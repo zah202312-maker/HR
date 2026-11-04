@@ -1,0 +1,7 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU" />
+    </Configurations>
+
+    <Project Path="HR_Mangment2/HR_Mangment2.csproj" />
+</Solution>

@@ -1,0 +1,4452 @@
+openapi: "3.0.3"
+info:
+  title: "HR System - Identity and Organization"
+  version: "1.0.0"
+  description: >-
+    الدخول، المستخدم الحالي، الحسابات، الأدوار والصلاحيات، التحقق بخطوتين، الأقسام، الموظفون، ربط المديرين، الوثائق، والتفويض. x-permission بقيمة null تعني أن العملية تحتاج رمزًا صالحًا فقط دون صلاحية، حتى لا يمكن سحب حق أساسي مثل تغيير كلمة السر. x-data-scope يذكر أوسع نطاق، وx-data-scope-by-role يفصله عندما يختلف حسب الدور. x-release يتبع المرحلة في القسم 12: الأساس 1، ومسار الطلبات 2. ربط الموظف بدوام PUT /api/app/employee/{id}/shift في وحدة الدوام والإجازات.
+servers:
+  - url: https://api.hr.example.com
+    description: "Placeholder. The real host is chosen at deployment."
+x-global-rules:
+  access-gates:
+    description: >-
+      حاجز وصول يفرضه الخادم على كل عمليات النظام في كل الوحدات، بما فيها ما ليس في هذا الملف، ويعتمد على حالة الحساب في الخادم في كل طلب وليس على محتوى الرمز. يصل المنع برد 403 بصيغة RemoteServiceErrorResponse ويكون error.code أحد الرمزين التاليين، فعلى عميل Flutter معالجته مركزيًا في Dio والانتقال إلى الشاشة الإجبارية. الرد 403 مقصود وليس 422، لأنه منع عام يسبق قواعد العملية، وكل عملية تعلن 403 أصلًا.
+    codes:
+      Hr:Identity:PasswordChangeRequired:
+        when: "accessGate = passwordChangeRequired"
+        allowedOperations: [OpenIdConfiguration_Get, ConnectToken_Issue, ApplicationConfiguration_Get, Me_Get, Account_ChangePassword]
+      Hr:Identity:MfaEnrollmentRequired:
+        when: "accessGate = mfaEnrollmentRequired"
+        allowedOperations:
+          - OpenIdConfiguration_Get
+          - ConnectToken_Issue
+          - ApplicationConfiguration_Get
+          - Me_Get
+          - Account_ChangePassword
+          - Mfa_GetStatus
+          - Mfa_StartEnrollment
+          - Mfa_ConfirmEnrollment
+    detection: "يقرأ العميل accessGate من extraProperties في application-configuration عند التشغيل أو من GET /api/app/me. إذا كانت none تعمل كل العمليات حسب الصلاحيات."
+    exemptOperations: "مسار استقبال البصمة POST /api/attendance-devices/punches لا يخضع للحاجز، لأنه يعمل بمفتاح جهاز وليس بمستخدم."
+  manager-link:
+    description: >-
+      من يصلح مديرًا لكل موظف. تُطبق الصفوف بالترتيب، وأول صف ينطبق على أدوار الموظف هو المعتمد. مخالفتها تعطي Hr:Employee:InvalidManagerForRole. وهي مأخوذة من مصفوفة الموافقات في القسم 4 لأن المسارات تعتمد على هذا الربط. يجب أن يكون المدير بحالة active، ولا يجوز أن يدير الشخص نفسه أو أن تتكون حلقة.
+    rules:
+      - employeeHasRole: executiveDirector
+        managerMustHoldRole: null
+        note: "لا مدير له. وأي رابط يُرفض بـHr:Employee:ExecutiveCannotHaveManager."
+      - employeeHasRole: hrManager
+        managerMustHoldRole: executiveDirector
+      - employeeHasRole: systemAdmin
+        managerMustHoldRole: executiveDirector
+      - employeeHasRole: departmentManager
+        managerMustHoldRole: systemAdmin
+        note: "مسؤول النظام هو المدير الأعلى لمديري الأقسام."
+      - employeeHasRole: anyOther
+        managerMustHoldRole: departmentManager
+        note: "موظفو الموارد البشرية يرتبطون بمديرها إذا حمل دور departmentManager أيضًا."
+  error-codes-meaning:
+    Hr:Identity:SingletonRoleAlreadyAssigned: "hrManager or executiveDirector already belongs to another active user."
+    Hr:Identity:ProtectedPermissionNotGrantable: "A permission starting with Hr.Complaint was sent."
+    Hr:Identity:FinancialPermissionNotGrantable: "A permission starting with Hr.Finance was granted to the departmentManager or storeOfficer role, or directly to a user holding either role."
+    Hr:Employee:ManagerRequired: "A non-executive employee has no manager in the input."
+    Hr:Employee:WorkShiftRequired: "A non-executive employee has no workShiftId in the input."
+    Hr:Employee:EmployeeEnded: "The operation is not valid for an employee with status ended."
+    Hr:Employee:HireDateLocked: "hireDate cannot change after leave ledger entries exist."
+    Hr:Document:NotAvailable: "The document is not clean yet (pending or infected)."
+security:
+  - oauth2: [HR_Mangment2]
+tags:
+  - name: Auth
+    description: >-
+      الدخول وإعدادات التطبيق
+  - name: CurrentUser
+    description: >-
+      المستخدم الحالي
+  - name: Mfa
+    description: >-
+      التحقق بخطوتين
+  - name: UserAccounts
+    description: >-
+      حسابات المستخدمين
+  - name: RolesPermissions
+    description: >-
+      الأدوار والصلاحيات العادية
+  - name: Departments
+    description: >-
+      الأقسام
+  - name: Employees
+    description: >-
+      الموظفون وربط المديرين
+  - name: EmployeeDocuments
+    description: >-
+      وثائق الموظف
+  - name: Delegations
+    description: >-
+      التفويض
+paths:
+  /.well-known/openid-configuration:
+    get:
+      operationId: OpenIdConfiguration_Get
+      tags: [Auth]
+      summary: "Get the OpenID Connect discovery document"
+      description: >-
+        يوفره OpenIddict. يقرأ منه التطبيق عناوين الدخول والرموز. الدخول بطريقة Authorization Code + PKCE عبر صفحة دخول الخادم باللغتين، وFlutter عميل عام بلا Client Secret. لا يُرسل العميل معرّف شركة، فالشركة الوحيدة المفعلة يحددها الخادم.
+      x-source: ["1", "7", "10"]
+      x-release: 1
+      x-allowed-roles: []
+      x-permission: null
+      x-data-scope: public
+      x-error-codes: []
+      security: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenIdConfigurationDto"
+              example:
+                issuer: https://auth.hr.example.com/
+                authorization_endpoint: https://auth.hr.example.com/connect/authorize
+                token_endpoint: https://auth.hr.example.com/connect/token
+                end_session_endpoint: https://auth.hr.example.com/connect/logout
+                userinfo_endpoint: https://auth.hr.example.com/connect/userinfo
+                revocation_endpoint: https://auth.hr.example.com/connect/revocat
+                jwks_uri: https://auth.hr.example.com/.well-known/jwks
+                scopes_supported: [openid, profile, offline_access, HR_Mangment2]
+                response_types_supported: [code]
+                grant_types_supported: [authorization_code, refresh_token]
+                code_challenge_methods_supported: [S256]
+  /connect/token:
+    post:
+      operationId: ConnectToken_Issue
+      tags: [Auth]
+      summary: "Issue or refresh tokens"
+      description: >-
+        يبادل رمز التفويض مع code_verifier برموز الدخول، أو يجدد الرموز برمز التجديد. لا يُدعم الدخول المباشر بكلمة السر من التطبيق، وأي كلمة سر أو رمز TOTP يُدخل في صفحة الدخول على الخادم فقط. يصدر الرمز حتى لو كان تغيير كلمة السر أو تفعيل التحقق بخطوتين مطلوبًا، ويتولى حاجز الوصول منع بقية العمليات. أخطاء هذا المسار بصيغة OAuth 2.0 وليست بصيغة ABP. على Flutter Web يُحفظ الرمز في الذاكرة، وقد يُستبدل هذا الاستدعاء بـBFF إذا أثبت الاختبار الحاجة إليه.
+      x-source: ["1", "3", "7", "8", "10"]
+      x-release: 1
+      x-allowed-roles: []
+      x-permission: null
+      x-data-scope: public
+      x-error-codes: []
+      security: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/ConnectTokenRequestDto"
+            example:
+              grant_type: authorization_code
+              client_id: HR_Mangment2_Flutter
+              code: Q3a9dZk1mN
+              redirect_uri: com.example.hr://callback
+              code_verifier: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+      responses:
+        "200":
+          description: "Tokens issued."
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectTokenResponseDto"
+              example:
+                access_token: eyJhbGciOiJSUzI1NiJ9.example.signature
+                token_type: Bearer
+                expires_in: 3600
+                refresh_token: CfDJ8Example
+                id_token: eyJhbGciOiJSUzI1NiJ9.example.idtoken
+                scope: "openid profile offline_access HR_Mangment2"
+        "400":
+          description: "OAuth 2.0 error."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectTokenErrorDto"
+              example:
+                error: invalid_grant
+                error_description: "The refresh token is no longer valid."
+  /api/abp/application-configuration:
+    get:
+      operationId: ApplicationConfiguration_Get
+      tags: [Auth]
+      summary: "Get user, permissions, localization and settings"
+      description: >-
+        أول استدعاء بعد الدخول وعند كل تشغيل. تعتمد الواجهة على grantedPolicies لإخفاء ما لا يخص المستخدم، ويبقى الفحص الحقيقي في الخادم. يعيد extraProperties.accessGate حالة حاجز الوصول، فإذا لم تكن none ينتقل العميل مباشرة إلى شاشة تغيير كلمة السر أو تفعيل التحقق بخطوتين. يُعاد الاستدعاء بعد تغيير كلمة السر وتفعيل التحقق وتغيير اللغة وتغيير الأدوار. يعمل دون رمز ويعيد عندها isAuthenticated=false. يُستثنى من حاجز الوصول.
+      x-source: ["3", "7", "8", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      security:
+        - {}
+        - oauth2: [HR_Mangment2]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: includeLocalizationResources
+          in: query
+          required: false
+          description: "Flutter sends false, because its UI labels come from ARB files."
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationConfigurationDto"
+              example:
+                localization:
+                  currentCulture:
+                    cultureName: ar
+                    name: ar
+                    displayName: "العربية"
+                    twoLetterIsoLanguageName: ar
+                    isRightToLeft: true
+                  defaultResourceName: Hr
+                  languages:
+                    - cultureName: ar
+                      uiCultureName: ar
+                      displayName: "العربية"
+                    - cultureName: en
+                      uiCultureName: en
+                      displayName: English
+                  values: {}
+                auth:
+                  grantedPolicies:
+                    Hr.Request.Create: true
+                    Hr.Employee.ReadTeam: true
+                setting:
+                  values:
+                    Abp.Localization.DefaultLanguage: ar
+                    Abp.Identity.Password.RequiredLength: "8"
+                    Hr.Document.MaxFileSizeBytes: "10485760"
+                currentUser:
+                  isAuthenticated: true
+                  id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  tenantId: null
+                  userName: maryam.khaled
+                  name: "مريم"
+                  surName: "العلي"
+                  email: "maryam.khaled@example.com"
+                  emailVerified: false
+                  phoneNumber: null
+                  phoneNumberVerified: false
+                  roles: [employee]
+                extraProperties:
+                  accessGate: passwordChangeRequired
+                  mustChangePassword: true
+                  mfaRequired: false
+                  mfaEnabled: false
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/me:
+    get:
+      operationId: Me_Get
+      tags: [CurrentUser]
+      summary: "Get my account and access gate"
+      description: >-
+        يعيد بيانات حسابي وأدواري وحالة حاجز الوصول. بعد الدخول يرى المستخدم حسابه وخياراته حسب صلاحياته. يُستثنى من حاجز الوصول، وهو المرجع الذي يعتمده العميل لمعرفة الخطوة الإجبارية التالية.
+      x-source: ["3", "8"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "كشف تغيير كلمة السر الإجباري وحالة التحقق بخطوتين للمستخدم الحالي (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyAccountDto"
+              example:
+                userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                userName: maryam.khaled
+                displayName: "مريم خالد العلي"
+                email: "maryam.khaled@example.com"
+                preferredLanguage: ar
+                roleNames: [employee]
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  departmentName: "قسم المبيعات"
+                directReportCount: 0
+                accessGate: passwordChangeRequired
+                mustChangePassword: true
+                mfaRequired: false
+                mfaEnabled: false
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    patch:
+      operationId: Me_Update
+      tags: [CurrentUser]
+      summary: "Update my preferred language"
+      description: >-
+        يحفظ لغة المستخدم، وتُرسل إليه الإشعارات بها. يعيد العميل طلب application-configuration بعد التغيير. يبقى ترويس Accept-Language هو ما يحدد لغة كل استجابة.
+      x-source: ["1", "5.17", "8"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "حفظ لغة المستلم لإرسال الإشعارات بها (القسم 5.17) وشاشة اللغة (القسم 8)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MyAccountUpdateDto"
+            example:
+              preferredLanguage: en
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyAccountDto"
+              example:
+                userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                userName: maryam.khaled
+                displayName: "مريم خالد العلي"
+                email: "maryam.khaled@example.com"
+                preferredLanguage: en
+                roleNames: [employee]
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  departmentName: "قسم المبيعات"
+                directReportCount: 0
+                accessGate: none
+                mustChangePassword: false
+                mfaRequired: false
+                mfaEnabled: false
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/me/employee-profile:
+    get:
+      operationId: Me_GetEmployeeProfile
+      tags: [CurrentUser]
+      summary: "Get my own employee file"
+      description: >-
+        شاشة «ملفي». للقراءة فقط، فالتعديل عند الموارد البشرية. سجلات الملف الأخرى تأتي من وحداتها: حضوري، الأرصدة، طلباتي، المطالعات، التقييم، كتب الشكر، الإنذارات، العقود. الوثائق من GET /api/app/employee/{id}/documents.
+      x-source: ["3", "5.1", "8"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Employee.ReadSelf
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "عرض الملف للموظف نفسه بنموذج مستقل، لأن DTO يختلف حسب الجمهور (القسم 5.1 وقواعد الخصوصية)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeSelfDto"
+              example:
+                id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                fullName: "مريم خالد العلي"
+                fullNameAr: "مريم خالد العلي"
+                fullNameEn: "Maryam Khaled Al-Ali"
+                email: "maryam.khaled@example.com"
+                phoneNumber: "+9647700000000"
+                dateOfBirth: "1994-07-02"
+                address: "بغداد، حي المنصور"
+                department:
+                  id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                  name: "قسم المبيعات"
+                jobTitle: "أخصائية مبيعات"
+                hireDate: "2026-03-15"
+                status: active
+                manager:
+                  id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                  fullName: "يوسف سالم الحداد"
+                  departmentName: "قسم المبيعات"
+                currentShift:
+                  workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                  name: "الدوام الصباحي"
+                  effectiveFrom: "2026-03-15"
+                currentContract:
+                  contractId: b8e24d16-37fa-4901-9c5d-0a6f2e7b1caa
+                  startDate: "2026-03-15"
+                  endDate: "2027-03-14"
+                roleNames: [employee]
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/me/inbox-summary:
+    get:
+      operationId: Me_GetInboxSummary
+      tags: [CurrentUser]
+      summary: "Get counts for my pending actions"
+      description: >-
+        يعيد أعداد ما ينتظر إجراء المستخدم لكل فئة، لبطاقة «بانتظار إجرائي» والشارات. يشمل ما وصله عبر تفويض نشط. قائمة الطلبات نفسها في GET /api/app/request/inbox. لا يشمل الشكاوى إطلاقًا، لا عددًا ولا فئة، فمعالجوها يستخدمون صندوقها المستقل، حتى لا يكشف الملخص وجود شكوى أو مستواها. لا يحتوي أسماء أو تفاصيل.
+      x-source: ["5.5", "5.8", "8"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "ملخص موحد لصندوق «بانتظار إجرائي» يجمع الفئات من كل الوحدات (القسم 5.5)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxSummaryDto"
+              example:
+                totalCount: 5
+                items:
+                  - category: request
+                    count: 3
+                    delegatedCount: 1
+                  - category: memo
+                    count: 1
+                    delegatedCount: 0
+                  - category: circularAcknowledgement
+                    count: 1
+                    delegatedCount: 0
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/me/administrative-task-log:
+    get:
+      operationId: Me_GetAdministrativeTaskLog
+      tags: [CurrentUser]
+      summary: "Get my administrative task log as a manager"
+      description: >-
+        سجل المهام الإدارية لمدير القسم ضمن ملفه: قرارات الطلبات، ما رفعه نيابة عن موظفيه، المطالعات والبلاغات، التقييم والتقرير، التعاميم، الجرد، توصيات الإنذار. لا يتضمن أي عمل على الشكاوى.
+      x-source: ["5.1"]
+      x-release: 2
+      x-allowed-roles: [departmentManager]
+      x-permission: Hr.Employee.ReadOwnTaskLog
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "سجل المهام الإدارية في ملف مدير القسم (القسم 5.1)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: taskType
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AdministrativeTaskType"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdministrativeTaskLogPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - occurredAt: "2026-10-28T07:45:00Z"
+                    taskType: requestApproved
+                    title: "موافقة على طلب إجازة"
+                    referenceId: "71c3e5a9-0f82-4d67-b3e4-8a1f6d9c2b77"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/account/change-password:
+    post:
+      operationId: Account_ChangePassword
+      tags: [CurrentUser]
+      summary: "Change my password"
+      description: >-
+        لكل مستخدم، وهو الطريق الوحيد لرفع الإلزام عند أول دخول. عند mustChangePassword=true يوقف الخادم كل العمليات الأخرى برد 403 ورمز Hr:Identity:PasswordChangeRequired حتى ينجح هذا الاستدعاء. بعد النجاح: يصبح mustChangePassword=false فورًا، وتُلغى رموز التجديد للجلسات الأخرى ويبقى رمز الجلسة الحالية صالحًا، ويُشعر المستخدم، ويُسجل الحدث دون أي قيمة لكلمة السر. لا تُكتب قيم كلمات السر في سجل التدقيق أو Serilog. يعيد accessGate، فقد تكون الخطوة التالية تفعيل التحقق بخطوتين.
+      x-source: ["3", "7", "8", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes:
+        - Hr:Identity:CurrentPasswordIncorrect
+        - Hr:Identity:PasswordPolicyViolation
+        - Hr:Identity:NewPasswordSameAsCurrent
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInputDto"
+            example:
+              currentPassword: "Tmp#7kQ2xLp9"
+              newPassword: "N3w!Secure#Pass26"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangePasswordResultDto"
+              example:
+                accessGate: none
+                changedAt: "2026-03-15T06:05:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/account/mfa:
+    get:
+      operationId: Mfa_GetStatus
+      tags: [Mfa]
+      summary: "Get my MFA status"
+      description: >-
+        حالة التحقق بخطوتين للمستخدم الحالي. يخص الأدوار الأربعة الإلزامية فقط، ولا يوجد خيار تعطيل ذاتي لأن التفعيل إلزامي لها. طلب رمز TOTP عند الدخول يتم في صفحة الدخول على الخادم وليس في هذا الـAPI.
+      x-source: ["1.1", "3"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector, accountant, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "التحقق بخطوتين إلزامي لمدير الموارد والمدير التنفيذي والمحاسب ومسؤول النظام (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaStatusDto"
+              example:
+                isRequired: true
+                isEnabled: true
+                enabledAt: "2026-03-15T06:10:00Z"
+                recoveryCodesRemaining: 8
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/account/mfa/enroll:
+    post:
+      operationId: Mfa_StartEnrollment
+      tags: [Mfa]
+      summary: "Start TOTP enrollment"
+      description: >-
+        ينشئ مفتاح TOTP جديدًا ويعيده مع رابط QR. لا يصبح التحقق مفعلًا إلا بعد mfa/confirm، والاستدعاء المتكرر قبل التأكيد يستبدل المفتاح السابق. متاح أثناء حاجز mfaEnrollmentRequired. عند حاجز تغيير كلمة السر يُرفض بـ403 حتى تتغير كلمة السر.
+      x-source: ["1.1", "3"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector, accountant, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: [Hr:Identity:MfaAlreadyEnabled]
+      x-added-route: "التحقق بخطوتين إلزامي لمدير الموارد والمدير التنفيذي والمحاسب ومسؤول النظام (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaEnrollmentDto"
+              example:
+                sharedKey: JBSWY3DPEHPK3PXP
+                authenticatorUri: "otpauth://totp/HR:hala.hassan?secret=JBSWY3DPEHPK3PXP&issuer=HR&digits=6&period=30"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/account/mfa/confirm:
+    post:
+      operationId: Mfa_ConfirmEnrollment
+      tags: [Mfa]
+      summary: "Confirm TOTP enrollment"
+      description: >-
+        يتحقق من أول رمز TOTP ويفعّل التحقق بخطوتين، ويعيد رموز الاسترداد مرة واحدة فقط، ويرفع حاجز mfaEnrollmentRequired. يُشعر المستخدم ويُسجل الحدث في سجل التدقيق.
+      x-source: ["1.1", "3"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector, accountant, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: [Hr:Identity:MfaEnrollmentNotStarted, Hr:Identity:MfaAlreadyEnabled, Hr:Identity:MfaCodeInvalid]
+      x-added-route: "التحقق بخطوتين إلزامي لمدير الموارد والمدير التنفيذي والمحاسب ومسؤول النظام (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeInputDto"
+            example:
+              code: "492039"
+      responses:
+        "200":
+          description: Success.
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaRecoveryCodesDto"
+              example:
+                recoveryCodes: ["7K2M-9QXA", P4TZ-1WRE, C8NV-6HJD]
+                accessGate: none
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/account/mfa/recovery-codes:
+    post:
+      operationId: Mfa_RegenerateRecoveryCodes
+      tags: [Mfa]
+      summary: "Regenerate my recovery codes"
+      description: >-
+        يبطل الرموز السابقة ويصدر رموزًا جديدة تُعرض مرة واحدة، بعد التحقق من رمز TOTP صالح. يُسجل الحدث في سجل التدقيق.
+      x-source: ["1.1", "3"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector, accountant, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: [Hr:Identity:MfaNotEnabled, Hr:Identity:MfaCodeInvalid]
+      x-added-route: "التحقق بخطوتين إلزامي لمدير الموارد والمدير التنفيذي والمحاسب ومسؤول النظام (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeInputDto"
+            example:
+              code: "118204"
+      responses:
+        "200":
+          description: Success.
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaRecoveryCodesDto"
+              example:
+                recoveryCodes: ["2BXL-5TQP", R7DF-3MKS, V9GA-4YNC]
+                accessGate: none
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/user-account/{id}/mfa/reset:
+    post:
+      operationId: UserAccount_ResetMfa
+      tags: [Mfa]
+      summary: "Reset a user's MFA after a lost device"
+      description: >-
+        يلغي مفتاح TOTP ورموز الاسترداد عند فقد الجهاز، فيصبح الحاجز mfaEnrollmentRequired وتُلغى جلسات المستخدم. {id} هو معرّف المستخدم. لا يعيد ضبط أحد تحققه هو. مسؤول النظام يعيد الضبط للمحاسب ومسؤولي النظام الآخرين فقط، والمدير التنفيذي لأي مستخدم عدا نفسه، حتى لا يصل مسؤول النظام إلى حساب معالج شكاوى ويتجاوز القاعدة المحمية 3. المدير التنفيذي يستعيد حسابه برموز الاسترداد فقط. يُشعر المستخدم ويُسجل الحدث مع السبب في سجل التدقيق.
+      x-source: ["3"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin, executiveDirector]
+      x-permission: Hr.Identity.UserAccount.ResetMfa
+      x-data-scope: company
+      x-error-codes: [Hr:Identity:CannotResetOwnMfa, Hr:Identity:MfaResetNotAllowedForTarget, Hr:Identity:MfaNotEnabled]
+      x-added-route: "استعادة الوصول عند فقد جهاز التحقق بخطوتين الإلزامي (القسم 3)."
+      x-open-question: "لا تحدد الوثيقة من يعيد ضبط التحقق بخطوتين عند فقد الجهاز. اعتمد العقد توزيعًا يمنع مسؤول النظام من الوصول إلى حسابات معالجي الشكاوى. هل هذا مقبول؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./common.yaml#/components/schemas/ReasonInputDto"
+            example:
+              reason: "فقدان الهاتف المسجل عليه التطبيق"
+      responses:
+        "204":
+          description: "MFA was reset."
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/user-account:
+    get:
+      operationId: UserAccount_List
+      tags: [UserAccounts]
+      summary: "List user accounts"
+      description: >-
+        شاشة الحسابات للموارد البشرية وشاشة الأدوار لمسؤول النظام. لا يوجد في أي نموذج كلمة سر أو بصمتها.
+      x-source: ["3", "5.18", "8"]
+      x-release: 1
+      x-allowed-roles: [hrManager, systemAdmin]
+      x-permission: Hr.Identity.UserAccount.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة الحسابات وتعديل الأدوار تحتاج قائمة الحسابات (القسم 8)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          description: "Matches user name, email or employee name."
+          schema:
+            type: string
+            maxLength: 128
+        - name: roleName
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: mustChangePassword
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccountPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                    userName: maryam.khaled
+                    email: "maryam.khaled@example.com"
+                    employee:
+                      id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                      fullName: "مريم خالد العلي"
+                      departmentName: "قسم المبيعات"
+                    isActive: true
+                    isLockedOut: false
+                    mustChangePassword: true
+                    mfaRequired: false
+                    mfaEnabled: false
+                    roleNames: [employee]
+                    creationTime: "2026-03-10T08:15:00Z"
+                    lastModificationTime: null
+                    concurrencyStamp: "7e1f0c5a2b9d4c36"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: UserAccount_Create
+      tags: [UserAccounts]
+      summary: "Create an account for an employee without one"
+      description: >-
+        ينشئ حسابًا لموظف ملفه موجود ولا حساب له. المسار المعتاد لموظف جديد هو POST /api/app/employee الذي ينشئ الملف والحساب معًا. يولد الخادم كلمة سر مؤقتة ويعيدها في هذه الاستجابة فقط، ليسلمها مدير الموارد البشرية مع اسم المستخدم إلى الموظف، ولا يستطيع أحد رؤيتها بعد ذلك. يبدأ الحساب بـmustChangePassword=true. لا يُخزن الطلب أو الاستجابة كلمة السر في أي سجل. عند فقد القيمة تُستخدم إعادة التعيين، ولا يوجد إعادة إرسال. يُسجل الحدث في سجل التدقيق. يمكن للمستخدم أكثر من دور وصلاحياته مجموعها. يضيف الخادم دور employee دائمًا لمن له ملف موظف. منح الأدوار لا يمنح وصولًا إلى الشكاوى، فالوصول إليها يفحصه ComplaintAccessPolicy من جدول المعالجين بموافقة المدير التنفيذي، حتى لو أضاف مسؤول النظام لنفسه دورًا آخر. إذا شملت الأدوار hrManager أو executiveDirector أو accountant أو systemAdmin يصبح التحقق بخطوتين إلزاميًا فورًا.
+      x-source: ["3", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Identity.UserAccount.Create
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Employee:EmployeeAlreadyHasAccount
+        - Hr:Employee:EmployeeEnded
+        - Hr:Identity:RoleNotFound
+        - Hr:Identity:SingletonRoleAlreadyAssigned
+      x-open-question: "بما أن POST /api/app/employee ينشئ الحساب أيضًا، يبقى هذا المسار لموظف بلا حساب، مثل ما تنشئه التهيئة الأولية. هل توجد حالة أخرى؟ ومن تنشئه التهيئة الأولية: مدير الموارد البشرية والمدير التنفيذي؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserAccountCreateDto"
+            example:
+              employeeId: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+              userName: maryam.khaled
+              email: "maryam.khaled@example.com"
+              roleNames: [employee]
+      responses:
+        "201":
+          description: "Account created. 409 means the user name or email is taken."
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccountCreatedDto"
+              example:
+                account:
+                  id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  userName: maryam.khaled
+                  email: "maryam.khaled@example.com"
+                  employee:
+                    id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    fullName: "مريم خالد العلي"
+                    departmentName: "قسم المبيعات"
+                  isActive: true
+                  isLockedOut: false
+                  mustChangePassword: true
+                  mfaRequired: false
+                  mfaEnabled: false
+                  roleNames: [employee]
+                  creationTime: "2026-03-10T08:15:00Z"
+                  lastModificationTime: null
+                  concurrencyStamp: "7e1f0c5a2b9d4c36"
+                credentials:
+                  userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  userName: maryam.khaled
+                  temporaryPassword: "Tmp#7kQ2xLp9"
+                  mustChangePassword: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/user-account/{id}:
+    get:
+      operationId: UserAccount_Get
+      tags: [UserAccounts]
+      summary: "Get a user account"
+      description: >-
+        يعيد الحساب وأدواره وحالته. {id} هو معرّف المستخدم وليس معرّف الموظف.
+      x-source: ["3", "5.18", "8"]
+      x-release: 1
+      x-allowed-roles: [hrManager, systemAdmin]
+      x-permission: Hr.Identity.UserAccount.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة تعديل الحساب تحتاج أدواره الحالية وconcurrencyStamp (القسم 8)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccountDto"
+              example:
+                id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                userName: maryam.khaled
+                email: "maryam.khaled@example.com"
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  departmentName: "قسم المبيعات"
+                isActive: true
+                isLockedOut: false
+                mustChangePassword: true
+                mfaRequired: false
+                mfaEnabled: false
+                roleNames: [employee]
+                creationTime: "2026-03-10T08:15:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "7e1f0c5a2b9d4c36"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  /api/app/user-account/{id}/reset-password:
+    post:
+      operationId: UserAccount_ResetPassword
+      tags: [UserAccounts]
+      summary: "Reset a password and notify the user"
+      description: >-
+        يولد كلمة سر مؤقتة جديدة تُعرض في هذه الاستجابة فقط، ويجعل mustChangePassword=true، ويفك القفل المؤقت، ويلغي رموز التجديد لجلسات المستخدم. يُسجل الإجراء مع السبب في سجل التدقيق دون كلمة السر. يُشعر الموظف داخل النظام وبالبريد ولا يتضمن الإشعار كلمة السر. مدير الموارد البشرية يعيد التعيين لأي حساب عدا حسابه، والمدير التنفيذي لحساب مدير الموارد البشرية فقط. لا يغير هذا الإجراء التحقق بخطوتين، فيبقى الدخول إلى الحسابات المحمية محتاجًا إلى رمز TOTP صاحبها.
+      x-source: ["3", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector]
+      x-permission: Hr.Identity.UserAccount.ResetPassword
+      x-data-scope: company
+      x-error-codes: [Hr:Identity:CannotResetOwnPassword, Hr:Identity:PasswordResetNotAllowedForTarget, Hr:Identity:AccountInactive]
+      x-open-question: "لا تحدد الوثيقة من يعيد تعيين كلمة سر مدير الموارد البشرية نفسه. اعتمد العقد المدير التنفيذي. هل هذا صحيح؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./common.yaml#/components/schemas/ReasonInputDto"
+            example:
+              reason: "نسي الموظف كلمة السر"
+      responses:
+        "200":
+          description: Success.
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemporaryCredentialsDto"
+              example:
+                userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                userName: maryam.khaled
+                temporaryPassword: "Rst#4mZ8vNc2"
+                mustChangePassword: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/user-account/{id}/roles:
+    put:
+      operationId: UserAccount_SetRoles
+      tags: [UserAccounts]
+      summary: "Replace the roles of a user"
+      description: >-
+        يستبدل مجموعة الأدوار كاملة. يمكن للمستخدم أكثر من دور وصلاحياته مجموعها. يضيف الخادم دور employee دائمًا لمن له ملف موظف. منح الأدوار لا يمنح وصولًا إلى الشكاوى، فالوصول إليها يفحصه ComplaintAccessPolicy من جدول المعالجين بموافقة المدير التنفيذي، حتى لو أضاف مسؤول النظام لنفسه دورًا آخر. إذا شملت الأدوار hrManager أو executiveDirector أو accountant أو systemAdmin يصبح التحقق بخطوتين إلزاميًا فورًا. يُرفض سحب دور من يمتلك موظفين مرتبطين به إذا فقد أهلية إدارتهم. إذا جعل التغيير رابط المدير الحالي غير صالح، مثل منح departmentManager لمن مديره ليس مسؤول نظام، يجب إرسال managerEmployeeId، ويسري عليه أثر تغيير المدير نفسه. منح executiveDirector يغلق رابط مديره، وسحبه يتطلب managerEmployeeId. يُسجل التغيير في سجل التدقيق ويسري فورًا، ويعيد العميل تحميل application-configuration للمستخدم المعني عند طلبه التالي.
+      x-source: ["3", "5.18", "7", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager, systemAdmin]
+      x-permission: Hr.Identity.UserAccount.SetRoles
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Identity:RoleNotFound
+        - Hr:Identity:SingletonRoleAlreadyAssigned
+        - Hr:Identity:LastSystemAdminCannotBeRemoved
+        - Hr:Identity:ManagerRoleHasDirectReports
+        - Hr:Employee:ManagerRequired
+        - Hr:Employee:ExecutiveCannotHaveManager
+        - Hr:Employee:ManagerNotFound
+        - Hr:Employee:ManagerNotActive
+        - Hr:Employee:InvalidManagerForRole
+        - Hr:Employee:CannotManageSelf
+        - Hr:Employee:ManagerCycle
+        - Hr:Employee:EmployeeEnded
+      x-open-question: "تذكر الوثيقة «العدد الحالي 1» للموارد البشرية والمدير التنفيذي والمراجع والمحاسب. اعتمد العقد منع أكثر من صاحب لدوري hrManager وexecutiveDirector فقط، لأن مسارات الموافقة تحتاج جهة واحدة. هل يصبح الحد ملزمًا للمراجع والمحاسب أيضًا؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRolesUpdateDto"
+            example:
+              roleNames: [employee, departmentManager]
+              managerEmployeeId: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+              concurrencyStamp: "7e1f0c5a2b9d4c36"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccountDto"
+              example:
+                id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                userName: maryam.khaled
+                email: "maryam.khaled@example.com"
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  departmentName: "قسم المبيعات"
+                isActive: true
+                isLockedOut: false
+                mustChangePassword: false
+                mfaRequired: false
+                mfaEnabled: false
+                roleNames: [employee, departmentManager]
+                creationTime: "2026-03-10T08:15:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "1a6d4f8e0c3b9752"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/user-account/{id}/permission:
+    get:
+      operationId: UserAccount_GetPermissions
+      tags: [RolesPermissions]
+      summary: "Get effective ordinary permissions of a user"
+      description: >-
+        يعرض الصلاحيات الفعلية ومصدرها: أدوار أو منح مباشر. تُعرض وتُعدل الصلاحيات العادية فقط. كل صلاحية يبدأ اسمها بـHr.Complaint غائبة من القراءة ومرفوضة في الكتابة، فحقوق معالجة الشكاوى محمية وتعيين المعالج في وحدة الشكاوى بموافقة المدير التنفيذي. وتُرفض صلاحيات Hr.Finance لدور departmentManager أو storeOfficer، ومنحها المباشر لمستخدم يحمل أحدهما، لأن البيانات المالية لا تظهر لهما.
+      x-source: ["3", "5.18", "7"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Permission.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "إدارة الصلاحيات المباشرة للمستخدم من مسؤول النظام (القسمان 5.18 و7)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionListResultDto"
+              example:
+                groups:
+                  - name: Hr.Employee
+                    displayName: "الموظفون"
+                    permissions:
+                      - name: Hr.Employee.ReadTeam
+                        displayName: "عرض الفريق"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: false
+                        grantedByRoleNames: [departmentManager]
+                      - name: Hr.Employee.Lookup
+                        displayName: "البحث عن موظف"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: true
+                        grantedByRoleNames: []
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: UserAccount_UpdatePermissions
+      tags: [RolesPermissions]
+      summary: "Update direct ordinary permissions of a user"
+      description: >-
+        يغير المنح المباشر للصلاحيات المرسلة فقط، ولا يلغي ما يأتي من الأدوار. تُعرض وتُعدل الصلاحيات العادية فقط. كل صلاحية يبدأ اسمها بـHr.Complaint غائبة من القراءة ومرفوضة في الكتابة، فحقوق معالجة الشكاوى محمية وتعيين المعالج في وحدة الشكاوى بموافقة المدير التنفيذي. وتُرفض صلاحيات Hr.Finance لدور departmentManager أو storeOfficer، ومنحها المباشر لمستخدم يحمل أحدهما، لأن البيانات المالية لا تظهر لهما. يُسجل التغيير في سجل التدقيق.
+      x-source: ["3", "5.18", "7"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Permission.Manage
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Identity:ProtectedPermissionNotGrantable
+        - Hr:Identity:FinancialPermissionNotGrantable
+        - Hr:Identity:PermissionNotFound
+      x-added-route: "إدارة الصلاحيات المباشرة للمستخدم من مسؤول النظام (القسمان 5.18 و7)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionGrantUpdateDto"
+            example:
+              permissions:
+                - name: Hr.Employee.Lookup
+                  isGranted: true
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionListResultDto"
+              example:
+                groups:
+                  - name: Hr.Employee
+                    displayName: "الموظفون"
+                    permissions:
+                      - name: Hr.Employee.ReadTeam
+                        displayName: "عرض الفريق"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: false
+                        grantedByRoleNames: [departmentManager]
+                      - name: Hr.Employee.Lookup
+                        displayName: "البحث عن موظف"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: true
+                        grantedByRoleNames: []
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/role:
+    get:
+      operationId: Role_List
+      tags: [RolesPermissions]
+      summary: "List roles"
+      description: >-
+        يعيد الأدوار الثمانية الثابتة وأي دور مخصص. تستخدمه الموارد البشرية عند إضافة موظف، ومسؤول النظام في شاشة الأدوار. دور admin الأصلي في ABP لا يظهر، فهو معطل أو محصور بالتشغيل.
+      x-source: ["3", "5.18", "7", "8"]
+      x-release: 1
+      x-allowed-roles: [hrManager, systemAdmin]
+      x-permission: Hr.Identity.Role.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "اختيار الأدوار عند إضافة الموظف وشاشة الأدوار (القسمان 3 و8)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RolePagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "94b0d7e2-6a15-4c38-a7f9-3e2c5d8f1a88"
+                    name: departmentManager
+                    displayName: "مدير القسم"
+                    nameAr: "مدير القسم"
+                    nameEn: "Department Manager"
+                    isStatic: true
+                    userCount: 6
+                    concurrencyStamp: "2f8c6a1d9e3b7045"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: Role_Create
+      tags: [RolesPermissions]
+      summary: "Create a custom role"
+      description: >-
+        ينشئ دورًا مخصصًا بصلاحيات عادية. لا يغير أي قاعدة مرتبطة بالأدوار الثمانية، مثل مسارات الموافقة، ولا يظهر في x-allowed-roles. يُسجل في سجل التدقيق.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Role.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      x-open-question: "تذكر الوثيقة إدارة «الأدوار» دون توضيح إنشاء أدوار جديدة. اعتمد العقد السماح بأدوار مخصصة بصلاحيات عادية. هل المطلوب ذلك، أم الاكتفاء بتعديل صلاحيات الأدوار الثمانية؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleCreateDto"
+            example:
+              name: branchCoordinator
+              nameAr: "منسق الفرع"
+              nameEn: "Branch Coordinator"
+      responses:
+        "201":
+          description: "Role created. 409 means the name is taken or equals an AppRole value."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDto"
+              example:
+                id: "94b0d7e2-6a15-4c38-a7f9-3e2c5d8f1a88"
+                name: branchCoordinator
+                displayName: "منسق الفرع"
+                nameAr: "منسق الفرع"
+                nameEn: "Branch Coordinator"
+                isStatic: false
+                userCount: 0
+                concurrencyStamp: "2f8c6a1d9e3b7045"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+  /api/app/role/{id}:
+    get:
+      operationId: Role_Get
+      tags: [RolesPermissions]
+      summary: "Get a role"
+      description: >-
+        يعيد بيانات الدور وعدد مستخدميه.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Role.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDto"
+              example:
+                id: "94b0d7e2-6a15-4c38-a7f9-3e2c5d8f1a88"
+                name: departmentManager
+                displayName: "مدير القسم"
+                nameAr: "مدير القسم"
+                nameEn: "Department Manager"
+                isStatic: true
+                userCount: 6
+                concurrencyStamp: "2f8c6a1d9e3b7045"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: Role_Update
+      tags: [RolesPermissions]
+      summary: "Rename a role"
+      description: >-
+        يعدل الاسم الظاهر بالعربية والإنجليزية فقط، وتبقى قيمة name ثابتة. يُسجل في سجل التدقيق.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Role.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdateDto"
+            example:
+              nameAr: "مدير القسم"
+              nameEn: "Department Manager"
+              concurrencyStamp: "2f8c6a1d9e3b7045"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDto"
+              example:
+                id: "94b0d7e2-6a15-4c38-a7f9-3e2c5d8f1a88"
+                name: departmentManager
+                displayName: "مدير القسم"
+                nameAr: "مدير القسم"
+                nameEn: "Department Manager"
+                isStatic: true
+                userCount: 6
+                concurrencyStamp: "2f8c6a1d9e3b7045"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+    delete:
+      operationId: Role_Delete
+      tags: [RolesPermissions]
+      summary: "Delete a custom role"
+      description: >-
+        يحذف دورًا مخصصًا لا يحمله أي مستخدم. لا تُحذف الأدوار الثمانية الثابتة. يُسجل في سجل التدقيق.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Role.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Identity:StaticRoleCannotBeDeleted, Hr:Identity:RoleInUse]
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "204":
+          description: "Role deleted."
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/role/{id}/permission:
+    get:
+      operationId: Role_GetPermissions
+      tags: [RolesPermissions]
+      summary: "Get ordinary permissions of a role"
+      description: >-
+        يعرض كل الصلاحيات العادية وحالتها لهذا الدور. تُعرض وتُعدل الصلاحيات العادية فقط. كل صلاحية يبدأ اسمها بـHr.Complaint غائبة من القراءة ومرفوضة في الكتابة، فحقوق معالجة الشكاوى محمية وتعيين المعالج في وحدة الشكاوى بموافقة المدير التنفيذي. وتُرفض صلاحيات Hr.Finance لدور departmentManager أو storeOfficer، ومنحها المباشر لمستخدم يحمل أحدهما، لأن البيانات المالية لا تظهر لهما.
+      x-source: ["5.18", "7"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Permission.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionListResultDto"
+              example:
+                groups:
+                  - name: Hr.Employee
+                    displayName: "الموظفون"
+                    permissions:
+                      - name: Hr.Employee.ReadTeam
+                        displayName: "عرض الفريق"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: true
+                        grantedByRoleNames: []
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: Role_UpdatePermissions
+      tags: [RolesPermissions]
+      summary: "Update ordinary permissions of a role"
+      description: >-
+        يغير الصلاحيات المرسلة فقط لهذا الدور، ويسري فورًا على حامليه. تُعرض وتُعدل الصلاحيات العادية فقط. كل صلاحية يبدأ اسمها بـHr.Complaint غائبة من القراءة ومرفوضة في الكتابة، فحقوق معالجة الشكاوى محمية وتعيين المعالج في وحدة الشكاوى بموافقة المدير التنفيذي. وتُرفض صلاحيات Hr.Finance لدور departmentManager أو storeOfficer، ومنحها المباشر لمستخدم يحمل أحدهما، لأن البيانات المالية لا تظهر لهما. يُسجل التغيير في سجل التدقيق.
+      x-source: ["5.18", "7"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Identity.Permission.Manage
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Identity:ProtectedPermissionNotGrantable
+        - Hr:Identity:FinancialPermissionNotGrantable
+        - Hr:Identity:PermissionNotFound
+      x-added-route: "مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionGrantUpdateDto"
+            example:
+              permissions:
+                - name: Hr.Employee.ReadTeam
+                  isGranted: true
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionListResultDto"
+              example:
+                groups:
+                  - name: Hr.Employee
+                    displayName: "الموظفون"
+                    permissions:
+                      - name: Hr.Employee.ReadTeam
+                        displayName: "عرض الفريق"
+                        parentName: null
+                        isGranted: true
+                        isDirectlyGranted: true
+                        grantedByRoleNames: []
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/department:
+    get:
+      operationId: Department_List
+      tags: [Departments]
+      summary: "List departments for administration"
+      description: >-
+        قائمة إدارة الأقسام لمدير الموارد البشرية بالاسمين وعدد الموظفين. بقية الأدوار تستخدم /api/app/department/lookup.
+      x-source: ["5.18", "9", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Department.Read
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                    name: "قسم المبيعات"
+                    nameAr: "قسم المبيعات"
+                    nameEn: Sales
+                    employeeCount: 12
+                    creationTime: "2026-01-05T10:00:00Z"
+                    lastModificationTime: null
+                    concurrencyStamp: "91ab3c7d5e0f2846"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: Department_Create
+      tags: [Departments]
+      summary: "Create a department"
+      description: >-
+        ينشئ قسمًا. لا يوجد للقسم مدير واحد في بياناته، فالإدارة تأتي من ربط كل موظف بمديره، وقد يضم القسم عدة مديرين. يُسجل في سجل التدقيق.
+      x-source: ["3", "5.18", "9", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Department.Manage
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepartmentCreateDto"
+            example:
+              nameAr: "قسم المبيعات"
+              nameEn: Sales
+      responses:
+        "201":
+          description: "Department created. 409 means an equal name exists."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDto"
+              example:
+                id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                name: "قسم المبيعات"
+                nameAr: "قسم المبيعات"
+                nameEn: Sales
+                employeeCount: 0
+                creationTime: "2026-01-05T10:00:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "91ab3c7d5e0f2846"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+  /api/app/department/lookup:
+    get:
+      operationId: Department_Lookup
+      tags: [Departments]
+      summary: "Look up departments by localized name"
+      description: >-
+        يعيد المعرّف والاسم المترجم فقط، لقوائم الاختيار والتصفية، مثل العهدة المشتركة والتعاميم.
+      x-source: ["5.7", "5.12", "9"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Department.Lookup
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "قوائم اختيار القسم لغير الموارد البشرية، مثل العهدة المشتركة (القسم 5.7)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentLookupPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                    name: "قسم المبيعات"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/department/{id}:
+    get:
+      operationId: Department_Get
+      tags: [Departments]
+      summary: "Get a department"
+      description: >-
+        يعيد القسم للتعديل بالاسمين وconcurrencyStamp.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Department.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة تعديل القسم (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDto"
+              example:
+                id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                name: "قسم المبيعات"
+                nameAr: "قسم المبيعات"
+                nameEn: Sales
+                employeeCount: 12
+                creationTime: "2026-01-05T10:00:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "91ab3c7d5e0f2846"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: Department_Update
+      tags: [Departments]
+      summary: "Update a department"
+      description: >-
+        يعدل اسمي القسم. يُسجل في سجل التدقيق.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Department.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "مدير الموارد البشرية يدير الأقسام (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepartmentUpdateDto"
+            example:
+              nameAr: "قسم المبيعات والتسويق"
+              nameEn: "Sales and Marketing"
+              concurrencyStamp: "91ab3c7d5e0f2846"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDto"
+              example:
+                id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                name: "قسم المبيعات والتسويق"
+                nameAr: "قسم المبيعات والتسويق"
+                nameEn: "Sales and Marketing"
+                employeeCount: 12
+                creationTime: "2026-01-05T10:00:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "91ab3c7d5e0f2846"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+    delete:
+      operationId: Department_Delete
+      tags: [Departments]
+      summary: "Delete an unused department"
+      description: >-
+        حذف ناعم لقسم لم يعد مستخدمًا. يُرفض إذا كان فيه موظفون بأي حالة أو عهدة مشتركة، لأن السجلات التاريخية تشير إليه. يُسجل في سجل التدقيق.
+      x-source: ["5.18"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Department.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Department:HasEmployees, Hr:Department:HasSharedCustody]
+      x-added-route: "مدير الموارد البشرية يدير الأقسام (القسم 5.18)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "204":
+          description: "Department deleted."
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/employee:
+    get:
+      operationId: Employee_List
+      tags: [Employees]
+      summary: "List employees for HR"
+      description: >-
+        قائمة الموظفين لمدير الموارد البشرية. تُعرض كل الحالات إلا إذا حُددت الحالة. مدير القسم يستخدم /api/app/manager/my-team، ومسؤول المخزن يستخدم /api/app/employee/lookup.
+      x-source: ["3", "5.1", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Read
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          description: "Matches name or user name."
+          schema:
+            type: string
+            maxLength: 128
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: managerEmployeeId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EmployeeStatus"
+        - name: roleName
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    fullName: "مريم خالد العلي"
+                    department:
+                      id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                      name: "قسم المبيعات"
+                    jobTitle: "أخصائية مبيعات"
+                    hireDate: "2026-03-15"
+                    status: active
+                    manager:
+                      id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                      fullName: "يوسف سالم الحداد"
+                      departmentName: "قسم المبيعات"
+                    roleNames: [employee]
+                    hasAccount: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: Employee_Create
+      tags: [Employees]
+      summary: "Create an employee with account, shift, manager and roles"
+      description: >-
+        عملية واحدة في معاملة واحدة تنشئ الملف والحساب والدوام وأول رابط مدير والأدوار. يجب تحديد نوع الدوام ومدير القسم لكل موظف، عدا المدير التنفيذي الذي لا مدير له ولا دوام. يطبق managerEmployeeId القاعدة x-global-rules.manager-link. يولد الخادم كلمة سر مؤقتة ويعيدها في هذه الاستجابة فقط، ليسلمها مدير الموارد البشرية مع اسم المستخدم، ويبدأ الحساب بـmustChangePassword=true. لا تدعم هذه العملية Idempotency-Key حتى لا تُخزن كلمة السر لإعادتها، وعند ضياع الاستجابة يرد التكرار بـ409، ثم تُستخدم إعادة التعيين. تحديد عدد أيام الإجازة السنوية خطوة منفصلة: PUT /api/app/leave-balance/employee/{id}/entitlement، وسنة الموظف تبدأ من hireDate. لا تصل قيمة كلمة السر إلى أي سجل. يُسجل الحدث في سجل التدقيق. يمكن للمستخدم أكثر من دور وصلاحياته مجموعها. يضيف الخادم دور employee دائمًا لمن له ملف موظف. منح الأدوار لا يمنح وصولًا إلى الشكاوى، فالوصول إليها يفحصه ComplaintAccessPolicy من جدول المعالجين بموافقة المدير التنفيذي، حتى لو أضاف مسؤول النظام لنفسه دورًا آخر. إذا شملت الأدوار hrManager أو executiveDirector أو accountant أو systemAdmin يصبح التحقق بخطوتين إلزاميًا فورًا.
+      x-source: ["3", "5.1", "5.2", "7", "10", "13"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Create
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Department:NotFound
+        - Hr:Employee:WorkShiftRequired
+        - Hr:Employee:WorkShiftNotFound
+        - Hr:Employee:ManagerRequired
+        - Hr:Employee:ExecutiveCannotHaveManager
+        - Hr:Employee:ManagerNotFound
+        - Hr:Employee:ManagerNotActive
+        - Hr:Employee:InvalidManagerForRole
+        - Hr:Identity:RoleNotFound
+        - Hr:Identity:SingletonRoleAlreadyAssigned
+      x-open-question: "لا تعدد الوثيقة حقول «البيانات» الشخصية. اعتمد العقد: الاسم بالعربية والإنجليزية والبريد والهاتف وتاريخ الميلاد والعنوان. هل تُضاف حقول مثل رقم الهوية أو الرقم الوظيفي؟ ولا تذكر المصفوفة المحاسب والمراجع، فعوملا معاملة الموظف ويرتبطان بمدير قسم. هل هذا صحيح؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeCreateDto"
+            example:
+              fullNameAr: "مريم خالد العلي"
+              fullNameEn: "Maryam Khaled Al-Ali"
+              email: "maryam.khaled@example.com"
+              phoneNumber: "+9647700000000"
+              dateOfBirth: "1994-07-02"
+              address: "بغداد، حي المنصور"
+              departmentId: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+              jobTitle: "أخصائية مبيعات"
+              hireDate: "2026-03-15"
+              workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+              managerEmployeeId: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+              userName: maryam.khaled
+              roleNames: [employee]
+      responses:
+        "201":
+          description: "Employee and account created. 409 means the user name or email is taken."
+          headers:
+            Cache-Control:
+              description: "Always no-store, because the body holds a one-time secret."
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeCreatedDto"
+              example:
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  fullNameAr: "مريم خالد العلي"
+                  fullNameEn: "Maryam Khaled Al-Ali"
+                  email: "maryam.khaled@example.com"
+                  phoneNumber: "+9647700000000"
+                  dateOfBirth: "1994-07-02"
+                  address: "بغداد، حي المنصور"
+                  department:
+                    id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                    name: "قسم المبيعات"
+                  jobTitle: "أخصائية مبيعات"
+                  hireDate: "2026-03-15"
+                  status: active
+                  manager:
+                    id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                    fullName: "يوسف سالم الحداد"
+                    departmentName: "قسم المبيعات"
+                  currentShift:
+                    workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                    name: "الدوام الصباحي"
+                    effectiveFrom: "2026-03-15"
+                  currentContract:
+                    contractId: b8e24d16-37fa-4901-9c5d-0a6f2e7b1caa
+                    startDate: "2026-03-15"
+                    endDate: "2027-03-14"
+                  account:
+                    userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                    userName: maryam.khaled
+                    isActive: true
+                    mustChangePassword: true
+                    mfaRequired: false
+                    mfaEnabled: false
+                    roleNames: [employee]
+                  directReportCount: 0
+                  creationTime: "2026-03-10T08:15:00Z"
+                  lastModificationTime: null
+                  concurrencyStamp: "4c9a1e7f3d2b8056"
+                credentials:
+                  userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  userName: maryam.khaled
+                  temporaryPassword: "Tmp#7kQ2xLp9"
+                  mustChangePassword: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/employee/lookup:
+    get:
+      operationId: Employee_Lookup
+      tags: [Employees]
+      summary: "Look up employees by name and department only"
+      description: >-
+        يعيد EmployeeRefDto فقط: المعرّف والاسم والقسم، دون أي حقل آخر. لمسؤول المخزن عند إضافة عهدة، وللموارد البشرية، وللمدير التنفيذي عند إصدار كتاب شكر، وللمحاسب عند اختيار موظف في الوحدة المالية. يعيد للمراجع مديري الأقسام فقط، لتوصية الإنذار. يشمل الموظفين الفعالين فقط. قائمة المشتكى عليهم لها مسار مستقل في وحدة الشكاوى ولا تُبنى من هنا.
+      x-source: ["3", "5.7", "5.14", "5.15", "5.16", "10"]
+      x-release: 1
+      x-allowed-roles: [storeOfficer, hrManager, executiveDirector, accountant, reviewer]
+      x-permission: Hr.Employee.Lookup
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          description: "Matches the employee name."
+          schema:
+            type: string
+            maxLength: 128
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeLookupPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    fullName: "مريم خالد العلي"
+                    departmentName: "قسم المبيعات"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/employee/{id}:
+    get:
+      operationId: Employee_Get
+      tags: [Employees]
+      summary: "Get the full employee file for HR"
+      description: >-
+        الملف الكامل لمدير الموارد البشرية. كل جمهور له مسار ونموذج مستقل حتى تغيب الحقول فعليًا: الموظف نفسه GET /api/app/me/employee-profile، والمدير المباشر GET /api/app/manager/my-team/{id}، ومسؤول المخزن GET /api/app/employee/lookup. سجلات الملف من وحداتها حسب employeeId: الحضور، الإجازات، الطلبات، المطالعات، التقييم، كتب الشكر، الإنذارات، العقود، والوثائق. لا يتضمن هذا النموذج بيانات الراتب، فهي في GET /api/app/finance/salary-profile/{employeeId} مع تسجيل الاطلاع، ولا الشكاوى، لأن العلاقة باتجاه واحد ولا يصل ملف الموظف إليها.
+      x-source: ["3", "5.1", "6", "9.1", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Read
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeHrDto"
+              example:
+                id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                fullName: "مريم خالد العلي"
+                fullNameAr: "مريم خالد العلي"
+                fullNameEn: "Maryam Khaled Al-Ali"
+                email: "maryam.khaled@example.com"
+                phoneNumber: "+9647700000000"
+                dateOfBirth: "1994-07-02"
+                address: "بغداد، حي المنصور"
+                department:
+                  id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                  name: "قسم المبيعات"
+                jobTitle: "أخصائية مبيعات"
+                hireDate: "2026-03-15"
+                status: active
+                manager:
+                  id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                  fullName: "يوسف سالم الحداد"
+                  departmentName: "قسم المبيعات"
+                currentShift:
+                  workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                  name: "الدوام الصباحي"
+                  effectiveFrom: "2026-03-15"
+                currentContract:
+                  contractId: b8e24d16-37fa-4901-9c5d-0a6f2e7b1caa
+                  startDate: "2026-03-15"
+                  endDate: "2027-03-14"
+                account:
+                  userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  userName: maryam.khaled
+                  isActive: true
+                  mustChangePassword: true
+                  mfaRequired: false
+                  mfaEnabled: false
+                  roleNames: [employee]
+                directReportCount: 0
+                creationTime: "2026-03-10T08:15:00Z"
+                lastModificationTime: null
+                concurrencyStamp: "4c9a1e7f3d2b8056"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: Employee_Update
+      tags: [Employees]
+      summary: "Update an employee file"
+      description: >-
+        يعدل بيانات الملف والقسم والمسمى وتاريخ المباشرة والحالة. لا يغير المدير أو الدوام أو الأدوار، فلكل منها مسار وسجل. تغيير الحالة إلى suspended أو ended يعطل الحساب ويلغي الجلسات، ويُرفض إذا بقي للموظف موظفون مرتبطون به حتى يُنقلوا، والعودة إلى active تعيد تفعيله. تغيير القسم لا يغير المدير. يُسجل في سجل التدقيق.
+      x-source: ["3", "5.1", "5.4", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Update
+      x-data-scope: company
+      x-error-codes: [Hr:Department:NotFound, Hr:Employee:HasDirectReports, Hr:Employee:HireDateLocked]
+      x-open-question: "تبدأ سنة الإجازة من تاريخ المباشرة، ولا تذكر الوثيقة أثر تصحيحه لاحقًا. اعتمد العقد رفض تغييره بعد وجود حركات رصيد. هل يلزم مسار تصحيح يعيد حساب السنوات؟ وهل يُرفض إنهاء خدمة موظف عليه عهدة غير مُرجعة؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdateDto"
+            example:
+              fullNameAr: "مريم خالد العلي"
+              fullNameEn: "Maryam Khaled Al-Ali"
+              email: "maryam.khaled@example.com"
+              phoneNumber: "+9647700000001"
+              dateOfBirth: "1994-07-02"
+              address: "بغداد، حي المنصور"
+              departmentId: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+              jobTitle: "أخصائية مبيعات أولى"
+              hireDate: "2026-03-15"
+              status: active
+              concurrencyStamp: "4c9a1e7f3d2b8056"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeHrDto"
+              example:
+                id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                fullName: "مريم خالد العلي"
+                fullNameAr: "مريم خالد العلي"
+                fullNameEn: "Maryam Khaled Al-Ali"
+                email: "maryam.khaled@example.com"
+                phoneNumber: "+9647700000001"
+                dateOfBirth: "1994-07-02"
+                address: "بغداد، حي المنصور"
+                department:
+                  id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                  name: "قسم المبيعات"
+                jobTitle: "أخصائية مبيعات أولى"
+                hireDate: "2026-03-15"
+                status: active
+                manager:
+                  id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                  fullName: "يوسف سالم الحداد"
+                  departmentName: "قسم المبيعات"
+                currentShift:
+                  workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                  name: "الدوام الصباحي"
+                  effectiveFrom: "2026-03-15"
+                currentContract:
+                  contractId: b8e24d16-37fa-4901-9c5d-0a6f2e7b1caa
+                  startDate: "2026-03-15"
+                  endDate: "2027-03-14"
+                account:
+                  userId: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  userName: maryam.khaled
+                  isActive: true
+                  mustChangePassword: true
+                  mfaRequired: false
+                  mfaEnabled: false
+                  roleNames: [employee]
+                directReportCount: 0
+                creationTime: "2026-03-10T08:15:00Z"
+                lastModificationTime: "2026-11-04T07:00:00Z"
+                concurrencyStamp: "6d0b3e9a1f7c4285"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/employee/{id}/manager:
+    put:
+      operationId: Employee_ChangeManager
+      tags: [Employees]
+      summary: "Change an employee's manager"
+      description: >-
+        يغير مدير موظف واحد وفق x-global-rules.manager-link. يُغلق الرابط الحالي في سجل الربط ويُفتح رابط جديد بتاريخ اليوم بتوقيت الشركة. تنتقل إلى المدير الجديد الطلبات المعلقة عند خطوة المدير القديم فقط، وتبقى الخطوات المتخذة في الخط الزمني كما هي، وتُحسب مسارات التقارير والتعاميم من الرابط الجديد. لا يرى المدير الجديد الملاحظات الداخلية في تقييمات الموظف السابقة. يُشعر الموظف والمدير الجديد، ويُسجل التغيير في سجل التدقيق. لا يمكن ربط المدير التنفيذي بمدير، ولا إزالة مدير أي موظف آخر. إرسال المدير الحالي نفسه يُرفض حتى لا يُكتب صف فارغ في السجل.
+      x-source: ["3", "5.9", "5.18", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.AssignManager
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Employee:ExecutiveCannotHaveManager
+        - Hr:Employee:ManagerNotFound
+        - Hr:Employee:ManagerNotActive
+        - Hr:Employee:InvalidManagerForRole
+        - Hr:Employee:CannotManageSelf
+        - Hr:Employee:ManagerCycle
+        - Hr:Employee:EmployeeEnded
+        - Hr:Employee:ManagerUnchanged
+      x-open-question: "تذكر الوثيقة نقل «الطلبات المعلقة» فقط. اعتمد العقد نقل المطالعات والبلاغات المعلقة عند المدير القديم معها حتى لا تتعطل. هل هذا صحيح؟ وماذا عن الشكوى العادية المعلقة عند المدير القديم: هل تنتقل إلى الجديد أم إلى الموارد البشرية؟ الشكاوى غير مشمولة هنا إلى أن يُحسم ذلك في وحدة الشكاوى."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagerChangeInputDto"
+            example:
+              managerEmployeeId: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+              reason: "إعادة توزيع فرق المبيعات"
+              concurrencyStamp: "4c9a1e7f3d2b8056"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerChangeResultDto"
+              example:
+                employee:
+                  id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                  fullName: "مريم خالد العلي"
+                  departmentName: "قسم المبيعات"
+                previousManager:
+                  id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                  fullName: "يوسف سالم الحداد"
+                  departmentName: "قسم المبيعات"
+                newManager:
+                  id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                  fullName: "هدى ناصر الراشد"
+                  departmentName: "قسم المبيعات"
+                effectiveFrom: "2026-11-04"
+                movedPendingItemCount: 2
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/employee/{id}/manager-history:
+    get:
+      operationId: Employee_GetManagerHistory
+      tags: [Employees]
+      summary: "Get manager link history"
+      description: >-
+        سجل كل روابط مدير الموظف بتواريخها، الأحدث أولًا افتراضيًا. للقراءة فقط ولا يُحذف منه شيء. لا صفوف للمدير التنفيذي إلا إذا كان له رابط سابق قبل حصوله على الدور.
+      x-source: ["3", "9"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.ReadManagerHistory
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "كل تغيير في الربط يُحفظ بتاريخه، وهذا السجل يحتاج مسار قراءة (القسم 3)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeManagerHistoryPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "71c3e5a9-0f82-4d67-b3e4-8a1f6d9c2b77"
+                    employeeId: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    manager:
+                      id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                      fullName: "يوسف سالم الحداد"
+                      departmentName: "قسم المبيعات"
+                    fromDate: "2026-03-15"
+                    toDate: null
+                    changedBy:
+                      id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                      displayName: "ليلى عمر"
+                    reason: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  /api/app/employee/{id}/administrative-task-log:
+    get:
+      operationId: Employee_GetAdministrativeTaskLog
+      tags: [Employees]
+      summary: "Get a manager's administrative task log for HR"
+      description: >-
+        سجل المهام الإدارية لمدير قسم، لمدير الموارد البشرية. تكون القائمة فارغة لمن لم يتولَّ مهام إدارية. لا يتضمن أي عمل على الشكاوى.
+      x-source: ["5.1"]
+      x-release: 2
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.ReadTaskLog
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "سجل المهام الإدارية في ملف مدير القسم (القسم 5.1)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: taskType
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AdministrativeTaskType"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdministrativeTaskLogPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - occurredAt: "2026-10-28T07:45:00Z"
+                    taskType: evaluationSubmitted
+                    title: "رفع تقييم شهر أكتوبر"
+                    referenceId: "71c3e5a9-0f82-4d67-b3e4-8a1f6d9c2b77"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  /api/app/manager/{id}/assign-employees:
+    post:
+      operationId: Manager_AssignEmployees
+      tags: [Employees]
+      summary: "Assign employees to a manager in bulk"
+      description: >-
+        {id} هو معرّف موظف المدير، ويجب أن يكون مؤهلًا لكل موظف حسب x-global-rules.manager-link. يُمنح الدور قبل ذلك عبر PUT /api/app/user-account/{id}/roles، ولا يمنحه هذا المسار. العملية كلها أو لا شيء: أي موظف غير صالح يرفض الطلب، ويعيد error.data.invalidEmployeeIds. الموظف المرتبط بهذا المدير أصلًا يُتجاوز دون صف جديد في السجل، لذلك إعادة الطلب آمنة. لكل موظف منقول: يُغلق الرابط الحالي في سجل الربط ويُفتح رابط جديد بتاريخ اليوم بتوقيت الشركة. تنتقل إلى المدير الجديد الطلبات المعلقة عند خطوة المدير القديم فقط، وتبقى الخطوات المتخذة في الخط الزمني كما هي، وتُحسب مسارات التقارير والتعاميم من الرابط الجديد. لا يرى المدير الجديد الملاحظات الداخلية في تقييمات الموظف السابقة. يُشعر الموظف والمدير الجديد، ويُسجل التغيير في سجل التدقيق.
+      x-source: ["3", "5.18", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.AssignManager
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Employee:ExecutiveCannotHaveManager
+        - Hr:Employee:ManagerNotActive
+        - Hr:Employee:InvalidManagerForRole
+        - Hr:Employee:CannotManageSelf
+        - Hr:Employee:ManagerCycle
+        - Hr:Employee:EmployeeEnded
+        - Hr:Employee:EmployeeNotFound
+      x-open-question: "تذكر الوثيقة نقل «الطلبات المعلقة» فقط. اعتمد العقد نقل المطالعات والبلاغات المعلقة عند المدير القديم معها حتى لا تتعطل. هل هذا صحيح؟ وماذا عن الشكوى العادية المعلقة عند المدير القديم: هل تنتقل إلى الجديد أم إلى الموارد البشرية؟ الشكاوى غير مشمولة هنا إلى أن يُحسم ذلك في وحدة الشكاوى."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagerAssignEmployeesInputDto"
+            example:
+              employeeIds: ["3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"]
+              reason: "تعيين مدير جديد لقسم المبيعات"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerAssignEmployeesResultDto"
+              example:
+                manager:
+                  id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                  fullName: "هدى ناصر الراشد"
+                  departmentName: "قسم المبيعات"
+                assignedCount: 1
+                alreadyAssignedCount: 0
+                movedPendingItemCount: 2
+                items:
+                  - employee:
+                      id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                      fullName: "مريم خالد العلي"
+                      departmentName: "قسم المبيعات"
+                    previousManager:
+                      id: "8a7d2c10-41b6-4f55-8e23-1c9b7d6e2f22"
+                      fullName: "يوسف سالم الحداد"
+                      departmentName: "قسم المبيعات"
+                    newManager:
+                      id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                      fullName: "هدى ناصر الراشد"
+                      departmentName: "قسم المبيعات"
+                    effectiveFrom: "2026-11-04"
+                    movedPendingItemCount: 2
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/manager/my-team:
+    get:
+      operationId: Manager_GetMyTeam
+      tags: [Employees]
+      summary: "List my direct reports"
+      description: >-
+        موظفو المستخدم الحالي المرتبطون به مباشرة. مسؤول النظام يرى به مديري الأقسام المرتبطين به لأنه مديرهم الأعلى. لا يوجد في النموذج أي بيانات مالية أو شكاوى. تُستثنى الحالة ended إلا إذا طُلبت.
+      x-source: ["3", "5.1", "10"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, systemAdmin]
+      x-permission: Hr.Employee.ReadTeam
+      x-data-scope: team
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          description: "Matches the employee name."
+          schema:
+            type: string
+            maxLength: 128
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EmployeeStatus"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeTeamMemberPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    fullName: "مريم خالد العلي"
+                    email: "maryam.khaled@example.com"
+                    phoneNumber: "+9647700000000"
+                    department:
+                      id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                      name: "قسم المبيعات"
+                    jobTitle: "أخصائية مبيعات"
+                    hireDate: "2026-03-15"
+                    status: active
+                    currentShift:
+                      workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                      name: "الدوام الصباحي"
+                      effectiveFrom: "2026-03-15"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/manager/my-team/{id}:
+    get:
+      operationId: Manager_GetTeamMember
+      tags: [Employees]
+      summary: "Get a direct report as seen by their manager"
+      description: >-
+        ملف الموظف كما يراه مديره المباشر، ولا يتضمن البيانات المالية أو الشكاوى أو العقد. {id} هو معرّف الموظف. يرد بـ404 إذا لم يكن الموظف مرتبطًا بالمستخدم الآن. سجلات الفريق من وحداتها: الحضور والإجازات والطلبات والعهد. الوثائق المسموحة من GET /api/app/employee/{id}/documents.
+      x-source: ["3", "5.1"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, systemAdmin]
+      x-permission: Hr.Employee.ReadTeam
+      x-data-scope: team
+      x-error-codes: []
+      x-added-route: "عرض الملف لمدير القسم بنموذج مستقل دون البيانات المالية والشكاوى (القسم 5.1 وقواعد الخصوصية)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeTeamMemberDto"
+              example:
+                id: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                fullName: "مريم خالد العلي"
+                email: "maryam.khaled@example.com"
+                phoneNumber: "+9647700000000"
+                department:
+                  id: e19a6c33-58d2-47b1-9f30-2a4c7b8d1e55
+                  name: "قسم المبيعات"
+                jobTitle: "أخصائية مبيعات"
+                hireDate: "2026-03-15"
+                status: active
+                currentShift:
+                  workShiftId: "2d7f4a18-c06e-4b93-8d51-9e3a6c2f0d66"
+                  name: "الدوام الصباحي"
+                  effectiveFrom: "2026-03-15"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  /api/app/employee/{id}/documents:
+    get:
+      operationId: EmployeeDocument_List
+      tags: [EmployeeDocuments]
+      summary: "List documents of an employee"
+      description: >-
+        الموارد البشرية ترى كل الوثائق، والموظف يرى وثائقه، والمدير المباشر يرى الوثائق ذات الحساسية normal لموظفيه الحاليين فقط. يرد بـ404 خارج هذا النطاق. مسؤول المخزن والمحاسب والمراجع لا يصلون إليها.
+      x-source: ["5.1", "9", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, systemAdmin, hrManager]
+      x-permission: Hr.Employee.Document.Read
+      x-data-scope: company
+      x-data-scope-by-role:
+        employee: self
+        departmentManager: team
+        systemAdmin: team
+        hrManager: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EmployeeDocumentType"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeDocumentPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "71c3e5a9-0f82-4d67-b3e4-8a1f6d9c2b77"
+                    employeeId: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                    type: certificate
+                    title: "شهادة البكالوريوس"
+                    fileName: degree.pdf
+                    contentType: application/pdf
+                    sizeBytes: 482133
+                    sensitivity: normal
+                    scanStatus: clean
+                    uploadedBy:
+                      id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                      displayName: "ليلى عمر"
+                    creationTime: "2026-03-16T09:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    post:
+      operationId: EmployeeDocument_Upload
+      tags: [EmployeeDocuments]
+      summary: "Upload an employee document"
+      description: >-
+        يرفع وثيقة إلى ملف الموظف، للموارد البشرية فقط. يُرفض ما يخالف الإعدادين Hr.Document.MaxFileSizeBytes وHr.Document.AllowedContentTypes. يبدأ الملف بحالة scanStatus=pending ويُفحص من الفيروسات، ولا يُنزل إلا إذا أصبح clean. يُسجل في سجل التدقيق.
+      x-source: ["5.1", "6", "7", "9", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Document.Upload
+      x-data-scope: company
+      x-error-codes: [Hr:Document:FileTooLarge, Hr:Document:FileTypeNotAllowed, Hr:Employee:EmployeeEnded]
+      x-open-question: "تذكر الوثيقة حقل Sensitivity دون مستوياته. اعتمد العقد: normal تراها الموارد البشرية والموظف ومديره، وsensitive تراها الموارد البشرية والموظف فقط. هل هذا صحيح؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EmployeeDocumentUploadDto"
+            example:
+              type: certificate
+              title: "شهادة البكالوريوس"
+              sensitivity: normal
+      responses:
+        "201":
+          description: "Document stored and queued for scanning."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeDocumentDto"
+              example:
+                id: "71c3e5a9-0f82-4d67-b3e4-8a1f6d9c2b77"
+                employeeId: "3f0c1b52-7a44-4c1e-9a10-6d2f8e1a0b11"
+                type: certificate
+                title: "شهادة البكالوريوس"
+                fileName: degree.pdf
+                contentType: application/pdf
+                sizeBytes: 482133
+                sensitivity: normal
+                scanStatus: pending
+                uploadedBy:
+                  id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  displayName: "ليلى عمر"
+                creationTime: "2026-03-16T09:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/document/{id}/download-url:
+    get:
+      operationId: EmployeeDocument_GetDownloadUrl
+      tags: [EmployeeDocuments]
+      summary: "Get a short-lived download link"
+      description: >-
+        يعيد رابطًا مؤقتًا لوثيقة ضمن نطاق المستخدم نفسه في قائمة الوثائق، ويرد بـ404 خارج النطاق حتى لا يكشف وجودها. يُسجل كل اطلاع على الوثائق ذات الحساسية sensitive باسم المستخدم والوقت. {id} هو معرّف الوثيقة.
+      x-source: ["5.1", "6", "7", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, systemAdmin, hrManager]
+      x-permission: Hr.Employee.Document.Read
+      x-data-scope: company
+      x-data-scope-by-role:
+        employee: self
+        departmentManager: team
+        systemAdmin: team
+        hrManager: company
+      x-error-codes: [Hr:Document:NotAvailable]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "./common.yaml#/components/schemas/FileDownloadUrlDto"
+              example:
+                url: "https://files.hr.example.com/documents/71c3e5a9?signature=abc123"
+                expiresAt: "2026-11-04T07:15:00Z"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/document/{id}:
+    delete:
+      operationId: EmployeeDocument_Delete
+      tags: [EmployeeDocuments]
+      summary: "Remove a document from the employee file"
+      description: >-
+        حذف ناعم لتصحيح رفع خاطئ أو إزالة ملف مصاب، للموارد البشرية فقط. يبقى السجل والملف حسب سياسة الاحتفاظ، ويُسجل الحدث في سجل التدقيق.
+      x-source: ["5.1", "6"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Employee.Document.Delete
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "تصحيح الوثائق في ملف الموظف وإزالة الملفات المصابة (القسمان 5.1 و7)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "204":
+          description: "Document removed."
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  /api/app/delegation:
+    get:
+      operationId: Delegation_List
+      tags: [Delegations]
+      summary: "List all delegations for HR"
+      description: >-
+        كل التفويضات المسجلة في الشركة بمددها وأسبابها، للمتابعة.
+      x-source: ["4", "9", "13"]
+      x-release: 2
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Delegation.ReadAll
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "التفويض مسجل بمدة وسبب، وهذا يحتاج مسار قراءة (القسم 4)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: fromUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: toUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DelegationStatus"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DelegationPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: a60f3c84-d971-4e25-8b06-4f7e1a9c3d99
+                    fromUser:
+                      id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                      displayName: "يوسف سالم الحداد"
+                    toUser:
+                      id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                      displayName: "هدى ناصر الراشد"
+                    scope: allApprovals
+                    startsAt: "2026-12-01T05:00:00Z"
+                    endsAt: "2026-12-10T15:00:00Z"
+                    reason: "إجازة سنوية للمدير"
+                    status: scheduled
+                    cancelledAt: null
+                    creationTime: "2026-11-25T11:20:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: Delegation_Create
+      tags: [Delegations]
+      summary: "Delegate my approvals to another user"
+      description: >-
+        ينشئ تفويضًا اختياريًا من المستخدم الحالي بمدة وسبب. التفويض ينقل حق القرار في الموافقات ضمن النطاق والمدة فقط، ويبقى الأصيل قادرًا على القرار، وأول قرار هو النافذ مع تسجيل المتخذ الفعلي في الخط الزمني. لا يشمل معالجة الشكاوى ولا البيانات المالية ولا التقييم والتقرير الشهري. لا يقرر المفوض طلبه الشخصي، فيبقى عند الأصيل. لا يُعاد تفويض ما وصل بتفويض. يُشعر المفوض، ويُسجل في سجل التدقيق.
+      x-source: ["3", "4", "9", "10"]
+      x-release: 2
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin]
+      x-permission: Hr.Delegation.Manage
+      x-data-scope: self
+      x-error-codes:
+        - Hr:Delegation:CannotDelegateToSelf
+        - Hr:Delegation:InvalidPeriod
+        - Hr:Delegation:DelegateNotEligible
+        - Hr:Delegation:OverlappingDelegation
+      x-open-question: "لا تحدد الوثيقة قيم Scope، ولا هل تنشئ الموارد البشرية تفويضًا نيابة عن معتمد غائب. اعتمد العقد ثلاث قيم، وأن ينشئ كل معتمد تفويضه بنفسه فقط. هل هذا صحيح؟"
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DelegationCreateDto"
+            example:
+              toUserId: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+              scope: allApprovals
+              startsAt: "2026-12-01T05:00:00Z"
+              endsAt: "2026-12-10T15:00:00Z"
+              reason: "إجازة سنوية للمدير"
+      responses:
+        "201":
+          description: "Delegation created."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DelegationDto"
+              example:
+                id: a60f3c84-d971-4e25-8b06-4f7e1a9c3d99
+                fromUser:
+                  id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                  displayName: "يوسف سالم الحداد"
+                toUser:
+                  id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                  displayName: "هدى ناصر الراشد"
+                scope: allApprovals
+                startsAt: "2026-12-01T05:00:00Z"
+                endsAt: "2026-12-10T15:00:00Z"
+                reason: "إجازة سنوية للمدير"
+                status: scheduled
+                cancelledAt: null
+                creationTime: "2026-11-25T11:20:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  /api/app/delegation/my:
+    get:
+      operationId: Delegation_GetMy
+      tags: [Delegations]
+      summary: "List delegations I gave or received"
+      description: >-
+        التفويضات التي أنشأها المستخدم أو وصلته. يحدد direction الاتجاه، وعند غيابه يعيد الاتجاهين.
+      x-source: ["4"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: null
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "المعتمد والمفوض يحتاجان إلى رؤية التفويضات (القسم 4)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: direction
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DelegationDirection"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DelegationStatus"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DelegationPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: a60f3c84-d971-4e25-8b06-4f7e1a9c3d99
+                    fromUser:
+                      id: "5b2e8f41-93c7-4d0a-a6f2-7c1d9e4b3a44"
+                      displayName: "يوسف سالم الحداد"
+                    toUser:
+                      id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                      displayName: "هدى ناصر الراشد"
+                    scope: allApprovals
+                    startsAt: "2026-12-01T05:00:00Z"
+                    endsAt: "2026-12-10T15:00:00Z"
+                    reason: "إجازة سنوية للمدير"
+                    status: scheduled
+                    cancelledAt: null
+                    creationTime: "2026-11-25T11:20:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/delegation/candidate:
+    get:
+      operationId: Delegation_GetCandidates
+      tags: [Delegations]
+      summary: "List users who can receive a delegation"
+      description: >-
+        يعيد المعرّف والاسم فقط لمستخدمين فعالين لهم ملف موظف، عدا المستخدم الحالي. لاختيار المفوض، لأن مدير القسم لا يملك قائمة موظفي الشركة.
+      x-source: ["4"]
+      x-release: 2
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin]
+      x-permission: Hr.Delegation.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "اختيار المفوض البديل دون كشف ملفات الموظفين (القسم 4)."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - name: search
+          in: query
+          required: false
+          description: "Matches the name."
+          schema:
+            type: string
+            maxLength: 128
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DelegationCandidatePagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: c41e9d07-2b38-4a76-b1c4-5e0f3a8d7c33
+                    displayName: "هدى ناصر الراشد"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  /api/app/delegation/{id}:
+    delete:
+      operationId: Delegation_Cancel
+      tags: [Delegations]
+      summary: "Cancel my delegation"
+      description: >-
+        يلغي التفويض قبل انتهائه، فتصبح حالته cancelled ويبقى في السجل ولا يُحذف. لصاحب التفويض فقط، ويرد بـ404 لغيره. ما قرره المفوض قبل الإلغاء يبقى نافذًا. يُشعر المفوض، ويُسجل في سجل التدقيق.
+      x-source: ["4", "10"]
+      x-release: 2
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin]
+      x-permission: Hr.Delegation.Manage
+      x-data-scope: self
+      x-error-codes: [Hr:Delegation:AlreadyEnded]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "204":
+          description: "Delegation cancelled."
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+components:
+  securitySchemes:
+    oauth2:
+      $ref: "./common.yaml#/components/securitySchemes/oauth2"
+  schemas:
+    OpenIdConfigurationDto:
+      type: object
+      description: "OpenID Connect discovery document. Property names are snake_case as fixed by the standard; this is an intended exception to camelCase."
+      required:
+        - issuer
+        - authorization_endpoint
+        - token_endpoint
+        - jwks_uri
+        - response_types_supported
+        - grant_types_supported
+        - code_challenge_methods_supported
+      properties:
+        issuer:
+          type: string
+          format: uri
+        authorization_endpoint:
+          type: string
+          format: uri
+        token_endpoint:
+          type: string
+          format: uri
+        end_session_endpoint:
+          type: string
+          format: uri
+          nullable: true
+        userinfo_endpoint:
+          type: string
+          format: uri
+          nullable: true
+        revocation_endpoint:
+          type: string
+          format: uri
+          nullable: true
+        jwks_uri:
+          type: string
+          format: uri
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+    ConnectTokenRequestDto:
+      type: object
+      description: "Form body of POST /connect/token. Property names are snake_case as fixed by OAuth 2.0."
+      required: [grant_type, client_id]
+      properties:
+        grant_type:
+          type: string
+          description: "The password grant is not supported."
+          enum: [authorization_code, refresh_token]
+        client_id:
+          type: string
+          description: "Public client id of the Flutter app. No client secret exists."
+        code:
+          type: string
+          description: "Required when grant_type is authorization_code."
+          nullable: true
+        redirect_uri:
+          type: string
+          description: "Required when grant_type is authorization_code. Must equal the value sent to /connect/authorize."
+          format: uri
+          nullable: true
+        code_verifier:
+          type: string
+          description: "PKCE verifier. Required when grant_type is authorization_code."
+          nullable: true
+        refresh_token:
+          type: string
+          description: "Required when grant_type is refresh_token."
+          nullable: true
+        scope:
+          type: string
+          description: "Space separated scopes, for example: openid profile offline_access HR_Mangment2."
+          nullable: true
+    ConnectTokenResponseDto:
+      type: object
+      description: "OAuth 2.0 token response. Property names are snake_case as fixed by the standard."
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          format: int32
+          description: "Access token lifetime in seconds."
+        refresh_token:
+          type: string
+          description: "Present when the offline_access scope was granted."
+          nullable: true
+        id_token:
+          type: string
+          description: "Present when the openid scope was granted."
+          nullable: true
+        scope:
+          type: string
+          nullable: true
+    ConnectTokenErrorDto:
+      type: object
+      description: "OAuth 2.0 error body. /connect/token is the only route in this module that does not use RemoteServiceErrorResponse."
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: "OAuth 2.0 error code. A suspended or ended account gets invalid_grant."
+          enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, invalid_scope]
+        error_description:
+          type: string
+          nullable: true
+    ApplicationConfigurationDto:
+      type: object
+      description: "The fields of the ABP application configuration that the Flutter app relies on. ABP may return other fields; they are not part of this contract and the client must ignore them."
+      required: [localization, auth, setting, currentUser]
+      properties:
+        localization:
+          $ref: "#/components/schemas/AppConfigLocalizationDto"
+        auth:
+          $ref: "#/components/schemas/AppConfigAuthDto"
+        setting:
+          $ref: "#/components/schemas/AppConfigSettingDto"
+        currentUser:
+          $ref: "#/components/schemas/AppConfigCurrentUserDto"
+        extraProperties:
+          description: "Added by a backend IApplicationConfigurationContributor. Null for anonymous calls."
+          allOf:
+            - $ref: "#/components/schemas/AppConfigExtraPropertiesDto"
+          nullable: true
+    AppConfigLocalizationDto:
+      type: object
+      required: [currentCulture, languages, values]
+      properties:
+        currentCulture:
+          $ref: "#/components/schemas/AppConfigCurrentCultureDto"
+        defaultResourceName:
+          type: string
+          nullable: true
+        languages:
+          type: array
+          description: "Exactly ar and en. ar is the default."
+          items:
+            $ref: "#/components/schemas/AppConfigLanguageDto"
+        values:
+          type: object
+          description: "Backend localization texts: resource name, then key, then text. The Flutter UI uses its own ARB files for labels."
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+    AppConfigCurrentCultureDto:
+      type: object
+      required: [cultureName, name, displayName, twoLetterIsoLanguageName, isRightToLeft]
+      properties:
+        cultureName:
+          type: string
+          example: ar
+        name:
+          type: string
+          example: ar
+        displayName:
+          type: string
+        twoLetterIsoLanguageName:
+          type: string
+          example: ar
+        isRightToLeft:
+          type: boolean
+          description: "Drives the screen direction."
+    AppConfigLanguageDto:
+      type: object
+      required: [cultureName, uiCultureName, displayName]
+      properties:
+        cultureName:
+          type: string
+        uiCultureName:
+          type: string
+        displayName:
+          type: string
+    AppConfigAuthDto:
+      type: object
+      required: [grantedPolicies]
+      properties:
+        grantedPolicies:
+          type: object
+          description: "Permission names granted to the current user (union of all roles and direct grants). Only granted names appear, each with the value true. Used to hide UI; the server still checks every call."
+          additionalProperties:
+            type: boolean
+    AppConfigSettingDto:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: object
+          description: "Settings visible to this client. Never contains secrets. The backend must expose Abp.Localization.DefaultLanguage and the Abp.Identity.Password.* rules (RequiredLength, RequiredUniqueChars, RequireNonAlphanumeric, RequireLowercase, RequireUppercase, RequireDigit), and Hr.Document.MaxFileSizeBytes and Hr.Document.AllowedContentTypes."
+          additionalProperties:
+            type: string
+            nullable: true
+    AppConfigCurrentUserDto:
+      type: object
+      required: [isAuthenticated, roles]
+      properties:
+        isAuthenticated:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+          description: "User id. Null when anonymous."
+          nullable: true
+        tenantId:
+          type: string
+          format: uuid
+          nullable: true
+        userName:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        surName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emailVerified:
+          type: boolean
+        phoneNumber:
+          type: string
+          nullable: true
+        phoneNumberVerified:
+          type: boolean
+        roles:
+          type: array
+          description: "Role names. Built-in roles use AppRole values. A user may hold several, and permissions are their union."
+          items:
+            type: string
+    AppConfigExtraPropertiesDto:
+      type: object
+      description: "Same values as MyAccountDto, so the client can route on startup with one call."
+      required: [accessGate, mustChangePassword, mfaRequired, mfaEnabled]
+      properties:
+        accessGate:
+          $ref: "#/components/schemas/AccessGate"
+        mustChangePassword:
+          type: boolean
+        mfaRequired:
+          type: boolean
+        mfaEnabled:
+          type: boolean
+    AccessGate:
+      type: string
+      description: "What the user must finish before using the system. passwordChangeRequired is evaluated first. Any value other than none blocks other operations with 403; see x-global-rules.access-gates."
+      enum: [none, passwordChangeRequired, mfaEnrollmentRequired]
+    AppLanguage:
+      type: string
+      enum: [ar, en]
+    MyAccountDto:
+      type: object
+      required:
+        - userId
+        - userName
+        - displayName
+        - preferredLanguage
+        - roleNames
+        - directReportCount
+        - accessGate
+        - mustChangePassword
+        - mfaRequired
+        - mfaEnabled
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        preferredLanguage:
+          $ref: "#/components/schemas/AppLanguage"
+        roleNames:
+          type: array
+          items:
+            type: string
+        employee:
+          description: "Null only for a technical account that has no employee file."
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        directReportCount:
+          type: integer
+          format: int32
+          description: "Employees currently linked to this user as their manager."
+          minimum: 0
+        accessGate:
+          $ref: "#/components/schemas/AccessGate"
+        mustChangePassword:
+          type: boolean
+        mfaRequired:
+          type: boolean
+          description: "True when the user holds hrManager, executiveDirector, accountant or systemAdmin."
+        mfaEnabled:
+          type: boolean
+    MyAccountUpdateDto:
+      type: object
+      required: [preferredLanguage]
+      properties:
+        preferredLanguage:
+          $ref: "#/components/schemas/AppLanguage"
+    ChangePasswordInputDto:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          description: "The current or temporary password."
+          minLength: 1
+          maxLength: 128
+          format: password
+        newPassword:
+          type: string
+          description: "Must satisfy the Abp.Identity.Password.* settings."
+          minLength: 1
+          maxLength: 128
+          format: password
+    ChangePasswordResultDto:
+      type: object
+      description: "accessGate tells the client the next step, for example mfaEnrollmentRequired."
+      required: [accessGate, changedAt]
+      properties:
+        accessGate:
+          $ref: "#/components/schemas/AccessGate"
+        changedAt:
+          type: string
+          format: date-time
+    InboxCategory:
+      type: string
+      description: "Kind of pending item. Complaints are deliberately not a category."
+      enum:
+        - request
+        - memo
+        - incident
+        - stockIssue
+        - evaluation
+        - departmentReport
+        - evaluationObjection
+        - evaluationAcknowledgement
+        - circularAcknowledgement
+        - custodyAcknowledgement
+        - warningResponse
+        - warningDecision
+        - contractDecision
+        - appreciationLetterAcknowledgement
+    InboxSummaryItemDto:
+      type: object
+      required: [category, count, delegatedCount]
+      properties:
+        category:
+          $ref: "#/components/schemas/InboxCategory"
+        count:
+          type: integer
+          format: int32
+          description: "All pending items in this category, including delegated ones."
+          minimum: 1
+        delegatedCount:
+          type: integer
+          format: int32
+          description: "The part of count that reached this user through an active delegation."
+          minimum: 0
+    InboxSummaryDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int32
+          minimum: 0
+        items:
+          type: array
+          description: "Only categories with a count above zero."
+          items:
+            $ref: "#/components/schemas/InboxSummaryItemDto"
+    AdministrativeTaskType:
+      type: string
+      enum:
+        - requestApproved
+        - requestRejected
+        - requestSubmittedOnBehalf
+        - memoProcessed
+        - incidentForwarded
+        - evaluationSubmitted
+        - departmentReportSubmitted
+        - circularSent
+        - custodyCountRecorded
+        - warningRecommended
+        - delegationCreated
+    AdministrativeTaskLogEntryDto:
+      type: object
+      description: "One administrative task done by a manager. Complaint work never appears here."
+      required: [occurredAt, taskType, title]
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+        taskType:
+          $ref: "#/components/schemas/AdministrativeTaskType"
+        title:
+          type: string
+          description: "Localized by Accept-Language."
+        referenceId:
+          type: string
+          format: uuid
+          description: "Id of the related record; its kind follows from taskType."
+          nullable: true
+    AdministrativeTaskLogPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdministrativeTaskLogEntryDto"
+    MfaStatusDto:
+      type: object
+      required: [isRequired, isEnabled, recoveryCodesRemaining]
+      properties:
+        isRequired:
+          type: boolean
+        isEnabled:
+          type: boolean
+        enabledAt:
+          type: string
+          format: date-time
+          nullable: true
+        recoveryCodesRemaining:
+          type: integer
+          format: int32
+          minimum: 0
+    MfaEnrollmentDto:
+      type: object
+      required: [sharedKey, authenticatorUri]
+      properties:
+        sharedKey:
+          type: string
+          description: "TOTP secret in Base32, for manual entry. Returned only by this call."
+        authenticatorUri:
+          type: string
+          description: "otpauth:// URI to render as a QR code."
+    MfaCodeInputDto:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: "Six-digit TOTP code."
+          pattern: "^[0-9]{6}$"
+    MfaRecoveryCodesDto:
+      type: object
+      required: [recoveryCodes, accessGate]
+      properties:
+        recoveryCodes:
+          type: array
+          description: "Shown once only. Each code works one time at sign-in."
+          items:
+            type: string
+        accessGate:
+          $ref: "#/components/schemas/AccessGate"
+    UserAccountDto:
+      type: object
+      description: "Account as seen by HR and the system admin. No password value or hash exists in any DTO."
+      required:
+        - id
+        - userName
+        - isActive
+        - isLockedOut
+        - mustChangePassword
+        - mfaRequired
+        - mfaEnabled
+        - roleNames
+        - creationTime
+        - concurrencyStamp
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "User id, not employee id."
+        userName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        employee:
+          description: "Null only for a technical account that has no employee file."
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        isActive:
+          type: boolean
+          description: "False while the employee is suspended or ended."
+        isLockedOut:
+          type: boolean
+          description: "Temporary sign-in lockout. Cleared by a password reset."
+        mustChangePassword:
+          type: boolean
+        mfaRequired:
+          type: boolean
+        mfaEnabled:
+          type: boolean
+        roleNames:
+          type: array
+          items:
+            type: string
+        creationTime:
+          type: string
+          format: date-time
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    UserAccountPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserAccountDto"
+    UserAccountCreateDto:
+      type: object
+      required: [employeeId, userName, roleNames]
+      properties:
+        employeeId:
+          type: string
+          format: uuid
+          description: "An employee that has no account yet."
+        userName:
+          type: string
+          minLength: 3
+          maxLength: 64
+        email:
+          type: string
+          description: "Defaults to the email on the employee file."
+          format: email
+          nullable: true
+        roleNames:
+          type: array
+          description: "Role names. The server always adds employee."
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+    TemporaryCredentialsDto:
+      type: object
+      required: [userId, userName, temporaryPassword, mustChangePassword]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        temporaryPassword:
+          type: string
+          description: "Generated by the server and returned only in this response. It cannot be read again by anyone; a lost value requires a reset."
+        mustChangePassword:
+          type: boolean
+          description: "Always true."
+    UserAccountCreatedDto:
+      type: object
+      required: [account, credentials]
+      properties:
+        account:
+          $ref: "#/components/schemas/UserAccountDto"
+        credentials:
+          $ref: "#/components/schemas/TemporaryCredentialsDto"
+    UserRolesUpdateDto:
+      type: object
+      required: [roleNames, concurrencyStamp]
+      properties:
+        roleNames:
+          type: array
+          description: "The complete new set of roles. The server always keeps employee on accounts linked to an employee file."
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        managerEmployeeId:
+          type: string
+          format: uuid
+          description: "Needed only when the new roles make the current manager link invalid. Applied in the same transaction with the effects of a manager change."
+          nullable: true
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    RoleDto:
+      type: object
+      required: [id, name, displayName, nameAr, nameEn, isStatic, userCount, concurrencyStamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: "Stable role identifier, used in roleNames and in currentUser.roles. Built-in roles use AppRole values."
+        displayName:
+          type: string
+          description: "Localized by Accept-Language."
+        nameAr:
+          type: string
+        nameEn:
+          type: string
+        isStatic:
+          type: boolean
+          description: "True for the eight built-in roles. They cannot be deleted, and their name never changes."
+        userCount:
+          type: integer
+          format: int32
+          minimum: 0
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    RolePagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoleDto"
+    RoleCreateDto:
+      type: object
+      required: [name, nameAr, nameEn]
+      properties:
+        name:
+          type: string
+          description: "Unique identifier in camelCase. Must not equal an AppRole value."
+          pattern: "^[a-z][a-zA-Z0-9]{1,63}$"
+        nameAr:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 128
+    RoleUpdateDto:
+      type: object
+      required: [nameAr, nameEn, concurrencyStamp]
+      properties:
+        nameAr:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 128
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    PermissionGrantInfoDto:
+      type: object
+      required: [name, displayName, isGranted, isDirectlyGranted, grantedByRoleNames]
+      properties:
+        name:
+          type: string
+          description: "ABP permission name."
+        displayName:
+          type: string
+          description: "Localized by Accept-Language."
+        parentName:
+          type: string
+          nullable: true
+        isGranted:
+          type: boolean
+          description: "Effective value for this role or user."
+        isDirectlyGranted:
+          type: boolean
+          description: "Granted on this exact role or user, not inherited. Only this part can be changed here."
+        grantedByRoleNames:
+          type: array
+          description: "Roles that provide this permission. Always empty when reading a role."
+          items:
+            type: string
+    PermissionGroupDto:
+      type: object
+      required: [name, displayName, permissions]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+          description: "Localized by Accept-Language."
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PermissionGrantInfoDto"
+    PermissionListResultDto:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          description: "Ordinary permissions only. Names starting with Hr.Complaint are absent."
+          items:
+            $ref: "#/components/schemas/PermissionGroupDto"
+    PermissionGrantChangeDto:
+      type: object
+      required: [name, isGranted]
+      properties:
+        name:
+          type: string
+        isGranted:
+          type: boolean
+    PermissionGrantUpdateDto:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          description: "Only the permissions to change. Others stay as they are."
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/PermissionGrantChangeDto"
+    DepartmentDto:
+      type: object
+      description: "Admin read of a department, for HR. Other roles use DepartmentRefDto through the lookup."
+      required: [id, name, nameAr, nameEn, employeeCount, creationTime, concurrencyStamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: "Localized by Accept-Language."
+        nameAr:
+          type: string
+        nameEn:
+          type: string
+        employeeCount:
+          type: integer
+          format: int32
+          description: "Employees with status active or suspended."
+          minimum: 0
+        creationTime:
+          type: string
+          format: date-time
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    DepartmentPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DepartmentDto"
+    DepartmentLookupPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+    DepartmentCreateDto:
+      type: object
+      required: [nameAr, nameEn]
+      properties:
+        nameAr:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 128
+    DepartmentUpdateDto:
+      type: object
+      required: [nameAr, nameEn, concurrencyStamp]
+      properties:
+        nameAr:
+          type: string
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          minLength: 1
+          maxLength: 128
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    EmployeeStatus:
+      type: string
+      enum: [active, suspended, ended]
+    EmployeeShiftSummaryDto:
+      type: object
+      description: "The shift in force today. Shift changes use PUT /api/app/employee/{id}/shift in the time and leave module."
+      required: [workShiftId, name, effectiveFrom]
+      properties:
+        workShiftId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: "Localized by Accept-Language."
+        effectiveFrom:
+          type: string
+          format: date
+    EmployeeContractSummaryDto:
+      type: object
+      required: [contractId, startDate]
+      properties:
+        contractId:
+          type: string
+          format: uuid
+          description: "Details come from the contracts module."
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+    EmployeeSelfDto:
+      type: object
+      description: "The employee reading their own file."
+      required: [id, fullName, fullNameAr, department, jobTitle, hireDate, status, roleNames]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: "Localized by Accept-Language."
+        fullNameAr:
+          type: string
+        fullNameEn:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        department:
+          $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+        jobTitle:
+          type: string
+        hireDate:
+          type: string
+          format: date
+          description: "Start of the personal leave year."
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        manager:
+          description: "Null only for the executive director."
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        currentShift:
+          description: "Null when attendance does not apply, as for the executive director."
+          allOf:
+            - $ref: "#/components/schemas/EmployeeShiftSummaryDto"
+          nullable: true
+        currentContract:
+          allOf:
+            - $ref: "#/components/schemas/EmployeeContractSummaryDto"
+          nullable: true
+        roleNames:
+          type: array
+          items:
+            type: string
+    EmployeeTeamMemberDto:
+      type: object
+      description: "Employee as seen by their direct manager. Financial data, complaints, contracts, birth date, address, roles and account data are absent by design. Do not add them."
+      required: [id, fullName, department, jobTitle, hireDate, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: "Localized by Accept-Language."
+        email:
+          type: string
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        department:
+          $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+        jobTitle:
+          type: string
+        hireDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        currentShift:
+          allOf:
+            - $ref: "#/components/schemas/EmployeeShiftSummaryDto"
+          nullable: true
+    EmployeeTeamMemberPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeTeamMemberDto"
+    EmployeeAccountSummaryDto:
+      type: object
+      required: [userId, userName, isActive, mustChangePassword, mfaRequired, mfaEnabled, roleNames]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        isActive:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+        mfaRequired:
+          type: boolean
+        mfaEnabled:
+          type: boolean
+        roleNames:
+          type: array
+          items:
+            type: string
+    EmployeeHrDto:
+      type: object
+      description: "Full employee file for the HR manager. Salary data stays in the finance module and complaints stay in the complaints module, since both are isolated at service and database level."
+      required:
+        - id
+        - fullName
+        - fullNameAr
+        - department
+        - jobTitle
+        - hireDate
+        - status
+        - directReportCount
+        - creationTime
+        - concurrencyStamp
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: "Localized by Accept-Language."
+        fullNameAr:
+          type: string
+        fullNameEn:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        department:
+          $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+        jobTitle:
+          type: string
+        hireDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        manager:
+          description: "Null only for the executive director."
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        currentShift:
+          allOf:
+            - $ref: "#/components/schemas/EmployeeShiftSummaryDto"
+          nullable: true
+        currentContract:
+          allOf:
+            - $ref: "#/components/schemas/EmployeeContractSummaryDto"
+          nullable: true
+        account:
+          description: "Null when the employee has no account yet."
+          allOf:
+            - $ref: "#/components/schemas/EmployeeAccountSummaryDto"
+          nullable: true
+        directReportCount:
+          type: integer
+          format: int32
+          minimum: 0
+        creationTime:
+          type: string
+          format: date-time
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    EmployeeListItemDto:
+      type: object
+      required: [id, fullName, department, jobTitle, hireDate, status, roleNames, hasAccount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: "Localized by Accept-Language."
+        department:
+          $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+        jobTitle:
+          type: string
+        hireDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        manager:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        roleNames:
+          type: array
+          items:
+            type: string
+        hasAccount:
+          type: boolean
+    EmployeeListItemPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeListItemDto"
+    EmployeeLookupPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+    EmployeeCreateDto:
+      type: object
+      required: [fullNameAr, departmentId, jobTitle, hireDate, userName, roleNames]
+      properties:
+        fullNameAr:
+          type: string
+          minLength: 1
+          maxLength: 200
+        fullNameEn:
+          type: string
+          maxLength: 200
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phoneNumber:
+          type: string
+          maxLength: 32
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        address:
+          type: string
+          maxLength: 500
+          nullable: true
+        departmentId:
+          type: string
+          format: uuid
+        jobTitle:
+          type: string
+          minLength: 1
+          maxLength: 128
+        hireDate:
+          type: string
+          format: date
+        workShiftId:
+          type: string
+          format: uuid
+          description: "Required for everyone except the executive director. Takes effect from hireDate."
+          nullable: true
+        managerEmployeeId:
+          type: string
+          format: uuid
+          description: "Required, and must follow x-global-rules.manager-link. Must be null for the executive director."
+          nullable: true
+        userName:
+          type: string
+          description: "Account user name."
+          minLength: 3
+          maxLength: 64
+        roleNames:
+          type: array
+          description: "Role names, one or more. The server always adds employee."
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+    EmployeeCreatedDto:
+      type: object
+      required: [employee, credentials]
+      properties:
+        employee:
+          $ref: "#/components/schemas/EmployeeHrDto"
+        credentials:
+          $ref: "#/components/schemas/TemporaryCredentialsDto"
+    EmployeeUpdateDto:
+      type: object
+      description: "Manager, shift and roles are not here. Each has its own route, because each has its own history and side effects."
+      required: [fullNameAr, departmentId, jobTitle, hireDate, status, concurrencyStamp]
+      properties:
+        fullNameAr:
+          type: string
+          minLength: 1
+          maxLength: 200
+        fullNameEn:
+          type: string
+          maxLength: 200
+          nullable: true
+        email:
+          type: string
+          description: "Also updates the account email."
+          format: email
+          nullable: true
+        phoneNumber:
+          type: string
+          maxLength: 32
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          nullable: true
+        address:
+          type: string
+          maxLength: 500
+          nullable: true
+        departmentId:
+          type: string
+          format: uuid
+        jobTitle:
+          type: string
+          minLength: 1
+          maxLength: 128
+        hireDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    ManagerChangeInputDto:
+      type: object
+      required: [managerEmployeeId, concurrencyStamp]
+      properties:
+        managerEmployeeId:
+          type: string
+          format: uuid
+          description: "The new manager, as an employee id."
+        reason:
+          type: string
+          maxLength: 2000
+          nullable: true
+        concurrencyStamp:
+          type: string
+          description: "Optimistic concurrency token. Send the latest value; a mismatch returns 409."
+    ManagerChangeResultDto:
+      type: object
+      required: [employee, newManager, effectiveFrom, movedPendingItemCount]
+      properties:
+        employee:
+          $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+        previousManager:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+        newManager:
+          $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+        effectiveFrom:
+          type: string
+          format: date
+        movedPendingItemCount:
+          type: integer
+          format: int32
+          description: "Pending requests moved to the new manager. Complaints are never counted."
+          minimum: 0
+    ManagerAssignEmployeesInputDto:
+      type: object
+      required: [employeeIds]
+      properties:
+        employeeIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        reason:
+          type: string
+          maxLength: 2000
+          nullable: true
+    ManagerAssignEmployeesResultDto:
+      type: object
+      required: [manager, assignedCount, alreadyAssignedCount, movedPendingItemCount, items]
+      properties:
+        manager:
+          $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+        assignedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        alreadyAssignedCount:
+          type: integer
+          format: int32
+          description: "Employees already linked to this manager. No history row is written for them."
+          minimum: 0
+        movedPendingItemCount:
+          type: integer
+          format: int32
+          minimum: 0
+        items:
+          type: array
+          description: "One item for each employee actually moved."
+          items:
+            $ref: "#/components/schemas/ManagerChangeResultDto"
+    EmployeeManagerHistoryDto:
+      type: object
+      required: [id, employeeId, manager, fromDate]
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        manager:
+          $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+          description: "Null on the current link."
+          nullable: true
+        changedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+    EmployeeManagerHistoryPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeManagerHistoryDto"
+    EmployeeDocumentType:
+      type: string
+      enum: [identity, passport, contract, certificate, medical, other]
+    DocumentSensitivity:
+      type: string
+      description: "normal: HR, the employee and the direct manager. sensitive: HR and the employee only."
+      enum: [normal, sensitive]
+    DocumentScanStatus:
+      type: string
+      description: "Virus scan result. Only clean documents can be downloaded."
+      enum: [pending, clean, infected]
+    EmployeeDocumentDto:
+      type: object
+      description: "Document metadata. The storage blob name is never exposed."
+      required: [id, employeeId, type, title, fileName, contentType, sizeBytes, sensitivity, scanStatus, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+        employeeId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/EmployeeDocumentType"
+        title:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        sensitivity:
+          $ref: "#/components/schemas/DocumentSensitivity"
+        scanStatus:
+          $ref: "#/components/schemas/DocumentScanStatus"
+        uploadedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+        creationTime:
+          type: string
+          format: date-time
+    EmployeeDocumentPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmployeeDocumentDto"
+    EmployeeDocumentUploadDto:
+      type: object
+      required: [file, type, title, sensitivity]
+      properties:
+        file:
+          type: string
+          format: binary
+        type:
+          $ref: "#/components/schemas/EmployeeDocumentType"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sensitivity:
+          $ref: "#/components/schemas/DocumentSensitivity"
+    DelegationScope:
+      type: string
+      description: "Which approval work moves to the delegate. Complaint handling, finance and evaluations can never be delegated."
+      enum: [allApprovals, requests, memosAndIncidents]
+    DelegationStatus:
+      type: string
+      description: "Computed by the server from the dates and cancellation."
+      enum: [scheduled, active, expired, cancelled]
+    DelegationDirection:
+      type: string
+      enum: [given, received]
+    DelegationDto:
+      type: object
+      required: [id, fromUser, toUser, scope, startsAt, endsAt, reason, status, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromUser:
+          $ref: "./common.yaml#/components/schemas/UserRefDto"
+        toUser:
+          $ref: "./common.yaml#/components/schemas/UserRefDto"
+        scope:
+          $ref: "#/components/schemas/DelegationScope"
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        status:
+          $ref: "#/components/schemas/DelegationStatus"
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        creationTime:
+          type: string
+          format: date-time
+    DelegationPagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DelegationDto"
+    DelegationCreateDto:
+      type: object
+      required: [toUserId, scope, startsAt, endsAt, reason]
+      properties:
+        toUserId:
+          type: string
+          format: uuid
+          description: "The delegate. Choose from GET /api/app/delegation/candidate."
+        scope:
+          $ref: "#/components/schemas/DelegationScope"
+        startsAt:
+          type: string
+          format: date-time
+          description: "Now or later."
+        endsAt:
+          type: string
+          format: date-time
+          description: "After startsAt."
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    DelegationCandidatePagedResultDto:
+      type: object
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/UserRefDto"

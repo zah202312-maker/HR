@@ -1,0 +1,4845 @@
+openapi: "3.0.3"
+info:
+  title: "HR System - Workflow and Store"
+  version: "1.0.0"
+  description: |-
+    طلبات عامة، ومطالعات، وبلاغات أعطال، ومخزن، وعهد. الموظف يظهر للجميع هنا عبر EmployeeRefDto.
+
+    ## مصفوفة الموافقات (القسم 4 من الوثيقة، قواعد لا يقررها العميل)
+
+    يبني الخادم الخطوات عند التقديم. القيم بين القوسين هي RequestStatus. الجهة none هي عمود الإجازة وتصحيح البصمة.
+
+    | صاحب الطلب | جهة none (إجازة، تصحيح بصمة) | جهة store (المخزن) | جهة accountant (المحاسب) |
+    |---|---|---|---|
+    | الموظف، ومنه المراجع والمحاسب ومسؤول المخزن | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم approved | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
+    | مدير القسم | مسؤول النظام (pendingManager) ثم الموارد البشرية (pendingHr) ثم approved | مسؤول النظام (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed | مسؤول النظام (pendingManager) ثم الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
+    | مدير الموارد البشرية | المدير التنفيذي (pendingExecutive) ثم approved | المخزن مباشرة (pendingDestination) ثم completed | المدير التنفيذي (pendingExecutive) ثم المحاسب (pendingDestination) ثم completed |
+    | المدير التنفيذي | لا يقدم إجازة: Hr:Request:ExecutiveCannotSubmit | المخزن مباشرة (pendingDestination) ثم completed | المحاسب مباشرة (pendingDestination) ثم completed |
+    | مسؤول النظام | المدير التنفيذي (pendingExecutive) ثم approved | المدير التنفيذي (pendingExecutive) ثم المخزن (pendingDestination) ثم completed | المدير التنفيذي (pendingExecutive) ثم المحاسب (pendingDestination) ثم completed |
+
+    قواعد ملزمة:
+
+    - مديرو الأقسام يمرون عبر مسؤول النظام لأنه المدير الأعلى لهم. لا توجد قيمة حالة خاصة به، فالحالة pendingManager وcurrentApproverRole = systemAdmin.
+    - لا توجد مهلة موافقة. يبقى الطلب معلقًا حتى يوافق المسؤول أو يرفض، ولا يتضمن أي DTO موعدًا نهائيًا.
+    - يصل تذكير دوري للمعتمد الحالي دون أي إجراء تلقائي: لا موافقة، ولا رفض، ولا تصعيد، ولا تغيير حالة. مواعيده من إعدادات مسؤول النظام.
+    - لا يعتمد أحد طلبه الشخصي، مهما كانت أدواره أو تفويضاته. يطبق الخادم ذلك ويعيد Hr:Request:SelfApprovalNotAllowed، ولا يظهر الطلب في صندوقه.
+    - الرفض في أي خطوة ينهي الطلب بالحالة rejected، ويظهر السبب للموظف.
+    - مدير القسم يقدم نيابة عن موظف فريقه: يُسجل المقدم الفعلي، ويُشعر الموظف، وتُعد موافقته الأولى تمت، ويبدأ الطلب من pendingHr.
+    - المفوض البديل اختياري ومسجل بمدة وسبب، والقرار يُسجل باسمه مع صاحب الصلاحية الأصلي.
+    - عند تغيير مدير الموظف تنتقل الطلبات المعلقة إلى المدير الجديد.
+
+    ## ما يراه الموظف
+
+    الحالات: بانتظار مدير القسم (pendingManager)، بانتظار الموارد البشرية (pendingHr)، موافق عليه (approved)، مرفوض (rejected)، مكتمل (completed). شاشات مقدم الطلب تعرض RequestEmployeeStatus وstatusLabel، وليس RequestStatus. لذلك pendingDestination تظهر له «موافق عليه»، وcurrentStageRole وحالة الصرف يبينان أين وصل الطلب.
+
+    ## عقود مع وحدات أخرى
+
+    - طلبا الإجازة وتصحيح البصمة ينشآن من POST /api/app/leave-request وPOST /api/app/attendance-correction في وحدتيهما، بسجل Request والمصفوفة نفسها، ويتخذ القرار فيهما عبر approve وreject هنا. ويظهران في my وinbox.
+    - إنشاء المصروف من حركة المخزن في وحدة المحاسبة، عبر حدث موثوق.
+    - GET /api/app/employee/lookup وGET /api/app/department ومسارات /api/app/delegation في identity-org.yaml. التفويض يُدار هناك، وتظهر آثاره هنا في delegatedFrom.
+    - قوالب الإشعارات من NotificationTemplateCode في identity-org.yaml: requestPendingAction, requestStatusChanged, requestSubmittedOnBehalf, requestApprovalReminder, memoUpdate, incidentUpdate, stockIssuePending, custodyAssigned.
+
+    ## x-release
+
+    1 يعني ما قبل الإطلاق التجريبي (المراحل 0 إلى 3 في القسم 12)، و2 يعني المرحلة 4 وفيها المخزن والعهد. لذلك لا تُفعَّل أنواع الجهة store قبل الإصدار 2، ويكون itemId في البلاغ null حتى ذلك الحين.
+
+    ## نموذج الحالات في المخزن
+
+    الصرف: pendingAcknowledgement ثم acknowledged ثم (purchasing إن لم يتوفر) ثم delivered. الوثيقة تذكر الثلاث الأخيرة، وأضيفت pendingAcknowledgement لما قبل «اطلعت» وcancelled لما بعد رفض الطلب أو إلغائه.
+security:
+  - oauth2: [HR_Mangment2]
+tags:
+  - name: Requests
+    description: "الطلبات العامة ومسار الموافقة."
+  - name: Memos
+    description: "المطالعات."
+  - name: Incidents
+    description: "بلاغات الأعطال."
+  - name: Store
+    description: "الأصناف والحركات وطلبات الصرف."
+  - name: Custody
+    description: "العهد والجرد."
+paths:
+  "/api/app/request-type":
+    get:
+      operationId: RequestType_GetList
+      tags: [Requests]
+      summary: "List active request types"
+      description: >-
+        يعرض أنواع الطلبات المفعلة بأسماء مترجمة لشاشة «طلب جديد». الأنواع: إجازة، تصحيح بصمة، قطعة من المخزن، طلب من المحاسب، احتياج إداري، وما يضيفه مسؤول النظام. لا يغير أي بيانات.
+      x-source: ["5.5", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Request.Type.View
+      x-data-scope: public
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestTypePagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                    code: storeItem
+                    name: "قطعة من المخزن"
+                    destination: store
+                    usesDedicatedEndpoint: false
+                    requiresItem: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: RequestType_Create
+      tags: [Requests]
+      summary: "Create a request type"
+      description: >-
+        ينشئ مسؤول النظام نوع طلب ويحدد جهته، ويسلك مسار المصفوفة الخاص بهذه الجهة. يظهر النوع فورًا للموظفين إذا كان مفعلًا. الرمز المكرر يعيد 422.
+      x-source: ["5.5", "5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Request.Type.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Request:TypeCodeAlreadyExists]
+      x-open-question: >-
+        الاحتياج الإداري غير موجود كعمود في مصفوفة القسم 4. الافتراض: يسلك عمود جهته المحددة في النوع، والنوع المبذور administrativeNeed جهته none فيتبع عمود الإجازة وتصحيح البصمة. هل هذا صحيح؟
+      x-added-route: "إدارة مسؤول النظام لأنواع الطلبات، القسم 5.5 و5.18."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/RequestTypeCreateInputDto"
+            example:
+              code: itSupport
+              nameAr: "دعم تقني"
+              nameEn: "IT support"
+              destination: none
+              isActive: true
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestTypeAdminDto"
+              example:
+                id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                code: itSupport
+                nameAr: "دعم تقني"
+                nameEn: "IT support"
+                destination: none
+                isActive: true
+                isSystem: false
+                concurrencyStamp: "9f3b2c1a7d"
+                creationTime: "2026-09-01T08:00:00Z"
+                lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/request-type/admin":
+    get:
+      operationId: RequestType_GetAdminList
+      tags: [Requests]
+      summary: "List all request types for admin"
+      description: >-
+        يعرض كل الأنواع، بما فيها غير المفعلة، بالاسمين العربي والإنجليزي لشاشة إعدادات مسؤول النظام.
+      x-source: ["5.5", "5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Request.Type.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "إدارة مسؤول النظام لأنواع الطلبات، القسم 5.5 و5.18."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: isActive
+          in: query
+          required: false
+          description: "تصفية حسب التفعيل."
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestTypeAdminPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                    code: administrativeNeed
+                    nameAr: "احتياج إداري"
+                    nameEn: "Administrative need"
+                    destination: none
+                    isActive: true
+                    isSystem: true
+                    concurrencyStamp: "9f3b2c1a7d"
+                    creationTime: "2026-09-01T08:00:00Z"
+                    lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/request-type/{id}":
+    get:
+      operationId: RequestType_Get
+      tags: [Requests]
+      summary: "Get a request type for admin"
+      description: "يعرض نوعًا واحدًا لمسؤول النظام مع concurrencyStamp قبل التعديل."
+      x-source: ["5.5", "5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Request.Type.Manage
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "إدارة مسؤول النظام لأنواع الطلبات، القسم 5.5 و5.18."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestTypeAdminDto"
+              example:
+                id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                code: administrativeNeed
+                nameAr: "احتياج إداري"
+                nameEn: "Administrative need"
+                destination: none
+                isActive: true
+                isSystem: true
+                concurrencyStamp: "9f3b2c1a7d"
+                creationTime: "2026-09-01T08:00:00Z"
+                lastModificationTime: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: RequestType_Update
+      tags: [Requests]
+      summary: "Update a request type"
+      description: >-
+        يعدل الاسمين والجهة والتفعيل. لا يوجد حذف، ويُستخدم إلغاء التفعيل. الطلبات القائمة تكمل مسارها المبني عند تقديمها، ولا تتأثر بتغيير الجهة. جهة الأنواع المبذورة لا تتغير.
+      x-source: ["5.5", "5.18"]
+      x-release: 1
+      x-allowed-roles: [systemAdmin]
+      x-permission: Hr.Request.Type.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Request:SystemTypeDestinationLocked]
+      x-added-route: "إدارة مسؤول النظام لأنواع الطلبات، القسم 5.5 و5.18."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/RequestTypeUpdateInputDto"
+            example:
+              nameAr: "احتياج إداري"
+              nameEn: "Administrative need"
+              destination: none
+              isActive: false
+              concurrencyStamp: "9f3b2c1a7d"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestTypeAdminDto"
+              example:
+                id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                code: administrativeNeed
+                nameAr: "احتياج إداري"
+                nameEn: "Administrative need"
+                destination: none
+                isActive: false
+                isSystem: true
+                concurrencyStamp: "9f3b2c1a7d"
+                creationTime: "2026-09-01T08:00:00Z"
+                lastModificationTime: "2026-11-04T08:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/request":
+    post:
+      operationId: Request_Submit
+      tags: [Requests]
+      summary: "Submit a request, personally or on behalf of an employee"
+      description: >-
+        يبني الخادم خطوات الطلب عند التقديم من مصفوفة القسم 4 (انظر info.description) حسب صاحب الطلب وجهة النوع، ولا يختار العميل المسار. التقديم نيابة عن موظف: لمدير القسم فقط وعلى موظف من فريقه، وغير ذلك 403، ويعيد Hr:Request:OnBehalfNotAllowed إذا لم يكن صاحب الطلب في صف الموظف. يُحفظ المقدم الفعلي في submittedBy، وتُسجل خطوة المدير approvedBySubmission، ويبدأ الطلب من pendingHr، ويصل إشعار للموظف. نوعا leave وattendanceCorrection يُقدمان من مساريهما المخصصين ويعيدان هنا Hr:Request:UseDedicatedEndpoint. المدير التنفيذي لا يقدم طلبًا جهته none. مدير الموارد البشرية والمدير التنفيذي يبدأ طلبهما إلى المخزن مباشرة بالحالة pendingDestination وينشأ الصرف فورًا، وكذلك طلب المدير التنفيذي إلى المحاسب. يصل إشعار إلى أول معتمد بلغة المستلم. لا تُحدد مهلة موافقة.
+      x-source: ["4", "5.5", "5.7"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Request.Create
+      x-data-scope: self
+      x-error-codes: [Hr:Request:TypeInactive, Hr:Request:UseDedicatedEndpoint, Hr:Request:ExecutiveCannotSubmit, Hr:Request:OnBehalfNotAllowed, Hr:Request:ItemFieldsInvalid, Hr:Request:ItemInactive, Hr:Request:NoApproverAvailable]
+      x-open-question: >-
+        مستخدم له عدة أدوار: أي صف في المصفوفة يُطبق؟ الافتراض بالأولوية: المدير التنفيذي، ثم مدير الموارد البشرية، ثم مسؤول النظام، ثم مدير القسم، ثم الموظف. وأصحاب أدوار المراجع والمحاسب ومسؤول المخزن يتبعون صف الموظف. والصنف غير الموجود في قائمة الأصناف: الافتراض أن مسؤول المخزن يضيفه أولًا لأن itemId مطلوب. والمدير التنفيذي لا يقدم أي نوع جهته none، ومنها الاحتياج الإداري، لأنه لا توجد جهة أعلى منه: هل هذا صحيح؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/RequestSubmitInputDto"
+            example:
+              requestTypeId: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+              onBehalfOfEmployeeId: null
+              description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+              itemId: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+              quantity: 1
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestDetailsDto"
+              example:
+                id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                type:
+                  id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                  code: storeItem
+                  name: "قطعة من المخزن"
+                  destination: store
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                submittedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                isOnBehalf: false
+                description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+                detailsSummary: "حاسوب محمول، الكمية 1"
+                status: pendingManager
+                employeeStatus: pendingManager
+                statusLabel: "بانتظار مدير القسم"
+                currentApproverRole: departmentManager
+                rejectionReason: null
+                steps:
+                  - order: 1
+                    approverRole: departmentManager
+                    approver:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    decision: pending
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 2
+                    approverRole: hrManager
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 3
+                    approverRole: storeOfficer
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                timeline:
+                  - occurredAt: "2026-11-02T07:15:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                stockIssue: null
+                sourceMemoId: null
+                canApprove: false
+                canReject: false
+                canCancel: true
+                creationTime: "2026-11-02T07:15:00Z"
+                lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+    get:
+      operationId: Request_GetList
+      tags: [Requests]
+      summary: "List requests for HR or a manager team"
+      description: >-
+        شاشة «الطلبات»: مدير الموارد البشرية يرى طلبات الشركة بكل حالاتها، ومدير القسم يرى طلبات موظفيه المرتبطين به فقط، ويحدد الخادم النطاق من دور المستخدم.
+      x-source: ["5.5", "8"]
+      x-release: 1
+      x-allowed-roles: [hrManager, departmentManager]
+      x-permission: Hr.Request.ViewList
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة الطلبات للموارد البشرية في القسم 8، وطلبات الفريق لمدير القسم."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/RequestStatus"
+        - name: requestTypeId
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            type: string
+            format: uuid
+        - name: employeeId
+          in: query
+          required: false
+          description: "تصفية حسب الموظف."
+          schema:
+            type: string
+            format: uuid
+        - name: fromDate
+          in: query
+          required: false
+          description: "من تاريخ التقديم."
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          description: "إلى تاريخ التقديم."
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestSummaryPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    type:
+                      id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                      code: storeItem
+                      name: "قطعة من المخزن"
+                      destination: store
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    submittedBy:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    isOnBehalf: false
+                    detailsSummary: "حاسوب محمول، الكمية 1"
+                    status: pendingHr
+                    currentApproverRole: hrManager
+                    creationTime: "2026-11-02T07:15:00Z"
+                    lastModificationTime: "2026-11-02T09:40:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/request/my":
+    get:
+      operationId: Request_GetMy
+      tags: [Requests]
+      summary: "List my requests"
+      description: >-
+        طلبات المستخدم الحالي بما فيها ما قُدم نيابة عنه، وبأنواعها كلها. تعرض employeeStatus وليس RequestStatus، فالطلب عند جهة التنفيذ يظهر «موافق عليه» حتى يصبح «مكتمل»، وcurrentStageRole يبين أين وصل. عند الرفض يظهر السبب.
+      x-source: ["4", "5.5", "5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Request.ViewOwn
+      x-data-scope: self
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: employeeStatus
+          in: query
+          required: false
+          description: "تصفية حسب الحالة الظاهرة."
+          schema:
+            $ref: "#/components/schemas/RequestEmployeeStatus"
+        - name: requestTypeId
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MyRequestPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    type:
+                      id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                      code: storeItem
+                      name: "قطعة من المخزن"
+                      destination: store
+                    detailsSummary: "حاسوب محمول، الكمية 1"
+                    employeeStatus: approved
+                    statusLabel: "موافق عليه"
+                    currentStageRole: storeOfficer
+                    stockIssueStatusLabel: "بانتظار الشراء"
+                    rejectionReason: null
+                    isOnBehalf: false
+                    submittedBy:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    creationTime: "2026-11-02T07:15:00Z"
+                    lastModificationTime: "2026-11-03T10:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/request/inbox":
+    get:
+      operationId: Request_GetInbox
+      tags: [Requests]
+      summary: "List requests waiting for my action"
+      description: >-
+        الصندوق الموحد «بانتظار إجرائي» لكل معتمد: الطلبات التي خطوتها الحالية تخص المستخدم بدوره أو باسمه أو عبر تفويض ساري، بكل الأنواع بما فيها الإجازة والتصحيح. لا يظهر فيه طلب المستخدم الشخصي أبدًا، فهذا منع للاعتماد الذاتي. لا توجد مهلة موافقة ولا إجراء تلقائي، ويبقى الطلب معلقًا حتى القرار. يصل تذكير دوري حسب إعدادات مسؤول النظام دون تغيير الحالة. عند تغيير مدير الموظف تنتقل طلباته المعلقة إلى المدير الجديد ويظهر approverReassigned في الخط الزمني. طلبات المخزن تأتي بـactionKind = stockIssue.
+      x-source: ["4", "5.5"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin, accountant, storeOfficer]
+      x-permission: Hr.Request.Inbox
+      x-data-scope: assigned
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: requestTypeId
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/RequestStatus"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestInboxItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    type:
+                      id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                      code: storeItem
+                      name: "قطعة من المخزن"
+                      destination: store
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    submittedBy:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    isOnBehalf: false
+                    detailsSummary: "حاسوب محمول، الكمية 1"
+                    status: pendingHr
+                    currentApproverRole: hrManager
+                    actionKind: decide
+                    stockIssueId: null
+                    delegatedFrom: null
+                    waitingSince: "2026-11-02T09:40:00Z"
+                    creationTime: "2026-11-02T07:15:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/request/{id}":
+    get:
+      operationId: Request_Get
+      tags: [Requests]
+      summary: "Get request details with timeline"
+      description: >-
+        التفاصيل والخطوات والخط الزمني: من قرر ومتى ولماذا. يصل إليه صاحب الطلب، ومقدمه الفعلي، ومن له خطوة في مساره أو تفويض عليها، ومدير الموارد البشرية، ومدير الموظف الحالي. مسؤول المخزن يعمل من /api/app/stock-issue، ويصل هنا إلى الطلبات التي وصلت خطوته فقط. غيرهم يحصل على 403.
+      x-source: ["4", "5.5", "5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Request.View
+      x-data-scope: assigned
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestDetailsDto"
+              example:
+                id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                type:
+                  id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                  code: storeItem
+                  name: "قطعة من المخزن"
+                  destination: store
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                submittedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                isOnBehalf: false
+                description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+                detailsSummary: "حاسوب محمول، الكمية 1"
+                status: pendingHr
+                employeeStatus: pendingHr
+                statusLabel: "بانتظار الموارد البشرية"
+                currentApproverRole: hrManager
+                rejectionReason: null
+                steps:
+                  - order: 1
+                    approverRole: departmentManager
+                    approver:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    decision: approved
+                    decidedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    delegatedFrom: null
+                    decidedAt: "2026-11-02T09:40:00Z"
+                    note: "موافق، الجهاز الحالي معطل"
+                  - order: 2
+                    approverRole: hrManager
+                    approver: null
+                    decision: pending
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 3
+                    approverRole: storeOfficer
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                timeline:
+                  - occurredAt: "2026-11-02T07:15:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                  - occurredAt: "2026-11-02T09:40:00Z"
+                    action: approved
+                    actor:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    note: "موافق، الجهاز الحالي معطل"
+                stockIssue: null
+                sourceMemoId: null
+                canApprove: false
+                canReject: false
+                canCancel: true
+                creationTime: "2026-11-02T07:15:00Z"
+                lastModificationTime: "2026-11-02T09:40:00Z"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  "/api/app/request/{id}/approve":
+    post:
+      operationId: Request_Approve
+      tags: [Requests]
+      summary: "Approve the current step"
+      description: >-
+        يوافق صاحب الخطوة الحالية أو مفوضه الساري، وينتقل الطلب إلى الخطوة التالية. آخر موافقة في طلب جهته none تجعله approved: الإجازة تتحول من حجز إلى خصم، وتصحيح البصمة يُطبق مع حفظ الأصل. إذا كانت الجهة store يصبح pendingDestination وينشأ الصرف بالحالة pendingAcknowledgement. إذا كانت الجهة accountant يصبح pendingDestination، وموافقة المحاسب نفسها تعني الإنجاز وتجعله completed. لا يستطيع أحد اعتماد طلبه الشخصي مهما كانت أدواره أو تفويضاته: Hr:Request:SelfApprovalNotAllowed. طلب المخزن في pendingDestination يكمل عبر stock-issue. يُشعر الموظف والمعتمد التالي، ويُسجل القرار في الخط الزمني.
+      x-source: ["3", "4", "5.5"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin, accountant]
+      x-permission: Hr.Request.Decide
+      x-data-scope: assigned
+      x-error-codes: [Hr:Request:SelfApprovalNotAllowed, Hr:Request:NotPending, Hr:Request:UseStockIssueFlow]
+      x-open-question: >-
+        المحاسب ومسؤول المخزن عند تنفيذ طلبهما الشخصي بعد موافقة الموارد البشرية: الافتراض أن التنفيذ ليس اعتمادًا فيُسمح به ويُسجل، لأن المحاسب واحد وقد يكون مسؤول المخزن واحدًا. هل هذا مقبول؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/NoteInputDto"
+            example:
+              note: "موافق، الجهاز الحالي معطل"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestDetailsDto"
+              example:
+                id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                type:
+                  id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                  code: storeItem
+                  name: "قطعة من المخزن"
+                  destination: store
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                submittedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                isOnBehalf: false
+                description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+                detailsSummary: "حاسوب محمول، الكمية 1"
+                status: pendingHr
+                employeeStatus: pendingHr
+                statusLabel: "بانتظار الموارد البشرية"
+                currentApproverRole: hrManager
+                rejectionReason: null
+                steps:
+                  - order: 1
+                    approverRole: departmentManager
+                    approver:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    decision: approved
+                    decidedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    delegatedFrom: null
+                    decidedAt: "2026-11-02T09:40:00Z"
+                    note: "موافق، الجهاز الحالي معطل"
+                  - order: 2
+                    approverRole: hrManager
+                    approver: null
+                    decision: pending
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 3
+                    approverRole: storeOfficer
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                timeline:
+                  - occurredAt: "2026-11-02T07:15:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                  - occurredAt: "2026-11-02T09:40:00Z"
+                    action: approved
+                    actor:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    note: "موافق، الجهاز الحالي معطل"
+                stockIssue: null
+                sourceMemoId: null
+                canApprove: false
+                canReject: false
+                canCancel: true
+                creationTime: "2026-11-02T07:15:00Z"
+                lastModificationTime: "2026-11-02T09:40:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/request/{id}/reject":
+    post:
+      operationId: Request_Reject
+      tags: [Requests]
+      summary: "Reject the request at the current step"
+      description: >-
+        الرفض في أي خطوة، بما فيها جهة التنفيذ قبل التسليم، ينهي الطلب بالحالة rejected ولا يعود إلى خطوة سابقة. السبب إلزامي ويظهر للموظف في rejectionReason والخط الزمني ويصله إشعار. يُفك حجز رصيد الإجازة إن وُجد، ويصبح الصرف cancelled. عدم توفر الصنف ليس سبب رفض تلقائيًا، ويُستخدم mark-purchasing. منع الاعتماد الذاتي يشمل الرفض.
+      x-source: ["3", "4", "5.5", "5.7"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin, accountant, storeOfficer]
+      x-permission: Hr.Request.Decide
+      x-data-scope: assigned
+      x-error-codes: [Hr:Request:SelfApprovalNotAllowed, Hr:Request:NotPending]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/ReasonInputDto"
+            example:
+              reason: "يوجد جهاز احتياطي في القسم يغطي الحاجة"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestDetailsDto"
+              example:
+                id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                type:
+                  id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                  code: storeItem
+                  name: "قطعة من المخزن"
+                  destination: store
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                submittedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                isOnBehalf: false
+                description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+                detailsSummary: "حاسوب محمول، الكمية 1"
+                status: rejected
+                employeeStatus: rejected
+                statusLabel: "مرفوض"
+                currentApproverRole: null
+                rejectionReason: "يوجد جهاز احتياطي في القسم يغطي الحاجة"
+                steps:
+                  - order: 1
+                    approverRole: departmentManager
+                    approver:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    decision: approved
+                    decidedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    delegatedFrom: null
+                    decidedAt: "2026-11-02T09:40:00Z"
+                    note: "موافق، الجهاز الحالي معطل"
+                  - order: 2
+                    approverRole: hrManager
+                    approver: null
+                    decision: pending
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 3
+                    approverRole: storeOfficer
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                timeline:
+                  - occurredAt: "2026-11-02T07:15:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                  - occurredAt: "2026-11-02T09:40:00Z"
+                    action: approved
+                    actor:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    note: "موافق، الجهاز الحالي معطل"
+                stockIssue: null
+                sourceMemoId: null
+                canApprove: false
+                canReject: false
+                canCancel: false
+                creationTime: "2026-11-02T07:15:00Z"
+                lastModificationTime: "2026-11-02T09:40:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/request/{id}/cancel":
+    post:
+      operationId: Request_Cancel
+      tags: [Requests]
+      summary: "Cancel my request"
+      description: >-
+        يلغي صاحب الطلب أو مقدمه الفعلي الطلب، فيصبح cancelled. يُفك حجز رصيد الإجازة إن وُجد، ويصبح الصرف cancelled، ويُشعر المعتمد الحالي وصاحب الطلب إذا كان المقدم غيره. المسموح: pendingManager وpendingHr وpendingExecutive، وpendingDestination قبل أي تنفيذ (للمخزن قبل «اطلعت»، وللمحاسب قبل الإنجاز).
+      x-source: ["5.5", "10"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Request.Cancel
+      x-data-scope: self
+      x-error-codes: [Hr:Request:CannotCancelAtThisStage]
+      x-open-question: >-
+        الوثيقة تذكر مسار الإلغاء دون شروطه، ولا تذكر «ملغى» ضمن حالات الموظف. الافتراض: الإلغاء قبل بدء التنفيذ فقط، وتظهر الحالة «ملغى». الإجازة المعتمدة لا تُلغى من هنا. هل هذا صحيح؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/NoteInputDto"
+            example:
+              note: "لم أعد بحاجة إلى الجهاز"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/RequestDetailsDto"
+              example:
+                id: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                type:
+                  id: "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e02"
+                  code: storeItem
+                  name: "قطعة من المخزن"
+                  destination: store
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                submittedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                isOnBehalf: false
+                description: "أحتاج حاسوبًا محمولًا بدل الجهاز المعطل"
+                detailsSummary: "حاسوب محمول، الكمية 1"
+                status: cancelled
+                employeeStatus: cancelled
+                statusLabel: "ملغى"
+                currentApproverRole: null
+                rejectionReason: null
+                steps:
+                  - order: 1
+                    approverRole: departmentManager
+                    approver:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    decision: approved
+                    decidedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    delegatedFrom: null
+                    decidedAt: "2026-11-02T09:40:00Z"
+                    note: "موافق، الجهاز الحالي معطل"
+                  - order: 2
+                    approverRole: hrManager
+                    approver: null
+                    decision: pending
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                  - order: 3
+                    approverRole: storeOfficer
+                    approver: null
+                    decision: notReached
+                    decidedBy: null
+                    delegatedFrom: null
+                    decidedAt: null
+                    note: null
+                timeline:
+                  - occurredAt: "2026-11-02T07:15:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                  - occurredAt: "2026-11-02T09:40:00Z"
+                    action: approved
+                    actor:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    note: "موافق، الجهاز الحالي معطل"
+                stockIssue: null
+                sourceMemoId: null
+                canApprove: false
+                canReject: false
+                canCancel: false
+                creationTime: "2026-11-02T07:15:00Z"
+                lastModificationTime: "2026-11-02T09:40:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/memo":
+    post:
+      operationId: Memo_Create
+      tags: [Memos]
+      summary: "Submit a memo"
+      description: >-
+        تصل المطالعة أولًا إلى مدير القسم المرتبط بالكاتب بالحالة pendingManager، ثم إلى الموارد البشرية بعد التحويل. يُشعر المدير. لمدير القسم: تذهب إلى مسؤول النظام بوصفه المدير الأعلى لمديري الأقسام. لمسؤول النظام ومدير الموارد البشرية: إلى المدير التنفيذي.
+      x-source: ["3", "5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Memo.Create
+      x-data-scope: self
+      x-error-codes: [Hr:Memo:NoManagerLinked]
+      x-open-question: >-
+        الوثيقة تحدد مسار مطالعة الموظف فقط. الافتراض لمدير القسم ومدير الموارد البشرية مأخوذ من مصفوفة القسم 4، وهو أن المدير التنفيذي لا يرفع مطالعة. هل هذا صحيح؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/MemoCreateInputDto"
+            example:
+              kind: leave
+              content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoDto"
+              example:
+                id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                kind: leave
+                content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+                status: pendingManager
+                statusLabel: "بانتظار مدير القسم"
+                currentHandlerRole: departmentManager
+                closeReason: null
+                convertedRequestId: null
+                convertedIncidentId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:00:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                creationTime: "2026-11-04T07:00:00Z"
+                lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/memo/my":
+    get:
+      operationId: Memo_GetMy
+      tags: [Memos]
+      summary: "List my memos"
+      description: "مطالعات المستخدم الحالي مع حالتها، ليرى أين وصلت."
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Memo.ViewOwn
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "يرى الموظف أين وصلت مطالعته، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/MemoStatus"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/MemoKind"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoListItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    kind: leave
+                    contentPreview: "أرجو الموافقة على إجازة لظرف عائلي"
+                    status: pendingManager
+                    statusLabel: "بانتظار مدير القسم"
+                    creationTime: "2026-11-04T07:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/memo/inbox":
+    get:
+      operationId: Memo_GetInbox
+      tags: [Memos]
+      summary: "List memos assigned to me"
+      description: >-
+        المطالعات التي عند المستخدم الآن: المدير يرى pendingManager لموظفيه، والموارد البشرية ترى pendingHr. مع status يمكن عرض ما سبق أن مر بالمستخدم.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin]
+      x-permission: Hr.Memo.Process
+      x-data-scope: assigned
+      x-error-codes: []
+      x-added-route: "وصول المطالعة إلى مدير القسم ثم الموارد البشرية، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة. دون قيمة تعرض ما بانتظار المستخدم."
+          schema:
+            $ref: "#/components/schemas/MemoStatus"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/MemoKind"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoListItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    kind: leave
+                    contentPreview: "أرجو الموافقة على إجازة لظرف عائلي"
+                    status: pendingManager
+                    statusLabel: "بانتظار مدير القسم"
+                    creationTime: "2026-11-04T07:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/memo/{id}":
+    get:
+      operationId: Memo_Get
+      tags: [Memos]
+      summary: "Get memo details"
+      description: >-
+        التفاصيل والخط الزمني. يصل إليها الكاتب ومن مرت به أو هي عنده. غيرهم يحصل على 403.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Memo.View
+      x-data-scope: assigned
+      x-error-codes: []
+      x-added-route: "يرى الموظف أين وصلت مطالعته، ويحتاج المعالج نصها، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoDto"
+              example:
+                id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                kind: leave
+                content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+                status: pendingManager
+                statusLabel: "بانتظار مدير القسم"
+                currentHandlerRole: departmentManager
+                closeReason: null
+                convertedRequestId: null
+                convertedIncidentId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:00:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                creationTime: "2026-11-04T07:00:00Z"
+                lastModificationTime: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  "/api/app/memo/{id}/forward":
+    post:
+      operationId: Memo_Forward
+      tags: [Memos]
+      summary: "Forward a memo to HR"
+      description: >-
+        ينقل من هي عنده المطالعة من pendingManager إلى pendingHr، ويُشعر الموارد البشرية والكاتب. لا يحول أحد مطالعته الشخصية. مطالعة مدير الموارد البشرية لا تُحال إلى الموارد البشرية ويعيد ذلك Hr:Memo:InvalidState، وإنما يحولها المدير التنفيذي إلى طلب أو بلاغ أو يغلقها.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, systemAdmin, executiveDirector]
+      x-permission: Hr.Memo.Process
+      x-data-scope: team
+      x-error-codes: [Hr:Memo:InvalidState, Hr:Memo:SelfActionNotAllowed]
+      x-added-route: "المطالعة تصل أولًا إلى مدير القسم ثم الموارد البشرية، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/NoteInputDto"
+            example:
+              note: "أرجو النظر في الطلب"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoDto"
+              example:
+                id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                kind: leave
+                content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+                status: pendingHr
+                statusLabel: "بانتظار الموارد البشرية"
+                currentHandlerRole: hrManager
+                closeReason: null
+                convertedRequestId: null
+                convertedIncidentId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:00:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                creationTime: "2026-11-04T07:00:00Z"
+                lastModificationTime: "2026-11-04T09:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/memo/{id}/convert":
+    post:
+      operationId: Memo_Convert
+      tags: [Memos]
+      summary: "Convert a memo to a leave request or an incident"
+      description: >-
+        مطالعة الإجازة تتحول إلى طلب إجازة، ومطالعة المشكلة تتحول إلى بلاغ، ويعيد غير ذلك Hr:Memo:ConvertTargetMismatch. يحولها من هي عنده الآن. طلب الإجازة يخضع لقواعد إنشاء الإجازة: حساب الأيام وحجز الرصيد ومنع تجاوزه، ويتبع مسار الكاتب في المصفوفة. إذا كان في صفه خطوة pendingManager تُسجل approvedBySubmission فيبدأ من pendingHr، حتى لو حولته الموارد البشرية، وتبقى موافقتها إجراء منفصلًا. وإذا لم تكن في صفه خطوة كهذه يبدأ من خطوته الأولى، مثل pendingExecutive لمدير الموارد البشرية. البلاغ يبدأ من pendingHr. النوع الذي يتطلب مرفقًا لا يُحول، ويقدمه الموظف مباشرة. يُسجل الناتج في convertedRequestId أو convertedIncidentId، وتصبح المطالعة نهائية، ويُشعر الكاتب.
+      x-source: ["5.4", "5.6"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager, executiveDirector, systemAdmin]
+      x-permission: Hr.Memo.Process
+      x-data-scope: assigned
+      x-error-codes: [Hr:Memo:InvalidState, Hr:Memo:ConvertTargetMismatch, Hr:Memo:LeaveDetailsInvalid, Hr:Memo:LeaveAttachmentRequired, Hr:Memo:SelfActionNotAllowed, Hr:Leave:InsufficientBalance]
+      x-open-question: >-
+        الوثيقة لا تحدد من يحول المطالعة. الافتراض: من هي عنده الآن، مدير القسم أو الموارد البشرية، وتحويل المدير يُعد موافقته الأولى كما في التقديم نيابة عن موظف. هل هذا صحيح؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/MemoConvertInputDto"
+            example:
+              target: leaveRequest
+              leave:
+                kind: annual
+                otherLeaveTypeId: null
+                startDate: "2026-12-01"
+                endDate: "2026-12-03"
+                leaveDate: null
+                fromTime: null
+                toTime: null
+              itemId: null
+              note: "تحويل بناءً على طلب الموظف"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoDto"
+              example:
+                id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                kind: leave
+                content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+                status: convertedToRequest
+                statusLabel: "تحولت إلى طلب"
+                currentHandlerRole: null
+                closeReason: null
+                convertedRequestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                convertedIncidentId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:00:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                creationTime: "2026-11-04T07:00:00Z"
+                lastModificationTime: "2026-11-04T09:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/memo/{id}/close":
+    post:
+      operationId: Memo_Close
+      tags: [Memos]
+      summary: "Close a memo without conversion"
+      description: >-
+        تُغلق المطالعة دون تحويل عند انتهائها في المرحلة الأخيرة، مع سبب إلزامي يظهر للكاتب ويصله إشعار. المرحلة الأخيرة هي الموارد البشرية، أو المدير التنفيذي لمطالعة مدير الموارد البشرية.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [hrManager, executiveDirector]
+      x-permission: Hr.Memo.Close
+      x-data-scope: assigned
+      x-error-codes: [Hr:Memo:InvalidState, Hr:Memo:SelfActionNotAllowed]
+      x-open-question: >-
+        الوثيقة تذكر التحويل فقط. هل يُسمح بإغلاق المطالعة دون تحويل؟ الافتراض: نعم مع سبب، حتى لا تبقى معلقة.
+      x-added-route: >-
+        مطالعة لا تحتاج إلى تحويل يجب أن تنتهي بحالة واضحة يراها الموظف، القسم 5.6.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/ReasonInputDto"
+            example:
+              reason: "تمت معالجة الموضوع مباشرة مع الموظف"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/MemoDto"
+              example:
+                id: "0a1b2c3d-4e5f-4a6b-8c7d-6e7f8a9b0c08"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                kind: leave
+                content: "أرجو الموافقة على إجازة لظرف عائلي من الأول إلى الثالث من ديسمبر"
+                status: closed
+                statusLabel: "مغلقة"
+                currentHandlerRole: null
+                closeReason: "تمت معالجة الموضوع مباشرة مع الموظف"
+                convertedRequestId: null
+                convertedIncidentId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:00:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                creationTime: "2026-11-04T07:00:00Z"
+                lastModificationTime: "2026-11-04T09:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/incident":
+    post:
+      operationId: Incident_Create
+      tags: [Incidents]
+      summary: "Submit a fault report"
+      description: >-
+        بلاغ العطل يسير: مدير القسم ثم الموارد البشرية. يبدأ pendingManager ويُشعر المدير المرتبط. إذا كان المقدم مدير قسم أو مسؤول النظام أو مدير الموارد البشرية أو المدير التنفيذي يبدأ pendingHr، لعدم وجود خطوة مدير في مسار البلاغ.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Incident.Create
+      x-data-scope: self
+      x-error-codes: [Hr:Incident:NoManagerLinked]
+      x-open-question: >-
+        مسار بلاغ مدير القسم غير مذكور. الافتراض: يذهب مباشرة إلى الموارد البشرية ولا يمر بمسؤول النظام. هل هذا صحيح؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/IncidentCreateInputDto"
+            example:
+              itemId: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+              description: "الحاسوب لا يعمل بعد التحديث الأخير"
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentDto"
+              example:
+                id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                description: "الحاسوب لا يعمل بعد التحديث الأخير"
+                status: pendingManager
+                statusLabel: "بانتظار مدير القسم"
+                currentHandlerRole: departmentManager
+                sourceMemoId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:30:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                concurrencyStamp: a1b2c3d4e5
+                creationTime: "2026-11-04T07:30:00Z"
+                lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/incident/my":
+    get:
+      operationId: Incident_GetMy
+      tags: [Incidents]
+      summary: "List my fault reports"
+      description: "بلاغات المستخدم الحالي مع حالتها، ليرى أين وصلت."
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Incident.ViewOwn
+      x-data-scope: self
+      x-error-codes: []
+      x-added-route: "يرى الموظف أين وصل بلاغه، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/IncidentStatus"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentListItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    descriptionPreview: "الحاسوب لا يعمل بعد التحديث الأخير"
+                    status: pendingHr
+                    statusLabel: "بانتظار الموارد البشرية"
+                    creationTime: "2026-11-04T07:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/incident/inbox":
+    get:
+      operationId: Incident_GetInbox
+      tags: [Incidents]
+      summary: "List fault reports I handle"
+      description: >-
+        مدير القسم يرى بلاغات موظفيه، ومدير الموارد البشرية يرى بلاغات الشركة، ويحدد الخادم النطاق من الدور. دون status تعرض غير المنتهية فقط.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [departmentManager, hrManager]
+      x-permission: Hr.Incident.Process
+      x-data-scope: assigned
+      x-error-codes: []
+      x-added-route: "وصول البلاغ إلى مدير القسم ثم الموارد البشرية، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/IncidentStatus"
+        - name: employeeId
+          in: query
+          required: false
+          description: "تصفية حسب الموظف."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentListItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    descriptionPreview: "الحاسوب لا يعمل بعد التحديث الأخير"
+                    status: pendingHr
+                    statusLabel: "بانتظار الموارد البشرية"
+                    creationTime: "2026-11-04T07:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/incident/{id}":
+    get:
+      operationId: Incident_Get
+      tags: [Incidents]
+      summary: "Get fault report details"
+      description: >-
+        التفاصيل والخط الزمني. يصل إليها المقدم ومديره المرتبط ومدير الموارد البشرية. غيرهم يحصل على 403.
+      x-source: ["5.6"]
+      x-release: 1
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Incident.View
+      x-data-scope: assigned
+      x-error-codes: []
+      x-added-route: "يرى الموظف أين وصل بلاغه، القسم 5.6."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentDto"
+              example:
+                id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                description: "الحاسوب لا يعمل بعد التحديث الأخير"
+                status: pendingManager
+                statusLabel: "بانتظار مدير القسم"
+                currentHandlerRole: departmentManager
+                sourceMemoId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:30:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                concurrencyStamp: a1b2c3d4e5
+                creationTime: "2026-11-04T07:30:00Z"
+                lastModificationTime: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    patch:
+      operationId: Incident_UpdateStatus
+      tags: [Incidents]
+      summary: "Update fault report status"
+      description: >-
+        تحدّث الموارد البشرية الحالة: pendingHr إلى inProgress أو resolved، وinProgress إلى resolved. يصل إشعار للموظف، وتظهر الملاحظة في الخط الزمني.
+      x-source: ["5.6", "10"]
+      x-release: 1
+      x-allowed-roles: [hrManager]
+      x-permission: Hr.Incident.UpdateStatus
+      x-data-scope: company
+      x-error-codes: [Hr:Incident:InvalidTransition]
+      x-open-question: >-
+        الوثيقة لا تعدد حالات البلاغ بعد وصوله إلى الموارد البشرية. الافتراض: inProgress ثم resolved. هل يلزم غير ذلك؟
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/IncidentStatusUpdateInputDto"
+            example:
+              status: inProgress
+              note: "تم تحويله إلى الفني"
+              concurrencyStamp: a1b2c3d4e5
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentDto"
+              example:
+                id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                description: "الحاسوب لا يعمل بعد التحديث الأخير"
+                status: inProgress
+                statusLabel: "قيد المعالجة"
+                currentHandlerRole: hrManager
+                sourceMemoId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:30:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                concurrencyStamp: a1b2c3d4e5
+                creationTime: "2026-11-04T07:30:00Z"
+                lastModificationTime: "2026-11-04T11:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/incident/{id}/forward":
+    post:
+      operationId: Incident_Forward
+      tags: [Incidents]
+      summary: "Forward a fault report to HR"
+      description: >-
+        ينقل مدير القسم البلاغ من pendingManager إلى pendingHr، ويُشعر الموارد البشرية والموظف، ويُسجل في الخط الزمني.
+      x-source: ["5.6", "10"]
+      x-release: 1
+      x-allowed-roles: [departmentManager]
+      x-permission: Hr.Incident.Process
+      x-data-scope: team
+      x-error-codes: [Hr:Incident:InvalidState]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/NoteInputDto"
+            example:
+              note: "أرجو المعالجة سريعًا"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/IncidentDto"
+              example:
+                id: "1b2c3d4e-5f6a-4b7c-9d8e-7f8a9b0c1d09"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                description: "الحاسوب لا يعمل بعد التحديث الأخير"
+                status: pendingHr
+                statusLabel: "بانتظار الموارد البشرية"
+                currentHandlerRole: hrManager
+                sourceMemoId: null
+                timeline:
+                  - occurredAt: "2026-11-04T07:30:00Z"
+                    action: submitted
+                    actor:
+                      id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                      displayName: "سارة خالد العلي"
+                    note: null
+                concurrencyStamp: a1b2c3d4e5
+                creationTime: "2026-11-04T07:30:00Z"
+                lastModificationTime: "2026-11-04T09:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/item":
+    get:
+      operationId: Item_GetList
+      tags: [Store]
+      summary: "List items with stock"
+      description: "شاشة الأصناف لمسؤول المخزن: النوع والرصيد والحد الأدنى. لا تحوي تكلفة."
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Item.View
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/ItemKind"
+        - name: isActive
+          in: query
+          required: false
+          description: "تصفية حسب التفعيل."
+          schema:
+            type: boolean
+        - name: belowMinimum
+          in: query
+          required: false
+          description: "الأصناف تحت الحد الأدنى فقط."
+          schema:
+            type: boolean
+        - name: filter
+          in: query
+          required: false
+          description: "بحث في الاسمين."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ItemPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                    nameAr: "حاسوب محمول"
+                    nameEn: Laptop
+                    kind: returnable
+                    minQuantity: 2
+                    quantityOnHand: 5
+                    isBelowMinimum: false
+                    isActive: true
+                    concurrencyStamp: b7c8d9e0f1
+                    creationTime: "2026-09-10T08:00:00Z"
+                    lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+    post:
+      operationId: Item_Create
+      tags: [Store]
+      summary: "Create an item"
+      description: >-
+        يضيف مسؤول المخزن صنفًا ويحدد نوعه: يُسترد ويصبح عهدة، أو مستهلك لا يصبح عهدة. يبدأ الرصيد صفرًا.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Item.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Item:NameAlreadyExists]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ItemCreateInputDto"
+            example:
+              nameAr: "حاسوب محمول"
+              nameEn: Laptop
+              kind: returnable
+              minQuantity: 2
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ItemDto"
+              example:
+                id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                nameAr: "حاسوب محمول"
+                nameEn: Laptop
+                kind: returnable
+                minQuantity: 2
+                quantityOnHand: 0
+                isBelowMinimum: true
+                isActive: true
+                concurrencyStamp: b7c8d9e0f1
+                creationTime: "2026-09-10T08:00:00Z"
+                lastModificationTime: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/item/lookup":
+    get:
+      operationId: Item_Lookup
+      tags: [Store]
+      summary: "Look up active items"
+      description: >-
+        قائمة الأصناف المفعلة دون كميات، لاختيار الصنف عند طلب قطعة أو رفع بلاغ.
+      x-source: ["5.5", "5.6", "5.7"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Store.Item.Lookup
+      x-data-scope: public
+      x-error-codes: []
+      x-added-route: "اختيار الصنف عند طلب قطعة من المخزن، دون كشف الأرصدة، القسم 5.5 و5.7."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/ItemKind"
+        - name: filter
+          in: query
+          required: false
+          description: "بحث في الاسم."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ItemRefPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                    name: "حاسوب محمول"
+                    kind: returnable
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/item/{id}":
+    get:
+      operationId: Item_Get
+      tags: [Store]
+      summary: "Get an item"
+      description: "يعرض صنفًا واحدًا لمسؤول المخزن مع concurrencyStamp قبل التعديل."
+      x-source: ["5.7"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Item.View
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "تعديل الصنف يحتاج إلى قراءة concurrencyStamp، القسم 5.7."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ItemDto"
+              example:
+                id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                nameAr: "حاسوب محمول"
+                nameEn: Laptop
+                kind: returnable
+                minQuantity: 2
+                quantityOnHand: 5
+                isBelowMinimum: false
+                isActive: true
+                concurrencyStamp: b7c8d9e0f1
+                creationTime: "2026-09-10T08:00:00Z"
+                lastModificationTime: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: Item_Update
+      tags: [Store]
+      summary: "Update an item"
+      description: >-
+        يعدل الاسمين والحد الأدنى والتفعيل. النوع لا يتغير بعد أول حركة. لا يوجد حذف، ويُستخدم إلغاء التفعيل. الرصيد يتغير بالحركات فقط.
+      x-source: ["5.7", "9"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Item.Manage
+      x-data-scope: company
+      x-error-codes: [Hr:Item:KindLocked, Hr:Item:NameAlreadyExists]
+      x-added-route: "صيانة بيانات الأصناف، القسم 5.7."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ItemUpdateInputDto"
+            example:
+              nameAr: "حاسوب محمول"
+              nameEn: Laptop
+              kind: returnable
+              minQuantity: 3
+              isActive: true
+              concurrencyStamp: b7c8d9e0f1
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ItemDto"
+              example:
+                id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                nameAr: "حاسوب محمول"
+                nameEn: Laptop
+                kind: returnable
+                minQuantity: 3
+                quantityOnHand: 5
+                isBelowMinimum: false
+                isActive: true
+                concurrencyStamp: b7c8d9e0f1
+                creationTime: "2026-09-10T08:00:00Z"
+                lastModificationTime: "2026-11-04T08:30:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/stock/receive":
+    post:
+      operationId: Stock_Receive
+      tags: [Store]
+      summary: "Receive stock"
+      description: >-
+        يسجل مسؤول المخزن دخول المواد بحركة receive فيزيد الرصيد. إذا أُرسل totalCost ينشأ مصروف بتصنيف مشتريات المخزن عند المحاسب، مرتبط بالحركة عبر StockMovementId، بأحداث موثوقة عبر Outbox. عند الشراء لصرف معين يُرسل stockIssueId، وتكون التكلفة إلزامية، ويبقى الصرف purchasing حتى التسليم. التكلفة لا تعود في الاستجابة.
+      x-source: ["5.7", "5.16", "9.1"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Stock.Receive
+      x-data-scope: company
+      x-error-codes: [Hr:Stock:ItemInactive, Hr:Stock:PurchaseCostRequired, Hr:Stock:IssueNotPurchasing, Hr:Stock:IssueItemMismatch]
+      x-open-question: >-
+        هل يرى مسؤول المخزن تكلفة ما أدخله؟ قاعدة العقد تمنع الحقول المالية في DTOs الخاصة به، فالافتراض أن التكلفة كتابة فقط ويراها المحاسب في المصروفات.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/StockReceiveInputDto"
+            example:
+              itemId: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+              quantity: 5
+              totalCost: 4250.5
+              stockIssueId: null
+              note: "دفعة من المورد"
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockMovementDto"
+              example:
+                id: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                type: receive
+                quantity: 5
+                balanceAfter: 5
+                requestId: null
+                stockIssueId: null
+                custodyId: null
+                reversesMovementId: null
+                employee: null
+                performedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                note: "دفعة من المورد"
+                creationTime: "2026-11-03T09:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/stock/adjust":
+    post:
+      operationId: Stock_Adjust
+      tags: [Store]
+      summary: "Correct stock with a reversing movement"
+      description: >-
+        حركات المخزن لا تُحذف ولا تُعدل، والتصحيح بحركة adjustment مع سبب إلزامي. لا يصبح الرصيد سالبًا. إذا عكست حركة شراء لها تكلفة، ينشأ مصروف عكسي عند المحاسب.
+      x-source: ["9"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Stock.Adjust
+      x-data-scope: company
+      x-error-codes: [Hr:Stock:InsufficientStock, Hr:Stock:ZeroQuantity, Hr:Stock:MovementAlreadyReversed]
+      x-added-route: "التصحيح بحركة عكسية، ملاحظات القسم 9."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/StockAdjustInputDto"
+            example:
+              itemId: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+              quantity: -1
+              reason: "خطأ في إدخال الكمية"
+              reversesMovementId: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockMovementDto"
+              example:
+                id: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                type: adjustment
+                quantity: -1
+                balanceAfter: 4
+                requestId: null
+                stockIssueId: null
+                custodyId: null
+                reversesMovementId: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                employee: null
+                performedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                note: "خطأ في إدخال الكمية"
+                creationTime: "2026-11-03T09:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/stock/movements":
+    get:
+      operationId: Stock_GetMovements
+      tags: [Store]
+      summary: "List stock movements"
+      description: >-
+        سجل الحركات لمسؤول المخزن دون تكلفة. الموظف فيه عبر EmployeeRefDto فقط.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Stock.View
+      x-data-scope: company
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: itemId
+          in: query
+          required: false
+          description: "تصفية حسب الصنف."
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/StockMovementType"
+        - name: fromDate
+          in: query
+          required: false
+          description: "من تاريخ."
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          description: "إلى تاريخ."
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockMovementPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    type: receive
+                    quantity: 5
+                    balanceAfter: 5
+                    requestId: null
+                    stockIssueId: null
+                    custodyId: null
+                    reversesMovementId: null
+                    employee: null
+                    performedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    note: "دفعة من المورد"
+                    creationTime: "2026-11-03T09:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/stock-issue":
+    get:
+      operationId: StockIssue_GetList
+      tags: [Store]
+      summary: "List stock issue requests"
+      description: >-
+        شاشة طلبات الصرف لمسؤول المخزن، وتشمل حالة التوفر. تظهر الطلبات بعد انتهاء موافقاتها فقط، أو مباشرة لطلبات مدير الموارد البشرية والمدير التنفيذي.
+      x-source: ["5.7", "8"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Issue.View
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة طلبات الصرف لمسؤول المخزن، القسم 8."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/StockIssueStatus"
+        - name: itemId
+          in: query
+          required: false
+          description: "تصفية حسب الصنف."
+          schema:
+            type: string
+            format: uuid
+        - name: employeeId
+          in: query
+          required: false
+          description: "تصفية حسب الموظف."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockIssuePagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                    requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    quantity: 1
+                    quantityOnHand: 5
+                    isAvailable: true
+                    status: pendingAcknowledgement
+                    statusLabel: "بانتظار الاطلاع"
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    acknowledgedAt: null
+                    acknowledgedBy: null
+                    purchasingAt: null
+                    deliveredAt: null
+                    deliveredBy: null
+                    custodyId: null
+                    stockMovementId: null
+                    creationTime: "2026-11-02T12:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/stock-issue/{id}":
+    get:
+      operationId: StockIssue_Get
+      tags: [Store]
+      summary: "Get a stock issue request"
+      description: "يعرض صرفًا واحدًا لمسؤول المخزن. الموظف عبر EmployeeRefDto فقط."
+      x-source: ["5.7", "8"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Issue.View
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "شاشة طلبات الصرف والتسليم لمسؤول المخزن، القسم 8."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockIssueDto"
+              example:
+                id: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                quantity: 1
+                quantityOnHand: 5
+                isAvailable: true
+                status: delivered
+                statusLabel: "تم التسليم"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                acknowledgedAt: "2026-11-03T08:00:00Z"
+                acknowledgedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                purchasingAt: null
+                deliveredAt: "2026-11-04T10:00:00Z"
+                deliveredBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                custodyId: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                stockMovementId: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                creationTime: "2026-11-02T12:00:00Z"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  "/api/app/stock-issue/{id}/acknowledge":
+    post:
+      operationId: StockIssue_Acknowledge
+      tags: [Store]
+      summary: "Mark a stock issue as acknowledged"
+      description: >-
+        يؤشر مسؤول المخزن «اطلعت»: pendingAcknowledgement إلى acknowledged. لا تتغير الكمية. يبقى الطلب pendingDestination، ويُسجل الوقت والمستخدم في الخط الزمني، ويُشعر الموظف.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Issue.Process
+      x-data-scope: company
+      x-error-codes: [Hr:Stock:IssueInvalidState]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockIssueDto"
+              example:
+                id: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                quantity: 1
+                quantityOnHand: 5
+                isAvailable: true
+                status: acknowledged
+                statusLabel: "اطلعت"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                acknowledgedAt: "2026-11-03T08:00:00Z"
+                acknowledgedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                purchasingAt: null
+                deliveredAt: null
+                deliveredBy: null
+                custodyId: null
+                stockMovementId: null
+                creationTime: "2026-11-02T12:00:00Z"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/stock-issue/{id}/mark-purchasing":
+    post:
+      operationId: StockIssue_MarkPurchasing
+      tags: [Store]
+      summary: "Mark a stock issue as waiting for purchase"
+      description: >-
+        إذا لم يتوفر الصنف يُسجل «بانتظار الشراء»: acknowledged إلى purchasing، ولا يُرفض الطلب تلقائيًا. لا تتغير الكمية. يدخل الصنف لاحقًا عبر POST /api/app/stock/receive مع التكلفة وstockIssueId، فتصل التكلفة إلى مصروفات المحاسب. يُشعر الموظف.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Issue.Process
+      x-data-scope: company
+      x-error-codes: [Hr:Stock:IssueInvalidState]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "./common.yaml#/components/schemas/NoteInputDto"
+            example:
+              note: "الكمية غير متوفرة، تم طلب الشراء"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockIssueDto"
+              example:
+                id: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                quantity: 1
+                quantityOnHand: 0
+                isAvailable: false
+                status: purchasing
+                statusLabel: "بانتظار الشراء"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                acknowledgedAt: "2026-11-03T08:00:00Z"
+                acknowledgedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                purchasingAt: "2026-11-03T09:00:00Z"
+                deliveredAt: null
+                deliveredBy: null
+                custodyId: null
+                stockMovementId: null
+                creationTime: "2026-11-02T12:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/stock-issue/{id}/deliver":
+    post:
+      operationId: StockIssue_Deliver
+      tags: [Store]
+      summary: "Deliver the item"
+      description: >-
+        التسليم الفعلي من acknowledged أو purchasing. عملية واحدة ذرية: تُخصم الكمية هنا فقط بحركة issue، ويصبح الصرف delivered، والطلب completed. إذا كان الصنف returnable تنشأ عهدة بالحالة pendingAcknowledgement باسم صاحب الطلب، أو باسم قسمه عند custodyKind = shared، وليس الاثنين معًا. المستهلك لا ينشئ عهدة. الرصيد غير الكافي يعيد Hr:Stock:InsufficientStock. يُشعر الموظف ليؤكد الاستلام. يوصى بـIdempotency-Key.
+      x-source: ["5.7", "9.1", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Store.Issue.Deliver
+      x-data-scope: company
+      x-error-codes: [Hr:Stock:IssueInvalidState, Hr:Stock:InsufficientStock]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/StockIssueDeliverInputDto"
+            example:
+              custodyKind: personal
+              note: "تم التسليم في المكتب الرئيسي"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/StockIssueDto"
+              example:
+                id: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                quantity: 1
+                quantityOnHand: 5
+                isAvailable: true
+                status: delivered
+                statusLabel: "تم التسليم"
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                acknowledgedAt: "2026-11-03T08:00:00Z"
+                acknowledgedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                purchasingAt: null
+                deliveredAt: "2026-11-04T10:00:00Z"
+                deliveredBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                custodyId: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                stockMovementId: "5f6a7b8c-9d0e-4f1a-8b2c-0c1d2e3f4a12"
+                creationTime: "2026-11-02T12:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/custody":
+    post:
+      operationId: Custody_Create
+      tags: [Custody]
+      summary: "Add custody directly"
+      description: >-
+        يختار مسؤول المخزن موظفًا من GET /api/app/employee/lookup (الاسم والقسم فقط) أو قسمًا، ويضيف عهدة مباشرة. العهدة شخصية باسم موظف أو مشتركة باسم قسم، وليست الاثنين معًا، ويعيد غير ذلك Hr:Custody:InvalidHolder. الصنف يجب أن يكون returnable. إذا كان deductFromStock = true تُخصم الكمية بحركة issue. تبدأ العهدة pendingAcknowledgement ويُشعر صاحبها، أو مدير القسم للعهدة المشتركة.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Custody.Create
+      x-data-scope: company
+      x-error-codes: [Hr:Custody:InvalidHolder, Hr:Custody:ItemNotReturnable, Hr:Stock:InsufficientStock]
+      x-open-question: >-
+        هل تخصم العهدة المباشرة من رصيد المخزن؟ الوثيقة تخصم عند التسليم الفعلي فقط وتسمح بالإضافة المباشرة. الافتراض: يحدد ذلك deductFromStock، وfalse لتسجيل ما هو موجود أصلًا عند الموظف.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/CustodyCreateInputDto"
+            example:
+              itemId: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+              kind: personal
+              employeeId: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+              departmentId: null
+              quantity: 1
+              deductFromStock: true
+              note: "حاسوب للموظف الجديد"
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyDto"
+              example:
+                id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                kind: personal
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                department: null
+                quantity: 1
+                status: pendingAcknowledgement
+                assignedAt: "2026-11-04T10:00:00Z"
+                assignedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                acknowledgedAt: null
+                acknowledgedBy: null
+                returnedAt: null
+                requestId: null
+                stockIssueId: null
+                note: "حاسوب للموظف الجديد"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+    get:
+      operationId: Custody_GetList
+      tags: [Custody]
+      summary: "List all custody records"
+      description: >-
+        كل العهد لمسؤول المخزن ومدير الموارد البشرية. الموظف عبر EmployeeRefDto فقط.
+      x-source: ["3", "5.7", "8"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer, hrManager]
+      x-permission: Hr.Custody.ViewAll
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: >-
+        صلاحية مسؤول المخزن على العهد واسترداد العهدة تحتاجان إلى قائمة، القسم 3 و5.7.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/CustodyKind"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/CustodyStatus"
+        - name: employeeId
+          in: query
+          required: false
+          description: "تصفية حسب الموظف."
+          schema:
+            type: string
+            format: uuid
+        - name: departmentId
+          in: query
+          required: false
+          description: "تصفية حسب القسم."
+          schema:
+            type: string
+            format: uuid
+        - name: itemId
+          in: query
+          required: false
+          description: "تصفية حسب الصنف."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    kind: personal
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    department: null
+                    quantity: 1
+                    status: pendingAcknowledgement
+                    assignedAt: "2026-11-04T10:00:00Z"
+                    assignedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    acknowledgedAt: null
+                    acknowledgedBy: null
+                    returnedAt: null
+                    requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                    note: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/custody/my":
+    get:
+      operationId: Custody_GetMy
+      tags: [Custody]
+      summary: "List my custody"
+      description: >-
+        العهد الشخصية باسم المستخدم الحالي. العهدة المشتركة باسم القسم لا تظهر هنا.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Custody.ViewOwn
+      x-data-scope: self
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/CustodyStatus"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    kind: personal
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    department: null
+                    quantity: 1
+                    status: pendingAcknowledgement
+                    assignedAt: "2026-11-04T10:00:00Z"
+                    assignedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    acknowledgedAt: null
+                    acknowledgedBy: null
+                    returnedAt: null
+                    requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                    note: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/custody/team":
+    get:
+      operationId: Custody_GetTeam
+      tags: [Custody]
+      summary: "List team custody"
+      description: >-
+        عهد موظفي مدير القسم الشخصية، والعهدة المشتركة باسم أقسامهم، لمتابعة الجرد.
+      x-source: ["5.7", "5.10", "10"]
+      x-release: 2
+      x-allowed-roles: [departmentManager]
+      x-permission: Hr.Custody.ViewTeam
+      x-data-scope: team
+      x-error-codes: []
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: kind
+          in: query
+          required: false
+          description: "تصفية حسب النوع."
+          schema:
+            $ref: "#/components/schemas/CustodyKind"
+        - name: status
+          in: query
+          required: false
+          description: "تصفية حسب الحالة."
+          schema:
+            $ref: "#/components/schemas/CustodyStatus"
+        - name: employeeId
+          in: query
+          required: false
+          description: "تصفية حسب الموظف."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    kind: personal
+                    employee:
+                      id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                      fullName: "سارة خالد العلي"
+                      departmentName: "تقنية المعلومات"
+                    department: null
+                    quantity: 1
+                    status: pendingAcknowledgement
+                    assignedAt: "2026-11-04T10:00:00Z"
+                    assignedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    acknowledgedAt: null
+                    acknowledgedBy: null
+                    returnedAt: null
+                    requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                    stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                    note: null
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+  "/api/app/custody/{id}":
+    get:
+      operationId: Custody_Get
+      tags: [Custody]
+      summary: "Get a custody record"
+      description: >-
+        يصل إليها صاحبها، ومدير القسم لعهد فريقه ومشتركة قسمه، ومسؤول المخزن، ومدير الموارد البشرية. غيرهم يحصل على 403.
+      x-source: ["5.7"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Custody.View
+      x-data-scope: assigned
+      x-error-codes: []
+      x-added-route: "فتح عهدة من إشعار تأكيد الاستلام، القسم 5.7."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyDto"
+              example:
+                id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                kind: personal
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                department: null
+                quantity: 1
+                status: pendingAcknowledgement
+                assignedAt: "2026-11-04T10:00:00Z"
+                assignedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                acknowledgedAt: null
+                acknowledgedBy: null
+                returnedAt: null
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                note: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+  "/api/app/custody/{id}/acknowledge":
+    post:
+      operationId: Custody_Acknowledge
+      tags: [Custody]
+      summary: "Acknowledge custody receipt"
+      description: >-
+        يؤكد صاحب العهدة الشخصية الاستلام داخل التطبيق، ويُسجل الوقت والمستخدم: pendingAcknowledgement إلى acknowledged. العهدة المشتركة يؤكدها مدير القسم، ولا يصبح بذلك مسؤولًا عنها شخصيًا إلا بمحضر باسمه، وهو عهدة شخصية مستقلة.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [employee, departmentManager, hrManager, executiveDirector, reviewer, accountant, storeOfficer, systemAdmin]
+      x-permission: Hr.Custody.Acknowledge
+      x-data-scope: self
+      x-error-codes: [Hr:Custody:AlreadyAcknowledged, Hr:Custody:AlreadyReturned]
+      x-open-question: >-
+        الوثيقة لا تحدد من يؤكد استلام العهدة المشتركة. الافتراض: مدير القسم المرتبط بها.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyDto"
+              example:
+                id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                kind: personal
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                department: null
+                quantity: 1
+                status: acknowledged
+                assignedAt: "2026-11-04T10:00:00Z"
+                assignedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                acknowledgedAt: "2026-11-04T11:00:00Z"
+                acknowledgedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                returnedAt: null
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                note: null
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/custody/{id}/return":
+    post:
+      operationId: Custody_Return
+      tags: [Custody]
+      summary: "Record custody return"
+      description: >-
+        يسجل مسؤول المخزن إرجاع العهدة كاملة عند استلامها فعليًا، فتصبح returned مع returnedAt. عند restock = true تعود الكمية بحركة return. عند false تبقى خارج الرصيد ويلزم note. يُشعر صاحب العهدة.
+      x-source: ["5.7", "10"]
+      x-release: 2
+      x-allowed-roles: [storeOfficer]
+      x-permission: Hr.Custody.Return
+      x-data-scope: company
+      x-error-codes: [Hr:Custody:AlreadyReturned, Hr:Custody:ReturnNoteRequired]
+      x-open-question: >-
+        الوثيقة لا تذكر التلف ولا الإرجاع الجزئي ولا من يبدأ الإرجاع. الافتراض: يسجله مسؤول المخزن للكمية كاملة، والتالف لا يعود إلى الرصيد.
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Id"
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/CustodyReturnInputDto"
+            example:
+              restock: true
+              note: "أُعيد بحالة جيدة"
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyDto"
+              example:
+                id: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                item:
+                  id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                  name: "حاسوب محمول"
+                  kind: returnable
+                kind: personal
+                employee:
+                  id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03
+                  fullName: "سارة خالد العلي"
+                  departmentName: "تقنية المعلومات"
+                department: null
+                quantity: 1
+                status: returned
+                assignedAt: "2026-11-04T10:00:00Z"
+                assignedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                acknowledgedAt: "2026-11-04T11:00:00Z"
+                acknowledgedBy:
+                  id: c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e04
+                  displayName: "سارة خالد العلي"
+                returnedAt: "2026-12-20T09:00:00Z"
+                requestId: "3f8a1c52-7b1e-4d3a-9c44-1a2b3c4d5e01"
+                stockIssueId: f6a7b8c9-d0e1-4f2a-9b3c-5d6e7f8a9b07
+                note: "أُعيد بحالة جيدة"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+  "/api/app/custody-count":
+    post:
+      operationId: CustodyCount_Create
+      tags: [Custody]
+      summary: "Record a department custody count"
+      description: >-
+        يسجل مدير القسم جرد العهدة المشتركة لقسم له فيه موظفون، بسطر لكل عهدة قائمة. يحسب الخادم result بمقارنة الكميات. الجرد لا يغير العهد ولا الرصيد، ولا يحمّل المدير مسؤولية شخصية. تظهر النتيجة في التقرير الشهري، وعند وجود فرق يُشعر مسؤول المخزن.
+      x-source: ["3", "5.7", "5.10", "10"]
+      x-release: 2
+      x-allowed-roles: [departmentManager]
+      x-permission: Hr.Custody.Count
+      x-data-scope: team
+      x-error-codes: [Hr:Custody:CountLinesIncomplete, Hr:Custody:CountLineInvalid, Hr:Custody:DepartmentNotInScope]
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/CustodyCountCreateInputDto"
+            example:
+              departmentId: "4e5f6a7b-8c9d-4e0f-9a1b-9b0c1d2e3f11"
+              countDate: "2026-11-30"
+              note: null
+              lines:
+                - custodyId: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                  countedQuantity: 3
+                  note: null
+      responses:
+        "201":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyCountDto"
+              example:
+                id: "6a7b8c9d-0e1f-4a2b-9c3d-1d2e3f4a5b13"
+                department:
+                  id: "4e5f6a7b-8c9d-4e0f-9a1b-9b0c1d2e3f11"
+                  name: "تقنية المعلومات"
+                countDate: "2026-11-30"
+                result: matched
+                note: null
+                countedBy:
+                  id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                  displayName: "أحمد ناصر الراشد"
+                lines:
+                  - custodyId: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                    item:
+                      id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                      name: "حاسوب محمول"
+                      kind: returnable
+                    expectedQuantity: 3
+                    countedQuantity: 3
+                    note: null
+                creationTime: "2026-11-30T12:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "422":
+          $ref: "./common.yaml#/components/responses/BusinessRuleViolation"
+    get:
+      operationId: CustodyCount_GetList
+      tags: [Custody]
+      summary: "List department custody counts"
+      description: >-
+        سجل الجرد. مدير القسم يرى أقسام فريقه، ومسؤول المخزن ومدير الموارد البشرية يريان الشركة، ويحدد الخادم النطاق من الدور.
+      x-source: ["5.7", "5.10"]
+      x-release: 2
+      x-allowed-roles: [departmentManager, storeOfficer, hrManager]
+      x-permission: Hr.Custody.ViewCount
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: "متابعة الجرد وعرض نتيجته في التقرير الشهري، القسم 5.7 و5.10."
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/AcceptLanguage"
+        - $ref: "./common.yaml#/components/parameters/SkipCount"
+        - $ref: "./common.yaml#/components/parameters/MaxResultCount"
+        - $ref: "./common.yaml#/components/parameters/Sorting"
+        - name: departmentId
+          in: query
+          required: false
+          description: "تصفية حسب القسم."
+          schema:
+            type: string
+            format: uuid
+        - name: result
+          in: query
+          required: false
+          description: "تصفية حسب النتيجة."
+          schema:
+            $ref: "#/components/schemas/CustodyCountResult"
+        - name: fromDate
+          in: query
+          required: false
+          description: "من تاريخ."
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          description: "إلى تاريخ."
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: "نجحت العملية."
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/CustodyCountPagedResultDto"
+              example:
+                totalCount: 1
+                items:
+                  - id: "6a7b8c9d-0e1f-4a2b-9c3d-1d2e3f4a5b13"
+                    department:
+                      id: "4e5f6a7b-8c9d-4e0f-9a1b-9b0c1d2e3f11"
+                      name: "تقنية المعلومات"
+                    countDate: "2026-11-30"
+                    result: matched
+                    note: null
+                    countedBy:
+                      id: d4e5f6a7-b8c9-4d0e-9f1a-3b4c5d6e7f05
+                      displayName: "أحمد ناصر الراشد"
+                    lines:
+                      - custodyId: "2c3d4e5f-6a7b-4c8d-8e9f-8a9b0c1d2e10"
+                        item:
+                          id: e5f6a7b8-c9d0-4e1f-8a2b-4c5d6e7f8a06
+                          name: "حاسوب محمول"
+                          kind: returnable
+                        expectedQuantity: 3
+                        countedQuantity: 3
+                        note: null
+                    creationTime: "2026-11-30T12:00:00Z"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "./common.yaml#/components/responses/Unauthorized"
+        "403":
+          $ref: "./common.yaml#/components/responses/Forbidden"
+components:
+  securitySchemes:
+    oauth2:
+      $ref: "./common.yaml#/components/securitySchemes/oauth2"
+  schemas:
+    RequestStatus:
+      type: string
+      description: |-
+        الحالة الفعلية للطلب في مسار الموافقة. يستخدمها المعتمدون والموارد البشرية، وتشير إليها الوحدات الأخرى.
+        pendingManager: بانتظار الموافقة الأولى. المعتمد مدير القسم المرتبط بالموظف، أو مسؤول النظام إذا كان مقدم الطلب مدير قسم (currentApproverRole يحدد ذلك).
+        pendingHr: بانتظار الموارد البشرية.
+        pendingExecutive: بانتظار المدير التنفيذي.
+        pendingDestination: انتهت الموافقات أو لا تلزم، وبانتظار تنفيذ الجهة: المخزن أو المحاسب.
+        approved: موافق عليه نهائيًا لطلب بلا جهة تنفيذ (إجازة، تصحيح بصمة، destination = none). حالة نهائية.
+        rejected: مرفوض في إحدى الخطوات. حالة نهائية.
+        completed: نفذت جهة التنفيذ الطلب: التسليم للمخزن، أو الإنجاز للمحاسب. حالة نهائية.
+        cancelled: ألغاه مقدمه أو صاحبه. حالة نهائية.
+      enum: [pendingManager, pendingHr, pendingExecutive, pendingDestination, approved, rejected, completed, cancelled]
+    RequestEmployeeStatus:
+      type: string
+      description: |-
+        الحالة كما يراها مقدم الطلب، وفق القسم 4 من الوثيقة. يجب أن تعرضها شاشات «طلباتي» بدل RequestStatus.
+        pendingManager = بانتظار مدير القسم. pendingHr = بانتظار الموارد البشرية. approved = موافق عليه. rejected = مرفوض. completed = مكتمل.
+        التحويل من RequestStatus: pendingDestination تظهر approved، والبقية بالاسم نفسه.
+        قيمتان خارج قائمة الموظف الخمس في الوثيقة: pendingExecutive (بانتظار المدير التنفيذي) ولا تظهر إلا لمدير الموارد البشرية ومسؤول النظام لأن الموظف العادي لا يمر بهذه الخطوة، وcancelled (ملغى) ولا تظهر إلا بعد إلغاء الطلب.
+      enum: [pendingManager, pendingHr, pendingExecutive, approved, rejected, completed, cancelled]
+    RequestDestination:
+      type: string
+      description: >-
+        جهة التنفيذ بعد الموافقات. none: الموافقة الأخيرة تنهي الطلب بالحالة approved (عمود الإجازة وتصحيح البصمة في المصفوفة). store: مسؤول المخزن. accountant: المحاسب.
+      enum: [none, store, accountant]
+    RequestStepDecision:
+      type: string
+      description: >-
+        notReached: لم تصل إليها بعد أو توقف الطلب قبلها. pending: الخطوة الحالية. approved: موافقة، وهي أيضًا إنجاز جهة التنفيذ. approvedBySubmission: عُدت موافقة مدير القسم تمت لأنه قدم الطلب نيابة عن الموظف. rejected: رفض.
+      enum: [notReached, pending, approved, approvedBySubmission, rejected]
+    RequestInboxActionKind:
+      type: string
+      description: >-
+        decide: الإجراء عبر approve وreject على الطلب. stockIssue: الإجراء عبر مسار /api/app/stock-issue باستخدام stockIssueId.
+      enum: [decide, stockIssue]
+    RequestTypeDto:
+      type: object
+      description: "نوع طلب للمستخدم العادي، باسم مترجم."
+      required: [id, code, name, destination, usesDedicatedEndpoint, requiresItem]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف النوع."
+        code:
+          type: string
+          description: >-
+            رمز ثابت. الأنواع المبذورة: leave, attendanceCorrection, storeItem, accountant, administrativeNeed.
+        name:
+          type: string
+          description: "الاسم حسب Accept-Language."
+        destination:
+          $ref: "#/components/schemas/RequestDestination"
+        usesDedicatedEndpoint:
+          type: boolean
+          description: >-
+            true للنوعين leave وattendanceCorrection. تقديمهما عبر POST /api/app/leave-request وPOST /api/app/attendance-correction وليس POST /api/app/request.
+        requiresItem:
+          type: boolean
+          description: >-
+            true عندما destination = store. عندها يلزم itemId وquantity عند التقديم.
+    RequestTypePagedResultDto:
+      type: object
+      description: "صفحة من RequestTypeDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestTypeDto"
+    RequestTypeAdminDto:
+      type: object
+      description: "نوع طلب لمسؤول النظام."
+      required: [id, code, nameAr, nameEn, destination, isActive, isSystem, concurrencyStamp, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف النوع."
+        code:
+          type: string
+          description: "رمز ثابت وفريد."
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+        destination:
+          $ref: "#/components/schemas/RequestDestination"
+        isActive:
+          type: boolean
+          description: "النوع غير المفعل لا يظهر عند التقديم، وتكمل طلباته القائمة مسارها."
+        isSystem:
+          type: boolean
+          description: "نوع مبذور. لا يتغير رمزه ولا جهته."
+        concurrencyStamp:
+          type: string
+          description: "يُعاد إرساله في التحديث. عدم المطابقة يعيد 409."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    RequestTypeAdminPagedResultDto:
+      type: object
+      description: "صفحة من RequestTypeAdminDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestTypeAdminDto"
+    RequestTypeCreateInputDto:
+      type: object
+      description: "إنشاء نوع طلب."
+      required: [code, nameAr, nameEn, destination, isActive]
+      properties:
+        code:
+          type: string
+          description: "حروف إنجليزية بصيغة camelCase. فريد."
+          pattern: "^[a-z][A-Za-z0-9]{1,63}$"
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+          minLength: 1
+          maxLength: 128
+        destination:
+          $ref: "#/components/schemas/RequestDestination"
+        isActive:
+          type: boolean
+          description: "تفعيل النوع."
+    RequestTypeUpdateInputDto:
+      type: object
+      description: "تعديل نوع طلب. الرمز لا يتغير."
+      required: [nameAr, nameEn, destination, isActive, concurrencyStamp]
+      properties:
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+          minLength: 1
+          maxLength: 128
+        destination:
+          allOf:
+            - $ref: "#/components/schemas/RequestDestination"
+          description: "لا يتغير للأنواع المبذورة."
+        isActive:
+          type: boolean
+          description: "تفعيل النوع."
+        concurrencyStamp:
+          type: string
+          description: "آخر قيمة مقروءة."
+    RequestTypeRefDto:
+      type: object
+      description: "مرجع مختصر لنوع الطلب."
+      required: [id, code, name, destination]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف النوع."
+        code:
+          type: string
+          description: "الرمز الثابت."
+        name:
+          type: string
+          description: "الاسم حسب Accept-Language."
+        destination:
+          $ref: "#/components/schemas/RequestDestination"
+    RequestSubmitInputDto:
+      type: object
+      description: "تقديم طلب عام."
+      required: [requestTypeId, description]
+      properties:
+        requestTypeId:
+          type: string
+          format: uuid
+          description: "نوع الطلب."
+        onBehalfOfEmployeeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "موظف من فريق مدير القسم عند التقديم نيابة عنه. null للتقديم الشخصي."
+        description:
+          type: string
+          description: "وصف الطلب."
+          minLength: 1
+          maxLength: 4000
+        itemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الصنف. مطلوب عندما destination = store، ويجب أن يكون null في غيره."
+        quantity:
+          type: number
+          format: decimal
+          nullable: true
+          description: >-
+            الكمية، أكبر من صفر. مطلوبة عندما destination = store، ويجب أن تكون null في غيره.
+          minimum: 0
+          exclusiveMinimum: true
+    MyRequestDto:
+      type: object
+      description: "طلب في قائمة «طلباتي». لا يحمل RequestStatus عمدًا."
+      required: [id, type, detailsSummary, employeeStatus, statusLabel, isOnBehalf, submittedBy, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الطلب."
+        type:
+          $ref: "#/components/schemas/RequestTypeRefDto"
+        detailsSummary:
+          type: string
+          description: "ملخص مترجم يولده الخادم، مثل نوع الإجازة وتواريخها أو الصنف وكميته."
+        employeeStatus:
+          $ref: "#/components/schemas/RequestEmployeeStatus"
+        statusLabel:
+          type: string
+          description: >-
+            نص الحالة حسب Accept-Language. عند pendingManager والمعتمد مسؤول النظام يكون «بانتظار مسؤول النظام».
+        currentStageRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          nullable: true
+          description: >-
+            أين وصل الطلب الآن. storeOfficer أو accountant أثناء التنفيذ رغم أن employeeStatus = approved. null في الحالات النهائية.
+        stockIssueStatusLabel:
+          type: string
+          nullable: true
+          description: >-
+            حالة الصرف المترجمة، مثل «بانتظار الشراء». null لغير طلبات المخزن أو قبل إنشاء الصرف.
+        rejectionReason:
+          type: string
+          nullable: true
+          description: "سبب الرفض. يظهر للموظف عند employeeStatus = rejected."
+        isOnBehalf:
+          type: boolean
+          description: "true إذا قدمه مدير القسم نيابة عن الموظف."
+        submittedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          description: "المقدم الفعلي."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    MyRequestPagedResultDto:
+      type: object
+      description: "صفحة من MyRequestDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MyRequestDto"
+    RequestInboxItemDto:
+      type: object
+      description: "عنصر في صندوق «بانتظار إجرائي». لا يحوي مهلة موافقة لأنه لا توجد مهلة."
+      required: [id, type, employee, submittedBy, isOnBehalf, detailsSummary, status, currentApproverRole, actionKind, waitingSince, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الطلب."
+        type:
+          $ref: "#/components/schemas/RequestTypeRefDto"
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "صاحب الطلب."
+        submittedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          description: "المقدم الفعلي."
+        isOnBehalf:
+          type: boolean
+          description: "true إذا قُدم نيابة عن الموظف."
+        detailsSummary:
+          type: string
+          description: "ملخص مترجم يولده الخادم."
+        status:
+          $ref: "#/components/schemas/RequestStatus"
+        currentApproverRole:
+          $ref: "./common.yaml#/components/schemas/AppRole"
+        actionKind:
+          $ref: "#/components/schemas/RequestInboxActionKind"
+        stockIssueId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "معرف الصرف عندما actionKind = stockIssue."
+        delegatedFrom:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "صاحب الصلاحية الأصلي إذا وصل العنصر عبر تفويض ساري."
+        waitingSince:
+          type: string
+          format: date-time
+          description: >-
+            وقت وصول الطلب إلى الخطوة الحالية. للعرض فقط، ولا يترتب عليه إجراء تلقائي.
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    RequestInboxItemPagedResultDto:
+      type: object
+      description: "صفحة من RequestInboxItemDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestInboxItemDto"
+    RequestSummaryDto:
+      type: object
+      description: "طلب في قائمة الموارد البشرية أو طلبات الفريق."
+      required: [id, type, employee, submittedBy, isOnBehalf, detailsSummary, status, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الطلب."
+        type:
+          $ref: "#/components/schemas/RequestTypeRefDto"
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "صاحب الطلب."
+        submittedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          description: "المقدم الفعلي."
+        isOnBehalf:
+          type: boolean
+          description: "true إذا قُدم نيابة عن الموظف."
+        detailsSummary:
+          type: string
+          description: "ملخص مترجم يولده الخادم."
+        status:
+          $ref: "#/components/schemas/RequestStatus"
+        currentApproverRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          nullable: true
+          description: "null في الحالات النهائية."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    RequestSummaryPagedResultDto:
+      type: object
+      description: "صفحة من RequestSummaryDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestSummaryDto"
+    RequestStepDto:
+      type: object
+      description: "خطوة في مسار الطلب."
+      required: [order, approverRole, decision]
+      properties:
+        order:
+          type: integer
+          format: int32
+          description: "ترتيب الخطوة، يبدأ من 1."
+        approverRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          description: >-
+            الدور المطلوب. departmentManager للمدير المرتبط، وsystemAdmin لمديري الأقسام، وstoreOfficer أو accountant لخطوة التنفيذ.
+        approver:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: >-
+            المعتمد المسمى إن كان محددًا، مثل مدير القسم. null إذا كانت الخطوة لأي صاحب دور.
+        decision:
+          $ref: "#/components/schemas/RequestStepDecision"
+        decidedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "من اتخذ القرار فعليًا."
+        delegatedFrom:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "صاحب الصلاحية الأصلي إذا كان القرار بالتفويض."
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت القرار."
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة الموافقة أو سبب الرفض."
+    RequestDetailsDto:
+      type: object
+      description: >-
+        تفاصيل الطلب مع الخط الزمني. كل بيانات الموظف عبر EmployeeRefDto، ولا توجد حقول مالية.
+      required: [id, type, employee, submittedBy, isOnBehalf, detailsSummary, status, employeeStatus, statusLabel, steps, timeline, canApprove, canReject, canCancel, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الطلب."
+        type:
+          $ref: "#/components/schemas/RequestTypeRefDto"
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "صاحب الطلب."
+        submittedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          description: "المقدم الفعلي، ويختلف عن صاحب الطلب عند التقديم نيابة عنه."
+        isOnBehalf:
+          type: boolean
+          description: "true إذا قُدم نيابة عن الموظف."
+        description:
+          type: string
+          nullable: true
+          description: "وصف الطلب. null للإجازة وتصحيح البصمة. ملخصهما في detailsSummary، وتفاصيلهما في GET /api/app/leave-request/{id} وGET /api/app/attendance-correction/{id} بمعرف الطلب نفسه."
+        detailsSummary:
+          type: string
+          description: "ملخص مترجم يولده الخادم."
+        status:
+          allOf:
+            - $ref: "#/components/schemas/RequestStatus"
+          description: >-
+            الحالة الفعلية. شاشات المعتمدين تعرضها، وشاشات مقدم الطلب تعرض employeeStatus.
+        employeeStatus:
+          $ref: "#/components/schemas/RequestEmployeeStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة المناسب للمستخدم الحالي حسب Accept-Language."
+        currentApproverRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          nullable: true
+          description: "null في الحالات النهائية."
+        rejectionReason:
+          type: string
+          nullable: true
+          description: "سبب الرفض عند status = rejected."
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestStepDto"
+          description: "خطوات المسار المبنية عند التقديم حسب مقدم الطلب وجهته."
+        timeline:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/TimelineEntryDto"
+          description: >-
+            من قرر ومتى ولماذا، مرتب تصاعديًا. قيم action: submitted, submittedOnBehalf, approved, rejected, cancelled, approverReassigned, stockIssueAcknowledged, stockIssuePurchasing, stockIssueDelivered, completed.
+        stockIssue:
+          allOf:
+            - $ref: "#/components/schemas/StockIssueStatusDto"
+          nullable: true
+          description: "حالة الصرف لطلبات المخزن بعد إنشائه."
+        sourceMemoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "المطالعة التي تحول منها الطلب."
+        canApprove:
+          type: boolean
+          description: "المستخدم الحالي يستطيع استدعاء approve الآن."
+        canReject:
+          type: boolean
+          description: "المستخدم الحالي يستطيع استدعاء reject الآن."
+        canCancel:
+          type: boolean
+          description: "المستخدم الحالي يستطيع استدعاء cancel الآن."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    MemoKind:
+      type: string
+      description: >-
+        leave: مطالعة إجازة، وتتحول إلى طلب إجازة. problem: مطالعة مشكلة، وتتحول إلى بلاغ.
+      enum: [leave, problem]
+    MemoStatus:
+      type: string
+      description: >-
+        pendingManager: عند المدير. pendingHr: عند الموارد البشرية. convertedToRequest: تحولت إلى طلب إجازة. convertedToIncident: تحولت إلى بلاغ. closed: أُغلقت دون تحويل مع سبب.
+      enum: [pendingManager, pendingHr, convertedToRequest, convertedToIncident, closed]
+    MemoConvertTarget:
+      type: string
+      description: "leaveRequest لمطالعة الإجازة، وincident لمطالعة المشكلة."
+      enum: [leaveRequest, incident]
+    MemoCreateInputDto:
+      type: object
+      description: "رفع مطالعة."
+      required: [kind, content]
+      properties:
+        kind:
+          $ref: "#/components/schemas/MemoKind"
+        content:
+          type: string
+          description: "نص المطالعة."
+          minLength: 1
+          maxLength: 4000
+    MemoLeaveConversionDto:
+      type: object
+      description: >-
+        بيانات الإجازة عند التحويل. hourly: leaveDate وfromTime وtoTime. annual: startDate وendDate. other: otherLeaveTypeId وstartDate وendDate.
+      required: [kind]
+      properties:
+        kind:
+          $ref: "./time-leave.yaml#/components/schemas/LeaveKind"
+        otherLeaveTypeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "مطلوب عندما kind = other."
+        startDate:
+          type: string
+          format: date
+          nullable: true
+          description: "من تاريخ."
+        endDate:
+          type: string
+          format: date
+          nullable: true
+          description: "إلى تاريخ."
+        leaveDate:
+          type: string
+          format: date
+          nullable: true
+          description: "تاريخ الزمنية."
+        fromTime:
+          type: string
+          nullable: true
+          description: "من ساعة."
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        toTime:
+          type: string
+          nullable: true
+          description: "إلى ساعة."
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    MemoConvertInputDto:
+      type: object
+      description: "تحويل مطالعة."
+      required: [target]
+      properties:
+        target:
+          $ref: "#/components/schemas/MemoConvertTarget"
+        leave:
+          allOf:
+            - $ref: "#/components/schemas/MemoLeaveConversionDto"
+          nullable: true
+          description: "مطلوب عندما target = leaveRequest، ويجب أن يكون null في غيره."
+        itemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الصنف المتعطل عند التحويل إلى بلاغ، إن وُجد."
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة تظهر في الخط الزمني."
+          maxLength: 2000
+    MemoListItemDto:
+      type: object
+      description: "مطالعة في قائمة."
+      required: [id, employee, kind, contentPreview, status, statusLabel, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف المطالعة."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "كاتب المطالعة."
+        kind:
+          $ref: "#/components/schemas/MemoKind"
+        contentPreview:
+          type: string
+          description: "أول 200 حرف من النص."
+        status:
+          $ref: "#/components/schemas/MemoStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    MemoListItemPagedResultDto:
+      type: object
+      description: "صفحة من MemoListItemDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoListItemDto"
+    MemoDto:
+      type: object
+      description: "تفاصيل مطالعة مع مسارها."
+      required: [id, employee, kind, content, status, statusLabel, timeline, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف المطالعة."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "كاتب المطالعة."
+        kind:
+          $ref: "#/components/schemas/MemoKind"
+        content:
+          type: string
+          description: "نص المطالعة."
+        status:
+          $ref: "#/components/schemas/MemoStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        currentHandlerRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          nullable: true
+          description: "من عنده المطالعة الآن. null بعد التحويل أو الإغلاق."
+        closeReason:
+          type: string
+          nullable: true
+          description: "سبب الإغلاق عند status = closed."
+        convertedRequestId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "طلب الإجازة الناتج."
+        convertedIncidentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "البلاغ الناتج."
+        timeline:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/TimelineEntryDto"
+          description: >-
+            قيم action: submitted, forwardedToHr, convertedToRequest, convertedToIncident, closed.
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    IncidentStatus:
+      type: string
+      description: >-
+        pendingManager: عند مدير القسم. pendingHr: عند الموارد البشرية. inProgress: قيد المعالجة. resolved: تمت المعالجة، وهي حالة نهائية.
+      enum: [pendingManager, pendingHr, inProgress, resolved]
+    IncidentCreateInputDto:
+      type: object
+      description: "رفع بلاغ عطل."
+      required: [description]
+      properties:
+        itemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الصنف المتعطل إن كان من أصناف المخزن، من GET /api/app/item/lookup."
+        description:
+          type: string
+          description: "وصف العطل."
+          minLength: 1
+          maxLength: 4000
+    IncidentStatusUpdateInputDto:
+      type: object
+      description: >-
+        تحديث حالة البلاغ. الانتقالات: pendingHr إلى inProgress أو resolved، وinProgress إلى resolved.
+      required: [status, concurrencyStamp]
+      properties:
+        status:
+          type: string
+          description: "الحالة الجديدة."
+          enum: [inProgress, resolved]
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة تظهر للموظف في الخط الزمني."
+          maxLength: 2000
+        concurrencyStamp:
+          type: string
+          description: "آخر قيمة مقروءة."
+    IncidentListItemDto:
+      type: object
+      description: "بلاغ في قائمة."
+      required: [id, employee, descriptionPreview, status, statusLabel, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف البلاغ."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "مقدم البلاغ."
+        item:
+          allOf:
+            - $ref: "#/components/schemas/ItemRefDto"
+          nullable: true
+          description: "الصنف المتعطل."
+        descriptionPreview:
+          type: string
+          description: "أول 200 حرف من الوصف."
+        status:
+          $ref: "#/components/schemas/IncidentStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    IncidentListItemPagedResultDto:
+      type: object
+      description: "صفحة من IncidentListItemDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentListItemDto"
+    IncidentDto:
+      type: object
+      description: "تفاصيل بلاغ مع مساره، ليرى الموظف أين وصل."
+      required: [id, employee, description, status, statusLabel, timeline, concurrencyStamp, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف البلاغ."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "مقدم البلاغ."
+        item:
+          allOf:
+            - $ref: "#/components/schemas/ItemRefDto"
+          nullable: true
+          description: "الصنف المتعطل."
+        description:
+          type: string
+          description: "وصف العطل."
+        status:
+          $ref: "#/components/schemas/IncidentStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        currentHandlerRole:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/AppRole"
+          nullable: true
+          description: "من عنده البلاغ الآن. null عند resolved."
+        sourceMemoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "المطالعة التي تحول منها البلاغ."
+        timeline:
+          type: array
+          items:
+            $ref: "./common.yaml#/components/schemas/TimelineEntryDto"
+          description: "قيم action: submitted, forwardedToHr, inProgress, resolved."
+        concurrencyStamp:
+          type: string
+          description: "يُعاد إرساله في التحديث. عدم المطابقة يعيد 409."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    ItemKind:
+      type: string
+      description: >-
+        returnable: تُسترد وتصبح عهدة عند التسليم. consumable: مستهلكة ولا تصبح عهدة.
+      enum: [returnable, consumable]
+    ItemRefDto:
+      type: object
+      description: "مرجع صنف للمستخدمين العاديين، دون كميات."
+      required: [id, name, kind]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الصنف."
+        name:
+          type: string
+          description: "الاسم حسب Accept-Language."
+        kind:
+          $ref: "#/components/schemas/ItemKind"
+    ItemRefPagedResultDto:
+      type: object
+      description: "صفحة من ItemRefDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemRefDto"
+    ItemDto:
+      type: object
+      description: "صنف لمسؤول المخزن."
+      required: [id, nameAr, nameEn, kind, minQuantity, quantityOnHand, isBelowMinimum, isActive, concurrencyStamp, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الصنف."
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+        kind:
+          $ref: "#/components/schemas/ItemKind"
+        minQuantity:
+          type: number
+          format: decimal
+          description: "الحد الأدنى."
+          minimum: 0
+        quantityOnHand:
+          type: number
+          format: decimal
+          description: "الرصيد الحالي المحسوب من الحركات."
+        isBelowMinimum:
+          type: boolean
+          description: "quantityOnHand أقل من minQuantity."
+        isActive:
+          type: boolean
+          description: "غير المفعل لا يظهر عند تقديم الطلبات."
+        concurrencyStamp:
+          type: string
+          description: "يُعاد إرساله في التحديث. عدم المطابقة يعيد 409."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+        lastModificationTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت آخر تعديل UTC."
+    ItemPagedResultDto:
+      type: object
+      description: "صفحة من ItemDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDto"
+    ItemCreateInputDto:
+      type: object
+      description: "إضافة صنف. يبدأ رصيده صفرًا، ويزيد عبر استلام المواد."
+      required: [nameAr, nameEn, kind, minQuantity]
+      properties:
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+          minLength: 1
+          maxLength: 128
+        kind:
+          $ref: "#/components/schemas/ItemKind"
+        minQuantity:
+          type: number
+          format: decimal
+          description: "الحد الأدنى."
+          minimum: 0
+    ItemUpdateInputDto:
+      type: object
+      description: "تعديل صنف. الرصيد لا يُعدل هنا."
+      required: [nameAr, nameEn, kind, minQuantity, isActive, concurrencyStamp]
+      properties:
+        nameAr:
+          type: string
+          description: "الاسم بالعربية."
+          minLength: 1
+          maxLength: 128
+        nameEn:
+          type: string
+          description: "الاسم بالإنجليزية."
+          minLength: 1
+          maxLength: 128
+        kind:
+          allOf:
+            - $ref: "#/components/schemas/ItemKind"
+          description: "لا يتغير بعد أول حركة."
+        minQuantity:
+          type: number
+          format: decimal
+          description: "الحد الأدنى."
+          minimum: 0
+        isActive:
+          type: boolean
+          description: "تفعيل الصنف."
+        concurrencyStamp:
+          type: string
+          description: "آخر قيمة مقروءة."
+    StockMovementType:
+      type: string
+      description: >-
+        receive: دخول مواد. issue: تسليم أو عهدة مخصومة من المخزن. return: إرجاع عهدة إلى المخزن. adjustment: تصحيح بحركة عكسية.
+      enum: [receive, issue, return, adjustment]
+    StockReceiveInputDto:
+      type: object
+      description: >-
+        تسجيل دخول مواد. totalCost حقل كتابة فقط، ولا يعود في أي DTO لمسؤول المخزن.
+      required: [itemId, quantity]
+      properties:
+        itemId:
+          type: string
+          format: uuid
+          description: "الصنف."
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية الداخلة، أكبر من صفر."
+          minimum: 0
+          exclusiveMinimum: true
+        totalCost:
+          type: number
+          format: decimal
+          nullable: true
+          description: >-
+            إجمالي تكلفة الشراء. عند وجوده ينشأ مصروف عند المحاسب. مطلوب إذا وُجد stockIssueId.
+          minimum: 0
+          exclusiveMinimum: true
+        stockIssueId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            طلب الصرف الذي اشتُريت له المواد. يجب أن تكون حالته purchasing وأن يطابق الصنف.
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة."
+          maxLength: 2000
+    StockAdjustInputDto:
+      type: object
+      description: "تصحيح رصيد بحركة عكسية."
+      required: [itemId, quantity, reason]
+      properties:
+        itemId:
+          type: string
+          format: uuid
+          description: "الصنف."
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية بإشارة: موجبة تزيد الرصيد وسالبة تنقصه. لا تكون صفرًا."
+        reason:
+          type: string
+          description: "سبب التصحيح."
+          minLength: 1
+          maxLength: 2000
+        reversesMovementId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الحركة التي يعكسها التصحيح، إن وُجدت."
+    StockMovementDto:
+      type: object
+      description: >-
+        حركة مخزن. لا تُعدل ولا تُحذف، ولا تحوي تكلفة لأن مسؤول المخزن هو قارئها.
+      required: [id, item, type, quantity, balanceAfter, performedBy, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الحركة."
+        item:
+          $ref: "#/components/schemas/ItemRefDto"
+        type:
+          $ref: "#/components/schemas/StockMovementType"
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية بإشارة: موجبة للدخول والإرجاع، وسالبة للتسليم."
+        balanceAfter:
+          type: number
+          format: decimal
+          description: "رصيد الصنف بعد الحركة."
+        requestId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الطلب المرتبط."
+        stockIssueId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الصرف المرتبط."
+        custodyId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "العهدة المرتبطة."
+        reversesMovementId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الحركة المعكوسة."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+          description: "الموظف المستلم أو المرجع."
+        performedBy:
+          $ref: "./common.yaml#/components/schemas/UserRefDto"
+        note:
+          type: string
+          nullable: true
+          description: "الملاحظة أو سبب التصحيح."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    StockMovementPagedResultDto:
+      type: object
+      description: "صفحة من StockMovementDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockMovementDto"
+    StockIssueStatus:
+      type: string
+      description: >-
+        pendingAcknowledgement: وصل إلى مسؤول المخزن ولم يطلع. acknowledged: «اطلعت». purchasing: «بانتظار الشراء». delivered: «تم التسليم». cancelled: انتهى لأن الطلب رُفض أو أُلغي قبل التسليم.
+      enum: [pendingAcknowledgement, acknowledged, purchasing, delivered, cancelled]
+    CustodyKind:
+      type: string
+      description: "personal: شخصية باسم موظف. shared: مشتركة باسم قسم."
+      enum: [personal, shared]
+    CustodyStatus:
+      type: string
+      description: >-
+        pendingAcknowledgement: بانتظار تأكيد الاستلام. acknowledged: تأكد الاستلام. returned: أُرجعت.
+      enum: [pendingAcknowledgement, acknowledged, returned]
+    StockIssueStatusDto:
+      type: object
+      description: "حالة الصرف كما تظهر داخل تفاصيل الطلب. دون أرصدة المخزن."
+      required: [id, item, quantity, status, statusLabel]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الصرف."
+        item:
+          $ref: "#/components/schemas/ItemRefDto"
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية المطلوبة."
+        status:
+          $ref: "#/components/schemas/StockIssueStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت التسليم."
+        custodyId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "العهدة الناتجة."
+    StockIssueDto:
+      type: object
+      description: "طلب صرف لمسؤول المخزن. الموظف عبر EmployeeRefDto فقط."
+      required: [id, requestId, item, quantity, quantityOnHand, isAvailable, status, statusLabel, employee, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الصرف."
+        requestId:
+          type: string
+          format: uuid
+          description: "الطلب الأصلي."
+        item:
+          $ref: "#/components/schemas/ItemRefDto"
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية المطلوبة."
+        quantityOnHand:
+          type: number
+          format: decimal
+          description: "رصيد الصنف الآن."
+        isAvailable:
+          type: boolean
+          description: "quantityOnHand لا يقل عن quantity."
+        status:
+          $ref: "#/components/schemas/StockIssueStatus"
+        statusLabel:
+          type: string
+          description: "نص الحالة حسب Accept-Language."
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          description: "صاحب الطلب: الاسم والقسم فقط."
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت «اطلعت»."
+        acknowledgedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "من أشر «اطلعت»."
+        purchasingAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت «بانتظار الشراء»."
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت التسليم."
+        deliveredBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "من سلم."
+        custodyId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "العهدة الناتجة. null للمستهلك وقبل التسليم."
+        stockMovementId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "حركة الخصم بعد التسليم."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    StockIssuePagedResultDto:
+      type: object
+      description: "صفحة من StockIssueDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockIssueDto"
+    StockIssueDeliverInputDto:
+      type: object
+      description: "تسليم الصنف."
+      properties:
+        custodyKind:
+          allOf:
+            - $ref: "#/components/schemas/CustodyKind"
+          nullable: true
+          description: >-
+            للصنف الذي يُسترد فقط. null تعني personal باسم صاحب الطلب. shared تنشئ العهدة باسم قسم صاحب الطلب. تُهمل للمستهلك.
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة التسليم."
+          maxLength: 2000
+    CustodyCreateInputDto:
+      type: object
+      description: >-
+        إضافة عهدة مباشرة. personal: employeeId مطلوب وdepartmentId = null. shared: departmentId مطلوب وemployeeId = null.
+      required: [itemId, kind, quantity, deductFromStock]
+      properties:
+        itemId:
+          type: string
+          format: uuid
+          description: "صنف من نوع returnable."
+        kind:
+          $ref: "#/components/schemas/CustodyKind"
+        employeeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الموظف، من GET /api/app/employee/lookup."
+        departmentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "القسم، من GET /api/app/department."
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية، أكبر من صفر."
+          minimum: 0
+          exclusiveMinimum: true
+        deductFromStock:
+          type: boolean
+          description: >-
+            true: تسليم فعلي الآن من رصيد المخزن بحركة issue. false: تسجيل عهدة موجودة أصلًا عند الموظف أو القسم دون حركة.
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة."
+          maxLength: 2000
+    CustodyDto:
+      type: object
+      description: >-
+        عهدة. تحمل employee أو department، وليس الاثنين معًا: employee غير null فقط عندما kind = personal، وdepartment غير null فقط عندما kind = shared.
+      required: [id, item, kind, quantity, status, assignedAt, assignedBy]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف العهدة."
+        item:
+          $ref: "#/components/schemas/ItemRefDto"
+        kind:
+          $ref: "#/components/schemas/CustodyKind"
+        employee:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/EmployeeRefDto"
+          nullable: true
+          description: "صاحب العهدة الشخصية."
+        department:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+          nullable: true
+          description: "قسم العهدة المشتركة."
+        quantity:
+          type: number
+          format: decimal
+          description: "الكمية."
+        status:
+          $ref: "#/components/schemas/CustodyStatus"
+        assignedAt:
+          type: string
+          format: date-time
+          description: "وقت التسجيل."
+        assignedBy:
+          $ref: "./common.yaml#/components/schemas/UserRefDto"
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت تأكيد الاستلام."
+        acknowledgedBy:
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/UserRefDto"
+          nullable: true
+          description: "من أكد الاستلام."
+        returnedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "وقت الإرجاع."
+        requestId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الطلب المصدر."
+        stockIssueId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "الصرف المصدر. null للعهدة المباشرة."
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة."
+    CustodyPagedResultDto:
+      type: object
+      description: "صفحة من CustodyDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustodyDto"
+    CustodyReturnInputDto:
+      type: object
+      description: "إرجاع عهدة كاملة."
+      required: [restock]
+      properties:
+        restock:
+          type: boolean
+          description: >-
+            true: تعود الكمية إلى الرصيد بحركة return. false: لا تعود، مثل التلف، ويصبح note مطلوبًا.
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة الإرجاع."
+          maxLength: 2000
+    CustodyCountResult:
+      type: string
+      description: "matched: كل الكميات مطابقة. discrepancy: يوجد فرق."
+      enum: [matched, discrepancy]
+    CustodyCountLineInputDto:
+      type: object
+      description: "سطر جرد."
+      required: [custodyId, countedQuantity]
+      properties:
+        custodyId:
+          type: string
+          format: uuid
+          description: "عهدة مشتركة قائمة في القسم."
+        countedQuantity:
+          type: number
+          format: decimal
+          description: "الكمية الموجودة فعليًا."
+          minimum: 0
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة السطر."
+          maxLength: 2000
+    CustodyCountCreateInputDto:
+      type: object
+      description: "جرد عهدة قسم."
+      required: [departmentId, countDate, lines]
+      properties:
+        departmentId:
+          type: string
+          format: uuid
+          description: "القسم."
+        countDate:
+          type: string
+          format: date
+          description: "تاريخ الجرد."
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة عامة."
+          maxLength: 2000
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CustodyCountLineInputDto"
+          description: "سطر لكل عهدة مشتركة قائمة في القسم."
+    CustodyCountLineDto:
+      type: object
+      description: "سطر جرد محفوظ."
+      required: [custodyId, item, expectedQuantity, countedQuantity]
+      properties:
+        custodyId:
+          type: string
+          format: uuid
+          description: "العهدة."
+        item:
+          $ref: "#/components/schemas/ItemRefDto"
+        expectedQuantity:
+          type: number
+          format: decimal
+          description: "الكمية المسجلة وقت الجرد."
+        countedQuantity:
+          type: number
+          format: decimal
+          description: "الكمية الموجودة فعليًا."
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة السطر."
+    CustodyCountDto:
+      type: object
+      description: "جرد عهدة قسم. لا يغير العهد ولا الرصيد."
+      required: [id, department, countDate, result, countedBy, lines, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "معرف الجرد."
+        department:
+          $ref: "./common.yaml#/components/schemas/DepartmentRefDto"
+        countDate:
+          type: string
+          format: date
+          description: "تاريخ الجرد."
+        result:
+          $ref: "#/components/schemas/CustodyCountResult"
+        note:
+          type: string
+          nullable: true
+          description: "ملاحظة عامة."
+        countedBy:
+          $ref: "./common.yaml#/components/schemas/UserRefDto"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustodyCountLineDto"
+          description: "أسطر الجرد."
+        creationTime:
+          type: string
+          format: date-time
+          description: "وقت الإنشاء UTC."
+    CustodyCountPagedResultDto:
+      type: object
+      description: "صفحة من CustodyCountDto."
+      required: [totalCount, items]
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustodyCountDto"

@@ -1,0 +1,257 @@
+openapi: 3.0.3
+info:
+  title: HR System - Common Components
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: OpenIddict (ABP). Authorization Code + PKCE. Flutter is a public client with no client secret.
+      flows:
+        authorizationCode:
+          authorizationUrl: /connect/authorize
+          tokenUrl: /connect/token
+          refreshUrl: /connect/token
+          scopes:
+            openid: OpenID Connect
+            profile: User profile
+            offline_access: Refresh tokens
+            HR_Mangment2: HR API access
+    deviceKey:
+      type: apiKey
+      in: header
+      name: X-Device-Key
+      description: Per-device key used only by the attendance device or local agent.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SkipCount:
+      name: skipCount
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    MaxResultCount:
+      name: maxResultCount
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 20
+    Sorting:
+      name: sorting
+      in: query
+      required: false
+      description: "Field and direction, for example: creationTime desc."
+      schema:
+        type: string
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      schema:
+        type: string
+        enum: [ar, en]
+        default: ar
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Client-generated UUID. Repeating a request with the same key must not create a duplicate.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Input validation failed. See error.validationErrors.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+    Unauthorized:
+      description: Missing or invalid token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+    Forbidden:
+      description: Authenticated but the permission or data scope does not allow this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+    NotFound:
+      description: Resource does not exist, or its existence must not be revealed to this user.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+    Conflict:
+      description: concurrencyStamp mismatch, or an equivalent resource already exists.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+    BusinessRuleViolation:
+      description: A business rule rejected the operation. error.code holds a stable code listed in x-error-codes.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RemoteServiceErrorResponse'
+  schemas:
+    RemoteServiceErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/RemoteServiceErrorInfo'
+    RemoteServiceErrorInfo:
+      type: object
+      required: [message]
+      properties:
+        code:
+          type: string
+          nullable: true
+          description: Stable machine code. Clients branch on this, never on message.
+          example: Hr:Leave:InsufficientBalance
+        message:
+          type: string
+          description: Localized according to Accept-Language.
+        details:
+          type: string
+          nullable: true
+        data:
+          type: object
+          nullable: true
+          additionalProperties: true
+        validationErrors:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/RemoteServiceValidationErrorInfo'
+    RemoteServiceValidationErrorInfo:
+      type: object
+      required: [message, members]
+      properties:
+        message:
+          type: string
+        members:
+          type: array
+          items:
+            type: string
+    AppRole:
+      type: string
+      enum:
+        - employee
+        - departmentManager
+        - hrManager
+        - executiveDirector
+        - reviewer
+        - accountant
+        - storeOfficer
+        - systemAdmin
+    EmployeeRefDto:
+      type: object
+      description: Minimal employee reference. Safe for store officer lookup. Never add other fields.
+      required: [id, fullName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        departmentName:
+          type: string
+          nullable: true
+          description: Localized by Accept-Language.
+    UserRefDto:
+      type: object
+      required: [id, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+    DepartmentRefDto:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Localized by Accept-Language.
+    AttachmentDto:
+      type: object
+      required: [id, fileName, contentType, sizeBytes, creationTime]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        creationTime:
+          type: string
+          format: date-time
+    ReasonInputDto:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    NoteInputDto:
+      type: object
+      properties:
+        note:
+          type: string
+          nullable: true
+          maxLength: 2000
+    FileDownloadUrlDto:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Short-lived download link.
+        expiresAt:
+          type: string
+          format: date-time
+    TimelineEntryDto:
+      type: object
+      description: One decision or event in a request timeline.
+      required: [occurredAt, action]
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+        action:
+          type: string
+        actor:
+          allOf:
+            - $ref: '#/components/schemas/UserRefDto'
+          nullable: true
+        note:
+          type: string
+          nullable: true
