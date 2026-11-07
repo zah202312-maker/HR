@@ -265,13 +265,25 @@ paket-files/
 *.code-workspace
 
 # HR_Mangment2
-HR_Mangment2/Logs/*
-
-*.db
-*.db-shm
-*.db-wal
+src/HR_Mangment2.Web/Logs/*
+src/HR_Mangment2.Web.Host/Logs/*
+src/HR_Mangment2.Web.Public/Logs/*
+src/HR_Mangment2.Web.Public.Host/Logs/*
+src/HR_Mangment2.AuthServer/Logs/*
+src/HR_Mangment2.HttpApi.Host/Logs/*
+src/HR_Mangment2.HttpApi.Host/Logs/*
+src/HR_Mangment2.DbMigrator/Logs/*
+src/HR_Mangment2.Blazor.Server/Logs/*
+src/HR_Mangment2.Blazor.Server.Tiered/Logs/*
 
 # Use abp install-libs to restore.
 **/wwwroot/libs/*
-# Local database credentials
-appsettings.secrets.json
+
+# IdentityServer temp files
+tempkey.rsa
+tempkey.jwk
+
+# Local secrets
+**/appsettings.secrets.json
+**/appsettings.secrets.json.*
+**/Logs/

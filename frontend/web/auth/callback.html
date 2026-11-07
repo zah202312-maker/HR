@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><title>HR</title></head>
+<body>
+<p>تم تسجيل الدخول، يمكنك إغلاق هذه النافذة. / Sign-in complete, you can close this window.</p>
+<script>
+  // flutter_web_auth_2 web callback: hands the redirect URL (code + state) back to the app.
+  (function () {
+    var message = { 'flutter-web-auth-2': window.location.href };
+    if (window.opener) {
+      window.opener.postMessage(message, window.location.origin);
+      window.close();
+    } else if (window.parent && window.parent !== window) {
+      window.parent.postMessage(message, window.location.origin);
+    } else {
+      localStorage.setItem('flutter-web-auth-2', window.location.href);
+      window.close();
+    }
+  })();
+</script>
+</body>
+</html>

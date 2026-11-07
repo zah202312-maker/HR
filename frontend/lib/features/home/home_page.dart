@@ -1,0 +1,552 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../api/generated/hr_api.dart';
+import '../../core/l10n/locale_controller.dart';
+import '../../core/l10n/strings.dart';
+import '../../core/network/api_providers.dart';
+import '../../core/session/session_controller.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
+import '../../core/util/format.dart';
+import '../../core/widgets/motion_widgets.dart';
+import '../notifications/unread_count.dart';
+import 'widgets/charts.dart';
+import 'widgets/hero.dart';
+import 'widgets/kpi_card.dart';
+
+final inboxSummaryProvider = FutureProvider.autoDispose<InboxSummaryDto>(
+  (ref) => ref.watch(hrApiProvider).currentUser.Me_GetInboxSummary(),
+);
+
+final myBalanceProvider = FutureProvider.autoDispose<LeaveBalanceDto?>((ref) async {
+  if (!ref.watch(sessionProvider).can(HrOps.LeaveBalance_GetMy)) return null;
+  return ref.watch(hrApiProvider).leaveBalance.LeaveBalance_GetMy();
+});
+
+/// This month's own attendance (days in date order + the period summary).
+final myMonthAttendanceProvider = FutureProvider.autoDispose<AttendanceDayPagedResultDto?>((ref) async {
+  if (!ref.watch(sessionProvider).can(HrOps.Attendance_GetMy)) return null;
+  final now = DateTime.now();
+  return ref.watch(hrApiProvider).attendance.Attendance_GetMy(
+        fromDate: DateTime(now.year, now.month, 1),
+        toDate: now,
+        maxResultCount: 62,
+        sorting: 'date asc',
+      );
+});
+
+/// Everything the dashboard shows, already reduced from contract DTOs. `null` = still loading,
+/// `available == false` = the user has no access to that block (it is hidden).
+class DashboardData {
+  const DashboardData({
+    required this.displayName,
+    required this.hasTeam,
+    this.pending,
+    this.pendingTotal,
+    this.leaveAvailable = false,
+    this.leave,
+    this.attendanceAvailable = false,
+    this.attendance,
+    this.unread,
+    this.canNewRequest = false,
+    this.canNewLeave = false,
+    this.preview = false,
+  });
+
+  final String displayName;
+  final bool hasTeam;
+  final List<(InboxCategory category, int count, int delegated)>? pending;
+  final int? pendingTotal;
+  final bool leaveAvailable;
+  final ({double remaining, double used, double held, double entitlement, bool isSet})? leave;
+  final bool attendanceAvailable;
+  final ({int present, int lateDays, int absent, double leaveDays, int incomplete, int lateMinutes, double workedHours, List<double> hoursByDay, List<double> lateByDay, List<DateTime> days})? attendance;
+  final int? unread;
+  final bool canNewRequest;
+  final bool canNewLeave;
+  final bool preview;
+}
+
+/// S-HOME-01: the main dashboard (Bento): hero with the organizational network, items awaiting
+/// my action, KPIs with trend lines, and charts. Contract-backed numbers only.
+class HomePage extends ConsumerWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    final me = session.me;
+    final inbox = ref.watch(inboxSummaryProvider);
+    final balance = ref.watch(myBalanceProvider);
+    final month = ref.watch(myMonthAttendanceProvider);
+    final unread = ref.watch(unreadCountProvider).valueOrNull;
+
+    final b = balance.valueOrNull;
+    final m = month.valueOrNull;
+    final data = DashboardData(
+      displayName: me?.displayName ?? '',
+      hasTeam: (me?.directReportCount ?? 0) > 0,
+      pending: inbox.valueOrNull?.items.map((i) => (i.category, i.count, i.delegatedCount)).toList(),
+      pendingTotal: inbox.valueOrNull?.totalCount,
+      leaveAvailable: session.can(HrOps.LeaveBalance_GetMy) && !session.isSystemAdminOnly,
+      leave: b == null
+          ? null
+          : (
+              remaining: b.remainingDays,
+              used: b.usedDays,
+              held: b.heldDays,
+              entitlement: b.currentYearEntitlementDays + b.carriedDays + b.adjustmentDays,
+              isSet: b.isEntitlementSet,
+            ),
+      attendanceAvailable: session.can(HrOps.Attendance_GetMy) && !session.isSystemAdminOnly,
+      attendance: m == null
+          ? null
+          : (
+              present: m.summary.presentDays,
+              lateDays: m.summary.lateDays,
+              absent: m.summary.absentDays,
+              leaveDays: m.summary.leaveDays,
+              incomplete: m.summary.incompleteDays,
+              lateMinutes: m.summary.totalLateMinutes,
+              workedHours: m.summary.workedMinutes / 60,
+              hoursByDay: [for (final d in m.items) d.workedMinutes / 60],
+              lateByDay: [for (final d in m.items) d.lateMinutes.toDouble()],
+              days: [for (final d in m.items) d.date],
+            ),
+      unread: unread,
+      canNewRequest: session.can(HrOps.Request_Submit),
+      canNewLeave: session.can(HrOps.LeaveRequest_Create) && !session.isSystemAdminOnly,
+    );
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(inboxSummaryProvider);
+        ref.invalidate(myBalanceProvider);
+        ref.invalidate(myMonthAttendanceProvider);
+      },
+      child: HomeDashboard(data: data),
+    );
+  }
+}
+
+/// Reusable dashboard body (also rendered by the design preview with sample data).
+class HomeDashboard extends StatelessWidget {
+  const HomeDashboard({super.key, required this.data});
+  final DashboardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final f = Fmt(context);
+    final c = context.hr;
+    final now = DateTime.now();
+    final first = data.displayName.trim().split(RegExp(r'\s+')).first;
+    final hour = now.hour;
+    final greet = hour < 12 ? s.t('صباح الخير', 'Good morning') : (hour < 18 ? s.t('مساء الخير', 'Good afternoon') : s.t('مساء الخير', 'Good evening'));
+    final title = data.hasTeam
+        ? s.t('$greet يا $first، فريقك في أفضل حالاته', '$greet, $first. Your team is in great shape')
+        : s.t('$greet يا $first، يومك منظّم وجاهز', '$greet, $first. Your day is organized');
+    final pendingTotal = data.pendingTotal;
+    final subtitle = pendingTotal == null
+        ? s.t('نجهّز ملخص يومك…', 'Preparing your day…')
+        : pendingTotal == 0
+            ? s.t('لا شيء بانتظارك الآن. هذا ملخص حضورك وإجازاتك لهذا الشهر.', 'Nothing is waiting for you. Here is your attendance and leave this month.')
+            : s.t('لديك $pendingTotal عنصر بانتظار إجرائك، وهذا ملخص شهرك.', 'You have $pendingTotal items awaiting your action, and your month at a glance.');
+
+    final actions = <Widget>[
+      if ((pendingTotal ?? 0) > 0)
+        Magnetic(
+          child: FilledButton.icon(
+            onPressed: () => context.go('/inbox'),
+            icon: const Icon(Icons.pending_actions_outlined),
+            label: Text(s.t('افتح ما بانتظاري', 'Open my queue')),
+          ),
+        )
+      else if (data.canNewRequest)
+        Magnetic(
+          child: FilledButton.icon(onPressed: () => context.go('/requests/new'), icon: const Icon(Icons.add_task), label: Text(s.newRequest)),
+        ),
+      if (data.canNewLeave)
+        PressScale(
+          child: OutlinedButton.icon(onPressed: () => context.go('/leaves/new'), icon: const Icon(Icons.beach_access_outlined), label: Text(s.newLeave)),
+        ),
+    ];
+
+    final hero = WelcomeHero(
+      chip: '${s.appTagline} · ${f.date(now)}',
+      title: title,
+      subtitle: subtitle,
+      actions: actions,
+    );
+
+    final a = data.attendance;
+    final l = data.leave;
+    final kpis = <Widget>[
+      KpiCard(
+        icon: Icons.pending_actions_outlined,
+        label: s.pendingActions,
+        value: pendingTotal,
+        caption: s.t('طلبات ومطالعات وبلاغات وغيرها', 'Requests, memos, incidents and more'),
+        status: (pendingTotal ?? 0) > 0 ? (s.t('يحتاج إجراء', 'Needs action'), Icons.priority_high_rounded, HrColors.warning) : null,
+        onTap: () => context.go('/inbox'),
+      ),
+      if (data.attendanceAvailable)
+        KpiCard(
+          icon: Icons.event_available_outlined,
+          label: s.t('أيام الحضور هذا الشهر', 'Days present this month'),
+          value: a?.present,
+          unit: s.days,
+          caption: a == null ? null : s.t('ساعات العمل ${f.number(a.workedHours)}', 'Worked ${f.number(a.workedHours)} h'),
+          trend: a?.hoursByDay,
+          onTap: () => context.go('/attendance'),
+        ),
+      if (data.attendanceAvailable)
+        KpiCard(
+          icon: Icons.timer_outlined,
+          label: s.t('دقائق التأخر', 'Late minutes'),
+          value: a?.lateMinutes,
+          unit: s.minutes,
+          caption: a == null ? null : s.t('${a.lateDays} يوم تأخر', '${a.lateDays} late days'),
+          trend: a?.lateByDay,
+          status: a == null
+              ? null
+              : a.lateMinutes == 0
+                  ? (s.t('ممتاز', 'On time'), Icons.check_circle_outline, HrColors.success)
+                  : (s.t('انتبه', 'Watch'), Icons.error_outline, HrColors.warning),
+          onTap: () => context.go('/attendance'),
+        ),
+      if (data.leaveAvailable)
+        KpiCard(
+          icon: Icons.beach_access_outlined,
+          label: s.remainingBalance,
+          value: l == null ? null : (l.isSet ? l.remaining : 0),
+          decimals: (l?.remaining ?? 0) % 1 == 0 ? 0 : 1,
+          unit: s.days,
+          caption: l == null ? null : (l.isSet ? s.t('المستخدم ${f.number(l.used)} · المحجوز ${f.number(l.held)}', 'Used ${f.number(l.used)} · held ${f.number(l.held)}') : s.entitlementNotSet),
+          onTap: () => context.go('/leaves'),
+        ),
+      KpiCard(
+        icon: Icons.notifications_none,
+        label: s.unread,
+        value: data.unread,
+        caption: s.t('إشعارات لم تُقرأ بعد', 'Notifications not read yet'),
+        onTap: () => context.go('/notifications'),
+      ),
+    ];
+
+    final pendingCard = _PendingCard(items: data.pending);
+
+    final lineChart = a == null || a.hoursByDay.length < 2
+        ? null
+        : ChartCard(
+            title: s.t('ساعات العمل اليومية', 'Daily worked hours'),
+            subtitle: s.t('هذا الشهر', 'This month'),
+            semanticsSummary: s.t('ساعات العمل لكل يوم هذا الشهر، المجموع ${f.number(a.workedHours)}', 'Worked hours per day this month, total ${f.number(a.workedHours)}'),
+            table: [for (var i = 0; i < a.days.length; i++) (f.date(a.days[i]), f.number(a.hoursByDay[i]))],
+            chart: LineChart(values: a.hoursByDay, labels: [for (final d in a.days) '${d.day}']),
+          );
+    final barsChart = a == null
+        ? null
+        : ChartCard(
+            title: s.t('حالة أيام الشهر', 'Days this month'),
+            table: [
+              (s.dayStatus(AttendanceDayStatus.present), '${a.present}'),
+              (s.dayStatus(AttendanceDayStatus.late), '${a.lateDays}'),
+              (s.dayStatus(AttendanceDayStatus.absent), '${a.absent}'),
+              (s.dayStatus(AttendanceDayStatus.onLeave), f.number(a.leaveDays)),
+              (s.dayStatus(AttendanceDayStatus.incomplete), '${a.incomplete}'),
+            ],
+            chart: BarsChart(bars: [
+              (s.dayStatus(AttendanceDayStatus.present), a.present.toDouble(), HrColors.success, Icons.check_circle_outline),
+              (s.dayStatus(AttendanceDayStatus.late), a.lateDays.toDouble(), HrColors.warning, Icons.schedule),
+              (s.dayStatus(AttendanceDayStatus.absent), a.absent.toDouble(), HrColors.danger, Icons.cancel_outlined),
+              (s.dayStatus(AttendanceDayStatus.onLeave), a.leaveDays, HrColors.info, Icons.beach_access_outlined),
+              (s.dayStatus(AttendanceDayStatus.incomplete), a.incomplete.toDouble(), c.textSecondary, Icons.help_outline),
+            ]),
+          );
+    final donut = l == null || !l.isSet
+        ? null
+        : ChartCard(
+            title: s.t('رصيد الإجازة السنوية', 'Annual leave balance'),
+            table: [(s.remaining, f.number(l.remaining)), (s.used, f.number(l.used)), (s.held, f.number(l.held))],
+            chart: DonutChart(
+              centerValue: f.number(l.remaining),
+              centerLabel: s.t('يوم متبقٍ', 'days left'),
+              segments: [
+                (s.remaining, l.remaining, c.accent),
+                (s.used, l.used, HrColors.info),
+                (s.held, l.held, HrColors.warning),
+              ],
+            ),
+          );
+
+    return LayoutBuilder(builder: (context, box) {
+      final w = box.maxWidth;
+      final wide = w >= 1100;
+      final medium = w >= 700;
+      const gap = 16.0;
+      var i = 0;
+      Widget enter(Widget child) => FadeSlideIn(delay: HrMotion.cardStagger * (i++), child: child);
+
+      Widget grid(List<Widget> items, int columns) {
+        if (columns == 1) {
+          return Column(children: [for (final it in items) Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(it))]);
+        }
+        final rows = <Widget>[];
+        for (var r = 0; r < items.length; r += columns) {
+          rows.add(Padding(
+            padding: const EdgeInsets.only(bottom: gap),
+            // No IntrinsicHeight: measuring a loading card (skeleton) that way threw during layout
+            // and left the whole page blank and unresponsive.
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (var k = 0; k < columns; k++) ...[
+                if (k > 0) const SizedBox(width: gap),
+                Expanded(child: r + k < items.length ? enter(items[r + k]) : const SizedBox()),
+              ],
+            ]),
+          ));
+        }
+        return Column(children: rows);
+      }
+
+      Widget pair(Widget? a, Widget? b, int fa, int fb) {
+        if (a == null && b == null) return const SizedBox.shrink();
+        if (a == null || b == null || !medium) {
+          return Column(children: [
+            if (a != null) Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(a)),
+            if (b != null) Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(b)),
+          ]);
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: gap),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: fa, child: enter(a)),
+            const SizedBox(width: gap),
+            Expanded(flex: fb, child: enter(b)),
+          ]),
+        );
+      }
+
+      final children = <Widget>[
+        if (data.preview) _PreviewBanner(),
+        Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(hero)),
+        if (wide)
+          Padding(
+            padding: const EdgeInsets.only(bottom: gap),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 5, child: enter(pendingCard)),
+              const SizedBox(width: gap),
+              Expanded(flex: 7, child: grid(kpis, 2)),
+            ]),
+          )
+        else ...[
+          Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(pendingCard)),
+          grid(kpis, medium ? 2 : 1),
+        ],
+        pair(lineChart, donut, 7, 5),
+        if (barsChart != null) Padding(padding: const EdgeInsets.only(bottom: gap), child: enter(barsChart)),
+      ];
+
+      return ListView(
+        padding: EdgeInsets.fromLTRB(w >= 768 ? 24 : 16, 8, w >= 768 ? 24 : 16, 32),
+        children: [
+          Align(
+            alignment: AlignmentDirectional.topStart,
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1440), child: Column(children: children)),
+          ),
+        ],
+      );
+    });
+  }
+}
+
+class _PreviewBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: HrColors.info.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(HrColors.radiusControl),
+        ),
+        child: Row(children: [
+          const Icon(Icons.visibility_outlined, size: 18, color: HrColors.info),
+          const SizedBox(width: 8),
+          Expanded(child: Text(s.t('معاينة التصميم ببيانات تجريبية (وضع التطوير فقط).', 'Design preview with sample data (development only).'))),
+        ]),
+      ),
+    );
+  }
+}
+
+/// «Awaiting my action»: one line per category, with count, delegated part and destination.
+class _PendingCard extends StatelessWidget {
+  const _PendingCard({required this.items});
+  final List<(InboxCategory, int, int)>? items;
+
+  static String? _route(InboxCategory c) => switch (c) {
+        InboxCategory.request || InboxCategory.stockIssue => '/inbox',
+        InboxCategory.memo => '/memos',
+        InboxCategory.incident => '/incidents',
+        InboxCategory.evaluation || InboxCategory.evaluationObjection || InboxCategory.evaluationAcknowledgement => '/evaluations',
+        InboxCategory.departmentReport => '/department-reports',
+        InboxCategory.circularAcknowledgement => '/circulars',
+        InboxCategory.custodyAcknowledgement => '/custody',
+        InboxCategory.warningResponse || InboxCategory.warningDecision => '/warnings',
+        InboxCategory.contractDecision => '/contracts',
+        InboxCategory.appreciationLetterAcknowledgement => '/appreciation',
+        _ => null,
+      };
+
+  static IconData _icon(InboxCategory c) => switch (c) {
+        InboxCategory.request => Icons.assignment_outlined,
+        InboxCategory.memo => Icons.description_outlined,
+        InboxCategory.incident => Icons.build_circle_outlined,
+        InboxCategory.stockIssue => Icons.outbox_outlined,
+        InboxCategory.evaluation || InboxCategory.evaluationObjection || InboxCategory.evaluationAcknowledgement => Icons.rate_review_outlined,
+        InboxCategory.departmentReport => Icons.summarize_outlined,
+        InboxCategory.circularAcknowledgement => Icons.campaign_outlined,
+        InboxCategory.custodyAcknowledgement => Icons.inventory_2_outlined,
+        InboxCategory.warningResponse || InboxCategory.warningDecision => Icons.report_outlined,
+        InboxCategory.contractDecision => Icons.description_outlined,
+        InboxCategory.appreciationLetterAcknowledgement => Icons.workspace_premium_outlined,
+        _ => Icons.inbox_outlined,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final c = context.hr;
+    final list = items;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(HrColors.radiusCard),
+        border: Border.all(color: c.border),
+        boxShadow: c.shadow,
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(Icons.notifications_active_outlined, color: HrColors.warning, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Semantics(header: true, child: Text(s.pendingActions, style: Theme.of(context).textTheme.titleMedium))),
+          TextButton(onPressed: () => context.go('/inbox'), child: Text(s.t('عرض الكل', 'View all'))),
+        ]),
+        const SizedBox(height: 8),
+        if (list == null)
+          for (var i = 0; i < 3; i++)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Skeleton(height: 24))
+        else if (list.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Row(children: [
+              const Icon(Icons.check_circle_outline, color: HrColors.success),
+              const SizedBox(width: 10),
+              Expanded(child: Text(s.nothingPending, style: TextStyle(color: c.textSecondary))),
+            ]),
+          )
+        else
+          for (final (cat, count, delegated) in list)
+            Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(HrColors.radiusControl),
+                onTap: _route(cat) == null ? null : () => context.go(_route(cat)!),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: Row(children: [
+                      Icon(_icon(cat), color: c.accent, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(s.inboxCategory(cat), style: const TextStyle(fontWeight: FontWeight.w600)),
+                          if (delegated > 0)
+                            Text('$delegated ${s.viaDelegation}', style: TextStyle(color: c.textSecondary, fontSize: 12)),
+                        ]),
+                      ),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 32),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: c.glow, borderRadius: BorderRadius.circular(HrColors.radiusBadge)),
+                        child: Text('$count',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
+                      ),
+                      if (_route(cat) != null) Icon(Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left : Icons.chevron_right, color: c.textSecondary),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+      ]),
+    );
+  }
+}
+
+/// Development-only design preview: the dashboard with sample data, reachable without signing in
+/// (`/preview?theme=dark&lang=en`), so the design can be reviewed and captured. Not built into release.
+class HomePreviewPage extends ConsumerStatefulWidget {
+  const HomePreviewPage({super.key, this.theme, this.lang});
+  final String? theme;
+  final String? lang;
+
+  @override
+  ConsumerState<HomePreviewPage> createState() => _HomePreviewPageState();
+}
+
+class _HomePreviewPageState extends ConsumerState<HomePreviewPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.theme == 'dark') ref.read(themeModeProvider.notifier).set(ThemeMode.dark);
+      if (widget.theme == 'light') ref.read(themeModeProvider.notifier).set(ThemeMode.light);
+      if (widget.lang == 'en' || widget.lang == 'ar') ref.read(localeProvider.notifier).set(widget.lang!);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kDebugMode) return const SizedBox.shrink();
+    final s = S.of(context);
+    final days = [for (var i = 1; i <= 20; i++) DateTime(2026, 11, i)];
+    const hours = [8.0, 7.5, 8.2, 0, 0, 8.0, 7.8, 8.5, 6.9, 8.1, 0, 0, 8.3, 7.9, 8.0, 8.4, 7.2, 0, 0, 8.1];
+    const late = [0.0, 12, 0, 0, 0, 5, 0, 0, 22, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0];
+    final data = DashboardData(
+      displayName: s.t('سارة أحمد', 'Sarah Ahmed'),
+      hasTeam: true,
+      pending: const [(InboxCategory.request, 4, 1), (InboxCategory.memo, 2, 0), (InboxCategory.evaluation, 3, 0), (InboxCategory.circularAcknowledgement, 1, 0)],
+      pendingTotal: 10,
+      leaveAvailable: true,
+      leave: (remaining: 18.5, used: 9.0, held: 2.5, entitlement: 30.0, isSet: true),
+      attendanceAvailable: true,
+      attendance: (
+        present: 13,
+        lateDays: 4,
+        absent: 1,
+        leaveDays: 1.0,
+        incomplete: 1,
+        lateMinutes: 42,
+        workedHours: hours.fold<double>(0, (a, b) => a + b.toDouble()),
+        hoursByDay: hours.map((e) => e.toDouble()).toList(),
+        lateByDay: late.map((e) => e.toDouble()).toList(),
+        days: days,
+      ),
+      unread: 6,
+      canNewRequest: true,
+      canNewLeave: true,
+      preview: true,
+    );
+    return HomeDashboard(data: data);
+  }
+}

@@ -1,0 +1,110 @@
+/* HR account pages (sign-in, two-step code, sign-out). Tokens: frontend/HR-Design-System.md section 3. */
+:root, html[data-theme="light"] {
+    --hr-bg: #F8FAFC; --hr-surface: #FFFFFF; --hr-text: #0F172A; --hr-text2: #475569;
+    --hr-accent: #00A887; --hr-accent-ink: #FFFFFF; --hr-border: #E2E8F0;
+    --hr-glow: rgba(0, 168, 135, .16); --hr-shadow: 0 4px 16px rgba(15, 23, 42, .05);
+    --hr-input: #FFFFFF; --hr-danger: #EF4444; --hr-danger-bg: rgba(239, 68, 68, .08);
+}
+html[data-theme="dark"] {
+    --hr-bg: #0F172A; --hr-surface: #1E293B; --hr-text: #F8FAFC; --hr-text2: #94A3B8;
+    --hr-accent: #00C49F; --hr-accent-ink: #0F172A; --hr-border: #334155;
+    --hr-glow: rgba(0, 196, 159, .22); --hr-shadow: 0 4px 20px rgba(0, 0, 0, .35);
+    --hr-input: #0F172A; --hr-danger: #F87171; --hr-danger-bg: rgba(248, 113, 113, .12);
+}
+
+html, body.hr-account { min-height: 100%; }
+body.hr-account {
+    margin: 0; background: var(--hr-bg); color: var(--hr-text);
+    font-family: 'Cairo', 'Inter', system-ui, sans-serif; font-size: 15px;
+}
+html[lang="en"] body.hr-account { font-family: 'Inter', 'Cairo', system-ui, sans-serif; }
+
+.hr-bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(circle at 10% -5%, var(--hr-glow) 0%, transparent 55%), var(--hr-bg);
+}
+html[dir="rtl"] .hr-bg { background: radial-gradient(circle at 90% -5%, var(--hr-glow) 0%, transparent 55%), var(--hr-bg); }
+
+.hr-topbar {
+    position: fixed; top: 12px; inset-inline-end: 16px; z-index: 2;
+    display: flex; align-items: center; gap: 6px;
+}
+.hr-lang {
+    color: var(--hr-accent); text-decoration: none; font-weight: 600; padding: 6px 10px; border-radius: 10px;
+}
+.hr-lang:hover { background: var(--hr-glow); color: var(--hr-accent); }
+.hr-theme {
+    display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px;
+    border: 0; border-radius: 50%; background: transparent; color: var(--hr-accent); cursor: pointer;
+}
+.hr-theme:hover { background: var(--hr-glow); }
+.hr-ico-sun { display: none; }
+html[data-theme="dark"] .hr-ico-sun { display: block; }
+html[data-theme="dark"] .hr-ico-moon { display: none; }
+
+.hr-center { position: relative; z-index: 1; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 72px 16px 32px; box-sizing: border-box; }
+.hr-card {
+    width: 100%; max-width: 440px; box-sizing: border-box; padding: 28px;
+    background: var(--hr-surface); border: 1px solid var(--hr-border); border-radius: 16px; box-shadow: var(--hr-shadow);
+}
+
+.hr-logo { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 20px; direction: ltr; }
+.hr-mark { height: 48px; }
+.hr-mark-dark { display: none; }
+html[data-theme="dark"] .hr-mark-dark { display: inline; }
+html[data-theme="dark"] .hr-mark-light { display: none; }
+.hr-word { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: 1.5px; color: var(--hr-text); }
+
+.hr-title { font-size: 20px; font-weight: 700; text-align: center; margin: 0 0 6px; color: var(--hr-text); }
+.hr-subtitle { text-align: center; color: var(--hr-text2); margin: 0 0 20px; font-size: 14px; }
+
+.hr-form { display: flex; flex-direction: column; }
+.hr-label { font-weight: 600; font-size: 14px; margin: 10px 0 6px; color: var(--hr-text); }
+.hr-input {
+    width: 100%; box-sizing: border-box; height: 44px; padding: 0 12px;
+    background: var(--hr-input); color: var(--hr-text); border: 1px solid var(--hr-border); border-radius: 10px;
+    font: inherit; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.hr-input:focus { border-color: var(--hr-accent); box-shadow: 0 0 0 3px var(--hr-glow); }
+.hr-code { text-align: center; font-size: 22px; letter-spacing: 6px; height: 52px; font-family: 'Inter', monospace; }
+.hr-password { position: relative; }
+.hr-password .hr-input { padding-inline-end: 44px; }
+.hr-eye {
+    position: absolute; top: 0; inset-inline-end: 0; height: 44px; width: 44px; border: 0; background: transparent;
+    color: var(--hr-text2); cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.hr-eye[aria-pressed="true"] { color: var(--hr-accent); }
+
+.hr-check { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; color: var(--hr-text2); cursor: pointer; font-size: 14px; }
+.hr-check input { width: 18px; height: 18px; accent-color: var(--hr-accent); margin: 0; }
+
+.hr-btn {
+    margin-top: 18px; height: 44px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--hr-accent); color: var(--hr-accent-ink); font: inherit; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.hr-btn:hover { filter: brightness(1.05); }
+.hr-btn:disabled { opacity: .6; cursor: default; }
+.hr-btn-text, .hr-back {
+    margin-top: 10px; background: transparent; border: 0; color: var(--hr-accent); font: inherit; font-weight: 600;
+    cursor: pointer; text-align: center; text-decoration: none; display: block;
+}
+.hr-back { margin-top: 16px; }
+.hr-hint { margin: 16px 0 0; text-align: center; font-size: 13px; color: var(--hr-text2); }
+
+.hr-error, .hr-alerts .alert {
+    background: var(--hr-danger-bg); color: var(--hr-danger); border: 1px solid transparent; border-radius: 10px;
+    padding: 10px 12px; margin: 0 0 12px; font-size: 14px;
+}
+.hr-error:empty, .hr-error.validation-summary-valid { display: none; }
+.hr-error ul { margin: 0; padding-inline-start: 18px; }
+.hr-alerts .alert-success, .hr-alerts .alert-info { background: var(--hr-glow); color: var(--hr-text); }
+.hr-alerts .btn-close { filter: none; opacity: .6; }
+html[data-theme="dark"] .hr-alerts .btn-close { filter: invert(1); }
+.hr-field-error { color: var(--hr-danger); font-size: 13px; margin-top: 4px; }
+.hr-field-error:empty { display: none; }
+
+/* sign-out pages keep the framework card markup; blend it into the HR card */
+.hr-card .card { background: transparent; border: 0; box-shadow: none !important; margin: 0 !important; color: var(--hr-text); }
+.hr-card .card-body { padding: 0 !important; }
+.hr-card .btn-primary { background: var(--hr-accent); border-color: var(--hr-accent); color: var(--hr-accent-ink); }

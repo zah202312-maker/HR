@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HR_Mangment2.Complaints</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.AspNetCore.Mvc" Version="10.7.0" />
+    <ProjectReference Include="..\HR_Mangment2.Complaints.Application.Contracts\HR_Mangment2.Complaints.Application.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\src\HR_Mangment2.HttpApi\HR_Mangment2.HttpApi.csproj" />
+  </ItemGroup>
+
+</Project>

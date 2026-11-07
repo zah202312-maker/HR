@@ -1,0 +1,31 @@
+@page
+@using System.Globalization
+@using HR_Mangment2.Localization
+@using Microsoft.Extensions.Localization
+@using Volo.Abp.AspNetCore.Mvc.UI.Theming
+@model HR_Mangment2.Pages.Account.LoginTotpModel
+@inject IThemeManager ThemeManager
+@inject IStringLocalizer<HR_Mangment2Resource> L
+@{
+    Layout = ThemeManager.CurrentTheme.GetAccountLayout();
+    var isAr = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ar";
+    string T(string ar, string en) => isAr ? ar : en;
+}
+<h1 class="hr-title">@L["Account:TwoFactorTitle"]</h1>
+<p class="hr-subtitle">@T("اكتب الرمز المكوّن من 6 أرقام من تطبيق المصادقة، أو أحد رموز الاسترداد.",
+                         "Enter the 6-digit code from your authenticator app, or a recovery code.")</p>
+@if (Model.IsInvalid)
+{
+    <div class="hr-error">@L["Account:TwoFactorInvalid"]</div>
+}
+<form method="post" class="hr-form">
+    <input type="hidden" asp-for="ReturnUrl" />
+    <input type="hidden" asp-for="ReturnUrlHash" />
+    <label asp-for="Code" class="hr-label">@L["Account:TwoFactorCode"]</label>
+    <input asp-for="Code" class="hr-input hr-code" autocomplete="one-time-code" inputmode="numeric" autofocus dir="ltr" maxlength="32" />
+    <button type="submit" class="hr-btn">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>@L["Account:TwoFactorVerify"]</span>
+    </button>
+</form>
+<a class="hr-back" asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl">@T("رجوع لتسجيل الدخول", "Back to sign in")</a>

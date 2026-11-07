@@ -2,6 +2,35 @@
     <Configurations>
         <Platform Name="Any CPU" />
     </Configurations>
-
-    <Project Path="HR_Mangment2/HR_Mangment2.csproj" />
+    <Folder Name="/src/">
+        <Project Path="src/HR_Mangment2.Domain/HR_Mangment2.Domain.csproj" />
+        <Project Path="src/HR_Mangment2.Application/HR_Mangment2.Application.csproj" />
+        <Project Path="src/HR_Mangment2.EntityFrameworkCore/HR_Mangment2.EntityFrameworkCore.csproj" />
+        <Project Path="src/HR_Mangment2.Domain.Shared/HR_Mangment2.Domain.Shared.csproj" />
+        <Project Path="src/HR_Mangment2.Application.Contracts/HR_Mangment2.Application.Contracts.csproj" />
+        <Project Path="src/HR_Mangment2.HttpApi/HR_Mangment2.HttpApi.csproj" />
+        <Project Path="src/HR_Mangment2.HttpApi.Host/HR_Mangment2.HttpApi.Host.csproj" />
+        <Project Path="src/HR_Mangment2.DbMigrator/HR_Mangment2.DbMigrator.csproj" />
+    </Folder>
+    <Folder Name="/modules/">
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.Domain.Shared/HR_Mangment2.Complaints.Domain.Shared.csproj" />
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.Domain/HR_Mangment2.Complaints.Domain.csproj" />
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.Application.Contracts/HR_Mangment2.Complaints.Application.Contracts.csproj" />
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.Application/HR_Mangment2.Complaints.Application.csproj" />
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.EntityFrameworkCore/HR_Mangment2.Complaints.EntityFrameworkCore.csproj" />
+        <Project Path="modules/HR_Mangment2.Complaints/src/HR_Mangment2.Complaints.HttpApi/HR_Mangment2.Complaints.HttpApi.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.Domain.Shared/HR_Mangment2.Finance.Domain.Shared.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.Domain/HR_Mangment2.Finance.Domain.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.Application.Contracts/HR_Mangment2.Finance.Application.Contracts.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.Application/HR_Mangment2.Finance.Application.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.EntityFrameworkCore/HR_Mangment2.Finance.EntityFrameworkCore.csproj" />
+        <Project Path="modules/HR_Mangment2.Finance/src/HR_Mangment2.Finance.HttpApi/HR_Mangment2.Finance.HttpApi.csproj" />
+    </Folder>
+    <Folder Name="/test/">
+        <Project Path="test/HR_Mangment2.Application.Tests/HR_Mangment2.Application.Tests.csproj" />
+        <Project Path="test/HR_Mangment2.EntityFrameworkCore.Tests/HR_Mangment2.EntityFrameworkCore.Tests.csproj" />
+        <Project Path="test/HR_Mangment2.HttpApi.Tests/HR_Mangment2.HttpApi.Tests.csproj" />
+        <Project Path="test/HR_Mangment2.TestBase/HR_Mangment2.TestBase.csproj" />
+        <Project Path="test/HR_Mangment2.Domain.Tests/HR_Mangment2.Domain.Tests.csproj" />
+    </Folder>
 </Solution>

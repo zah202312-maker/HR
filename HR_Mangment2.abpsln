@@ -1,6 +1,7 @@
 {
-  "id": "50e64c58-b807-4b4b-a30c-62c9c9029e6f",
-  "template": "app-nolayers",
+  "id": "510e3567-2914-45eb-af4e-930a2d7c831b",
+  "creationTime": "11/04/2026 21:16:32 +00:00",
+  "template": "app",
   "versions": {
     "AbpFramework": "10.7.0",
     "AbpStudio": "3.1.6",
@@ -13,9 +14,8 @@
   },
   "runProfiles": {
     "Default": {
-      "path": "etc/run-profiles/Default.abprun.json"
-    }
-  },
+      "path": "etc/abp-studio/run-profiles/Default.abprun.json"
+    }  },
   "options": {
     "httpRequests": {
       "ignoredUrls": [
@@ -24,26 +24,32 @@
     }
   },
   "creatingStudioConfiguration": {
-    "template": "app-nolayers",
+    "template": "app",
     "createdAbpStudioVersion": "3.1.6",
-    "creationTool": "ABP Studio UI",
-    "multiTenancy": "false",
+    "creationTool": "ABP Studio CLI",
+    "tiered": "false",
     "runInstallLibs": "",
     "useLocalReferences": "false",
+    "multiTenancy": "true",
+    "includeTests": "true",
+    "kubernetesConfiguration": "false",
     "uiFramework": "no-ui",
+    "mobileFramework": "none",
+    "distributedEventBus": "none",
     "databaseProvider": "ef",
     "runDbMigrator": "",
-    "includeTests": "false",
     "databaseManagementSystem": "postgresql",
+    "separateTenantSchema": "false",
     "createInitialMigration": "",
     "theme": "basic",
     "themeStyle": "",
     "themeMenuPlacement": "",
-    "publicWebsite": "",
+    "mobileFramework": "none",
+    "publicWebsite": "false",
     "socialLogin": "false",
-    "sampleCrudPage": "true",
-    "selectedLanguages": ["English", "Arabic", ],
+    "sampleCrudPage": "false",
+    "selectedLanguages": ["English", "Arabic", "Chinese (Simplified)", "Chinese (Traditional)", "Czech", "English (UK)", "Finnish", "French", "German (Germany)", "Hindi ", "Hungarian", "Icelandic", "Italian", "Korean", "Portuguese (Brazil)", "Romanian (Romania)", "Russian", "Slovak", "Spanish", "Swedish", "Turkish", ],
     "defaultLanguage": "English",
-    "createCommand": "abp new HR_Mangment2 -t app-nolayers --ui-framework no-ui --database-provider ef --database-management-system postgresql --theme basic --skip-migration  --skip-migrator  --without-cms-kit --sample-crud-page --dont-run-install-libs --dont-run-bundling --no-multi-tenancy --no-social-logins -no-gdpr -no-openiddict-admin-ui -no-audit-logging -no-file-management -no-language-management -no-text-template-management"
+    "createCommand": "abp new HR_Mangment2 -t app --database-provider ef --database-management-system postgresql --theme basic --skip-migration  --skip-migrator  --without-cms-kit --dont-run-install-libs --dont-run-bundling --use-open-source-template"
   }
 }

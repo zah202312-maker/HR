@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HR_Mangment2.Finance</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.EntityFrameworkCore" Version="10.7.0" />
+    <ProjectReference Include="..\HR_Mangment2.Finance.Domain\HR_Mangment2.Finance.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

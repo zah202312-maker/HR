@@ -1,0 +1,15 @@
+include: package:flutter_lints/flutter.yaml
+
+# Generated code is analyzed too (errors must surface); its lint noise is silenced
+# per file by the generator header.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    always_declare_return_types: true

@@ -19,9 +19,12 @@ info:
 
     |---|---|---|---|
 
-    | الموظف، ومنه المراجع والمحاسب ومسؤول المخزن | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم
+    | الموظف، ومنه المحاسب ومسؤول المخزن | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم
     approved | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed |
     مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
+
+    | المراجع | الموارد البشرية (pendingHr) ثم approved | الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم
+    completed | الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
 
     | مدير القسم | مسؤول النظام (pendingManager) ثم الموارد البشرية (pendingHr) ثم approved | مسؤول النظام
     (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed | مسؤول النظام
@@ -40,6 +43,10 @@ info:
 
     قواعد ملزمة:
 
+
+    - المراجع يرتبط بالمدير التنفيذي أو بمدير الموارد البشرية، فلا يمر بخطوة مدير، ويبدأ طلبه من pendingHr. وتبدأ
+    مطالعته من الموارد البشرية مباشرة، وكذلك بلاغه. **قرار معتمد (زينب، 2026-11-07).** إذا حمل الشخص
+    departmentManager مع reviewer يطبق صف مدير القسم.
 
     - مديرو الأقسام يمرون عبر مسؤول النظام لأنه المدير الأعلى لهم. لا توجد قيمة حالة خاصة به، فالحالة pendingManager
     وcurrentApproverRole = systemAdmin.
@@ -169,6 +176,8 @@ tags:
     description: معايير التقييم والسلم اللفظي.
   - name: DepartmentReports
     description: التقرير الشهري للقسم.
+  - name: ReviewReports
+    description: تقرير متابعة المراجع للفرق، يُرفع إلى المدير التنفيذي.
   - name: Reports
     description: تقارير مدير القسم والمراجع والموارد البشرية والتصدير.
   - name: Circulars
@@ -792,6 +801,8 @@ paths:
       description: >-
         حالة التحقق بخطوتين للمستخدم الحالي. يخص الأدوار الأربعة الإلزامية فقط، ولا يوجد خيار تعطيل ذاتي لأن التفعيل
         إلزامي لها. طلب رمز TOTP عند الدخول يتم في صفحة الدخول على الخادم وليس في هذا الـAPI.
+
+        تشمل كذلك معالج الشكاوى بتعيين ساري، أيًا كان دوره، لأن التحقق بخطوتين إلزامي له.
       x-source:
         - '1.1'
         - '3'
@@ -801,6 +812,7 @@ paths:
         - executiveDirector
         - accountant
         - systemAdmin
+        - employee
       x-permission: null
       x-data-scope: self
       x-error-codes: []
@@ -834,6 +846,8 @@ paths:
         ينشئ مفتاح TOTP جديدًا ويعيده مع رابط QR. لا يصبح التحقق مفعلًا إلا بعد mfa/confirm، والاستدعاء المتكرر قبل
         التأكيد يستبدل المفتاح السابق. متاح أثناء حاجز mfaEnrollmentRequired. عند حاجز تغيير كلمة السر يُرفض بـ403 حتى
         تتغير كلمة السر.
+
+        تشمل كذلك معالج الشكاوى بتعيين ساري، أيًا كان دوره، لأن التحقق بخطوتين إلزامي له.
       x-source:
         - '1.1'
         - '3'
@@ -843,6 +857,7 @@ paths:
         - executiveDirector
         - accountant
         - systemAdmin
+        - employee
       x-permission: null
       x-data-scope: self
       x-error-codes:
@@ -886,6 +901,8 @@ paths:
 
 
         التعيين المعتمد لمعالجة الشكاوى يجعل التحقق بخطوتين إلزاميًا لصاحبه.
+
+        تشمل كذلك معالج الشكاوى بتعيين ساري، أيًا كان دوره، لأن التحقق بخطوتين إلزامي له.
       x-source:
         - '1.1'
         - '3'
@@ -895,6 +912,7 @@ paths:
         - executiveDirector
         - accountant
         - systemAdmin
+        - employee
       x-permission: null
       x-data-scope: self
       x-error-codes:
@@ -949,7 +967,10 @@ paths:
       tags:
         - Mfa
       summary: Regenerate my recovery codes
-      description: يبطل الرموز السابقة ويصدر رموزًا جديدة تُعرض مرة واحدة، بعد التحقق من رمز TOTP صالح. يُسجل الحدث في سجل التدقيق.
+      description: |-
+        يبطل الرموز السابقة ويصدر رموزًا جديدة تُعرض مرة واحدة، بعد التحقق من رمز TOTP صالح. يُسجل الحدث في سجل التدقيق.
+
+        تشمل كذلك معالج الشكاوى بتعيين ساري، أيًا كان دوره، لأن التحقق بخطوتين إلزامي له.
       x-source:
         - '1.1'
         - '3'
@@ -959,6 +980,7 @@ paths:
         - executiveDirector
         - accountant
         - systemAdmin
+        - employee
       x-permission: null
       x-data-scope: self
       x-error-codes:
@@ -1166,6 +1188,8 @@ paths:
 
 
         كلمة السر الأولى مؤقتة وتغييرها إجباري عند أول دخول. يُسجل أول دخول، ويُشعر الموظف بأي نشاط سبق تغييرها.
+
+        إذا كان email فارغًا يؤخذ بريد ملف الموظف. Hr:Identity:NoVerifiedEmail يبقى للحسابات القديمة بلا بريد.
       x-source:
         - '3'
         - '10'
@@ -1176,6 +1200,7 @@ paths:
       x-data-scope: company
       x-error-codes:
         - Hr:Employee:EmployeeAlreadyHasAccount
+        - Hr:Identity:NoVerifiedEmail
         - Hr:Employee:EmployeeEnded
         - Hr:Identity:RoleNotFound
         - Hr:Identity:SingletonRoleAlreadyAssigned
@@ -1384,6 +1409,8 @@ paths:
 
 
         «العدد الحالي» ليس حدًا ملزمًا للمراجع والمحاسب.
+
+        تغيير حامل hrManager محصور بالمدير التنفيذي.
       x-source:
         - '3'
         - '5.18'
@@ -1393,6 +1420,7 @@ paths:
       x-allowed-roles:
         - hrManager
         - systemAdmin
+        - executiveDirector
       x-permission: Hr.Identity.UserAccount.SetRoles
       x-data-scope: company
       x-error-codes:
@@ -1731,7 +1759,7 @@ paths:
       x-release: 1
       x-allowed-roles:
         - systemAdmin
-      x-permission: Hr.Identity.Role.Read
+      x-permission: Hr.Identity.Role.ReadDetail
       x-data-scope: company
       x-error-codes: []
       x-added-route: مسؤول النظام يدير الأدوار والصلاحيات العادية (القسم 5.18).
@@ -2378,6 +2406,8 @@ paths:
 
 
         كلمة السر الأولى مؤقتة وتغييرها إجباري عند أول دخول. يُسجل أول دخول، ويُشعر الموظف بأي نشاط سبق تغييرها.
+
+        employeeNumber فريد على مستوى الشركة، والتكرار يرد 409.
       x-source:
         - '3'
         - '5.1'
@@ -2403,6 +2433,7 @@ paths:
         - Hr:Identity:SingletonRoleAlreadyAssigned
         - Hr:Identity:ProtectedRoleChangeRequiresApproval
         - Hr:Identity:ForbiddenRoleCombination
+        - Hr:Shift:ShiftInactive
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
@@ -2657,6 +2688,8 @@ paths:
 
 
         **قرار معتمد:** تصحيح بمسار خاص مع سبب يعيد الحساب، ومنع الإنهاء حتى إرجاع العهدة.
+
+        employeeNumber فريد، والتكرار يرد 409. تغيير البريد أثناء صلاحية رابط إعادة تعيين كلمة السر يرد 409 بلا كود. يرد Hr:Employee:HasOutstandingCustody عند إنهاء خدمة من عليه عهدة غير مرجعة (القرار 6). hireDate هنا لا يقبل التغيير بعد وجود حركات رصيد، وتصحيحه عبر Employee_CorrectHireDate.
       x-source:
         - '3'
         - '5.1'
@@ -2671,6 +2704,7 @@ paths:
         - Hr:Department:NotFound
         - Hr:Employee:HasDirectReports
         - Hr:Employee:HireDateLocked
+        - Hr:Employee:HasOutstandingCustody
       parameters:
         - $ref: '#/components/parameters/Id'
         - $ref: '#/components/parameters/AcceptLanguage'
@@ -2752,6 +2786,53 @@ paths:
         '422':
           $ref: '#/components/responses/BusinessRuleViolation'
       x-module: identity-org
+  /api/app/employee/{id}/correct-hire-date:
+    post:
+      operationId: Employee_CorrectHireDate
+      tags:
+        - Employees
+      summary: Correct a wrong hire date
+      description: >-
+        مسار خاص لتصحيح تاريخ مباشرة خاطئ مع سبب مسجل، وينفذ حتى مع وجود حركات رصيد (القرار 6). يعيد حساب الحضور من أقدم التاريخين، وتتبع سنوات الإجازة التاريخ الجديد، ولا تتغير حركات الدفتر السابقة، وأي فرق يصلحه مدير الموارد البشرية بـLeaveBalance_Adjust.
+      x-source:
+        - '5.1'
+      x-release: 1
+      x-allowed-roles:
+        - hrManager
+      x-permission: Hr.Employee.CorrectHireDate
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Employee:EmployeeEnded
+        - Hr:Employee:HireDateUnchanged
+      x-module: identity-org
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeHireDateCorrectionDto'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeHrDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
   /api/app/employee/{id}/manager:
     put:
       operationId: Employee_ChangeManager
@@ -3197,7 +3278,7 @@ paths:
       x-data-scope-by-role:
         employee: self
         departmentManager: team
-        systemAdmin: company
+        systemAdmin: team
         hrManager: company
       x-error-codes: []
       parameters:
@@ -3486,6 +3567,8 @@ paths:
 
 
         **قرار معتمد:** ثلاثة نطاقات كما في العقد، ويُسمح للموارد البشرية بذلك عند الغياب مع تسجيله.
+
+        لمدير الموارد البشرية إنشاء تفويض عن معتمد غائب عبر fromUserId، ويُسجل ذلك (القرار 10). غيره يرد 403 إذا أرسله باسم غيره.
       x-source:
         - '3'
         - '4'
@@ -3505,6 +3588,7 @@ paths:
         - Hr:Delegation:InvalidPeriod
         - Hr:Delegation:DelegateNotEligible
         - Hr:Delegation:OverlappingDelegation
+        - Hr:Delegation:DelegatorNotEligible
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
@@ -4930,6 +5014,8 @@ paths:
 
 
         **قرار معتمد:** وسيط محلي حتى يتأكد الطراز.
+
+        حد الاستقبال 120 طلبًا في الدقيقة لكل IP، وبعده يرد 429 ويعيد الوسيط المحاولة.
       x-source:
         - '5.3'
         - '9'
@@ -5321,7 +5407,10 @@ paths:
       tags:
         - AttendanceDevice
       summary: Register an attendance device
-      description: يسجل جهازًا ويعيد مفتاحه مرة واحدة فقط. الرقم التسلسلي فريد، وتكراره يعطي 409.
+      description: |-
+        يسجل جهازًا ويعيد مفتاحه مرة واحدة فقط. الرقم التسلسلي فريد، وتكراره يعطي 409.
+
+        تكرار الطلب بنفس Idempotency-Key يعيد الجهاز نفسه بمفتاح جديد، ويلغي السابق، لأن المفتاح لا يُعرض مرتين.
       x-source:
         - '5.18'
         - '8'
@@ -5718,6 +5807,7 @@ paths:
         - Hr:Attendance:CorrectionDateInFuture
         - Hr:Attendance:CorrectionAlreadyPending
         - Hr:Attendance:CorrectionTimeInvalid
+        - Hr:Request:NoApproverAvailable
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -6329,6 +6419,8 @@ paths:
 
 
         تطبق القيمة الأولى على السنة الحالية (مثال 5.4).
+
+        المدير التنفيذي ينفذها على رصيد مدير الموارد البشرية فقط، وأي موظف غيره يرد 403.
       x-source:
         - '5.4'
         - '5.18'
@@ -6336,6 +6428,7 @@ paths:
       x-release: 1
       x-allowed-roles:
         - hrManager
+        - executiveDirector
       x-permission: Hr.Leave.Balance.SetEntitlement
       x-data-scope: company
       x-error-codes:
@@ -6425,6 +6518,8 @@ paths:
 
 
         الإضافة أيام إلى الرصيد (5.4).
+
+        المدير التنفيذي ينفذها على رصيد مدير الموارد البشرية فقط، وأي موظف غيره يرد 403.
       x-source:
         - '5.4'
         - '5.18'
@@ -6432,6 +6527,7 @@ paths:
       x-release: 1
       x-allowed-roles:
         - hrManager
+        - executiveDirector
       x-permission: Hr.Leave.Balance.Adjust
       x-data-scope: company
       x-error-codes:
@@ -6885,6 +6981,7 @@ paths:
         - Hr:Leave:OtherLeaveTypeMaxExceeded
         - Hr:Leave:AttachmentRequired
         - Hr:Leave:InvalidAttachment
+        - Hr:Request:NoApproverAvailable
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -7200,6 +7297,53 @@ paths:
       x-data-scope-by-role:
         departmentManager: team
         hrManager: company
+  /api/app/leave-request/{id}/reverse:
+    post:
+      operationId: LeaveRequest_Reverse
+      tags:
+        - LeaveRequest
+      summary: Reverse an approved leave
+      description: >-
+        تصحيح الموارد البشرية لإجازة معتمدة (القرار 17). يكتب حركة reverse بالدفتر تعيد الأيام، ويعيد حساب الحضور، وينقل الطلب إلى cancelled، ويسجل السبب في الخط الزمني. لا يصحح أحد إجازته بنفسه.
+      x-source:
+        - '5.4'
+      x-release: 1
+      x-allowed-roles:
+        - hrManager
+      x-permission: Hr.Leave.Request.Reverse
+      x-data-scope: company
+      x-error-codes:
+        - Hr:Leave:RequestNotReversible
+        - Hr:Leave:SelfAdjustmentNotAllowed
+      x-module: time-leave
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonInputDto'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
   /api/app/leave-request/{id}:
     get:
       operationId: LeaveRequest_Get
@@ -8351,6 +8495,8 @@ paths:
 
         للطلبات الموجهة إلى المحاسب: مدير القسم ومفوضه ومسؤول النظام يرون النوع فقط، وتُحذف الحقول description
         وdetailsSummary وملاحظات الخطوات من الرد. التفاصيل للموارد البشرية والمحاسب وصاحب الطلب.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '4'
         - '5.5'
@@ -8437,6 +8583,8 @@ paths:
 
         للطلبات الموجهة إلى المحاسب: مدير القسم ومفوضه ومسؤول النظام يرون النوع فقط، وتُحذف الحقول description
         وdetailsSummary وملاحظات الخطوات من الرد. التفاصيل للموارد البشرية والمحاسب وصاحب الطلب.
+
+        تفاصيل طلب المحاسب يراها مقدمه والموارد البشرية والمحاسب، والمدير التنفيذي عندما يكون معتمدًا في مساره. غيرهم يرى النوع فقط، ومن يحمل دور مدير قسم أو مسؤول مخزن مع دور المحاسب لا يراها بهذا الدور.
       x-source:
         - '4'
         - '5.5'
@@ -8567,6 +8715,8 @@ paths:
 
         للطلبات الموجهة إلى المحاسب: مدير القسم ومفوضه ومسؤول النظام يرون النوع فقط، وتُحذف الحقول description
         وdetailsSummary وملاحظات الخطوات من الرد. التفاصيل للموارد البشرية والمحاسب وصاحب الطلب.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '3'
         - '4'
@@ -8699,6 +8849,8 @@ paths:
 
         للطلبات الموجهة إلى المحاسب: مدير القسم ومفوضه ومسؤول النظام يرون النوع فقط، وتُحذف الحقول description
         وdetailsSummary وملاحظات الخطوات من الرد. التفاصيل للموارد البشرية والمحاسب وصاحب الطلب.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '3'
         - '4'
@@ -8713,7 +8865,7 @@ paths:
         - systemAdmin
         - accountant
         - storeOfficer
-      x-permission: Hr.Request.Decide
+      x-permission: Hr.Request.Reject
       x-data-scope: assigned
       x-error-codes:
         - Hr:Request:SelfApprovalNotAllowed
@@ -9104,6 +9256,8 @@ paths:
       description: >-
         المطالعات التي عند المستخدم الآن: المدير يرى pendingManager لموظفيه، والموارد البشرية ترى pendingHr. مع status
         يمكن عرض ما سبق أن مر بالمستخدم.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '5.6'
       x-release: 1
@@ -9240,6 +9394,10 @@ paths:
         ينقل من هي عنده المطالعة من pendingManager إلى pendingHr، ويُشعر الموارد البشرية والكاتب. لا يحول أحد مطالعته
         الشخصية. مطالعة مدير الموارد البشرية لا تُحال إلى الموارد البشرية ويعيد ذلك Hr:Memo:InvalidState، وإنما يحولها
         المدير التنفيذي إلى طلب أو بلاغ أو يغلقها.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
+
+        تبدأ من pendingManager، ومن pendingExecutive لمطالعة مسؤول النظام.
       x-source:
         - '5.6'
       x-release: 1
@@ -9247,7 +9405,7 @@ paths:
         - departmentManager
         - systemAdmin
         - executiveDirector
-      x-permission: Hr.Memo.Process
+      x-permission: Hr.Memo.Forward
       x-data-scope: team
       x-error-codes:
         - Hr:Memo:InvalidState
@@ -9325,6 +9483,10 @@ paths:
 
 
         **قرار معتمد:** من هي عنده الآن، ويُعد تحويل المدير موافقته الأولى.
+
+        عند target = leaveRequest يصل كود الإجازة الفعلي من حساب الإجازة، ويبقى Memo:LeaveDetailsInvalid لتفاصيل ناقصة في الطلب نفسه.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '5.4'
         - '5.6'
@@ -9344,6 +9506,19 @@ paths:
         - Hr:Memo:LeaveAttachmentRequired
         - Hr:Memo:SelfActionNotAllowed
         - Hr:Leave:InsufficientBalance
+        - Hr:Leave:EmployeeNotActive
+        - Hr:Leave:EntitlementNotSet
+        - Hr:Leave:HourlyOutsideShift
+        - Hr:Leave:HourlySettingsNotConfigured
+        - Hr:Leave:InvalidDateRange
+        - Hr:Leave:NoShiftAssigned
+        - Hr:Leave:NotEligibleForLeaveType
+        - Hr:Leave:NoWorkingDaysInRange
+        - Hr:Leave:OtherLeaveTypeInactive
+        - Hr:Leave:OtherLeaveTypeMaxExceeded
+        - Hr:Leave:OverlappingLeave
+        - Hr:Leave:RangeBeyondNextYear
+        - Hr:Request:NoApproverAvailable
       parameters:
         - $ref: '#/components/parameters/Id'
         - $ref: '#/components/parameters/AcceptLanguage'
@@ -9643,6 +9818,8 @@ paths:
       description: >-
         مدير القسم يرى بلاغات موظفيه، ومدير الموارد البشرية يرى بلاغات الشركة، ويحدد الخادم النطاق من الدور. دون status
         تعرض غير المنتهية فقط.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '5.6'
       x-release: 1
@@ -9851,14 +10028,17 @@ paths:
       tags:
         - Incidents
       summary: Forward a fault report to HR
-      description: ينقل مدير القسم البلاغ من pendingManager إلى pendingHr، ويُشعر الموارد البشرية والموظف، ويُسجل في الخط الزمني.
+      description: |-
+        ينقل مدير القسم البلاغ من pendingManager إلى pendingHr، ويُشعر الموارد البشرية والموظف، ويُسجل في الخط الزمني.
+
+        التفويض الساري بنطاقه بديل عن الصلاحية في هذه العملية.
       x-source:
         - '5.6'
         - '10'
       x-release: 1
       x-allowed-roles:
         - departmentManager
-      x-permission: Hr.Incident.Process
+      x-permission: Hr.Incident.Forward
       x-data-scope: team
       x-error-codes:
         - Hr:Incident:InvalidState
@@ -10466,6 +10646,8 @@ paths:
       description: >-
         شاشة طلبات الصرف لمسؤول المخزن، وتشمل حالة التوفر. تظهر الطلبات بعد انتهاء موافقاتها فقط، أو مباشرة لطلبات مدير
         الموارد البشرية والمدير التنفيذي.
+
+        التفويض لا يشمل تنفيذ الصرف: المفوض يرى طلب المخزن ويقرر فيه من صندوق الطلبات فقط.
       x-source:
         - '5.7'
         - '8'
@@ -10547,7 +10729,10 @@ paths:
       tags:
         - Store
       summary: Get a stock issue request
-      description: يعرض صرفًا واحدًا لمسؤول المخزن. الموظف عبر EmployeeRefDto فقط.
+      description: |-
+        يعرض صرفًا واحدًا لمسؤول المخزن. الموظف عبر EmployeeRefDto فقط.
+
+        التفويض لا يشمل تنفيذ الصرف: المفوض يرى طلب المخزن ويقرر فيه من صندوق الطلبات فقط.
       x-source:
         - '5.7'
         - '8'
@@ -10612,6 +10797,8 @@ paths:
       description: >-
         يؤشر مسؤول المخزن «اطلعت»: pendingAcknowledgement إلى acknowledged. لا تتغير الكمية. يبقى الطلب
         pendingDestination، ويُسجل الوقت والمستخدم في الخط الزمني، ويُشعر الموظف.
+
+        التفويض لا يشمل تنفيذ الصرف: المفوض يرى طلب المخزن ويقرر فيه من صندوق الطلبات فقط.
       x-source:
         - '5.7'
         - '10'
@@ -10677,6 +10864,8 @@ paths:
         إذا لم يتوفر الصنف يُسجل «بانتظار الشراء»: acknowledged إلى purchasing، ولا يُرفض الطلب تلقائيًا. لا تتغير
         الكمية. يدخل الصنف لاحقًا عبر POST /api/app/stock/receive مع التكلفة وstockIssueId، فتصل التكلفة إلى مصروفات
         المحاسب. يُشعر الموظف.
+
+        التفويض لا يشمل تنفيذ الصرف: المفوض يرى طلب المخزن ويقرر فيه من صندوق الطلبات فقط.
       x-source:
         - '5.7'
         - '10'
@@ -10753,6 +10942,8 @@ paths:
         delivered، والطلب completed. إذا كان الصنف returnable تنشأ عهدة بالحالة pendingAcknowledgement باسم صاحب الطلب،
         أو باسم قسمه عند custodyKind = shared، وليس الاثنين معًا. المستهلك لا ينشئ عهدة. الرصيد غير الكافي يعيد
         Hr:Stock:InsufficientStock. يُشعر الموظف ليؤكد الاستلام. يوصى بـIdempotency-Key.
+
+        التفويض لا يشمل تنفيذ الصرف: المفوض يرى طلب المخزن ويقرر فيه من صندوق الطلبات فقط.
       x-source:
         - '5.7'
         - '9.1'
@@ -11085,7 +11276,10 @@ paths:
       tags:
         - Custody
       summary: List team custody
-      description: عهد موظفي مدير القسم الشخصية، والعهدة المشتركة باسم أقسامهم، لمتابعة الجرد.
+      description: |-
+        عهد موظفي مدير القسم الشخصية، والعهدة المشتركة باسم أقسامهم، لمتابعة الجرد.
+
+        أقسام المدير هي أقسام موظفيه المباشرين غير منتهي الخدمة.
       x-source:
         - '5.7'
         - '5.10'
@@ -11388,6 +11582,8 @@ paths:
         يسجل مدير القسم جرد العهدة المشتركة لقسم له فيه موظفون، بسطر لكل عهدة قائمة. يحسب الخادم result بمقارنة الكميات.
         الجرد لا يغير العهد ولا الرصيد، ولا يحمّل المدير مسؤولية شخصية. تظهر النتيجة في التقرير الشهري، وعند وجود فرق
         يُشعر مسؤول المخزن.
+
+        أقسام المدير هي أقسام موظفيه المباشرين غير منتهي الخدمة.
       x-source:
         - '3'
         - '5.7'
@@ -11466,6 +11662,8 @@ paths:
       description: >-
         سجل الجرد. مدير القسم يرى أقسام فريقه، ومسؤول المخزن ومدير الموارد البشرية يريان الشركة، ويحدد الخادم النطاق من
         الدور.
+
+        أقسام المدير هي أقسام موظفيه المباشرين غير منتهي الخدمة.
       x-source:
         - '5.7'
         - '5.10'
@@ -11844,6 +12042,8 @@ paths:
 
         يُستخدم 403 هنا فقط لبوابات الحساب (تغيير كلمة السر والتحقق بخطوتين) قبل أي بحث عن الشكوى. فشل الصلاحية على
         الشكوى يرجع 404 دائمًا.
+
+        x-permission وx-allowed-roles هنا لعرض الشاشة وشرط أولي فقط، والقرار لـComplaintAccessPolicy، وصاحب التعيين المعتمد مسموح له، وتعذر الوصول يرد 404 أو قائمة فارغة.
       x-source:
         - '5.8'
         - '3'
@@ -12258,6 +12458,8 @@ paths:
 
         يُستخدم 403 هنا فقط لبوابات الحساب (تغيير كلمة السر والتحقق بخطوتين) قبل أي بحث عن الشكوى. فشل الصلاحية على
         الشكوى يرجع 404 دائمًا.
+
+        x-permission وx-allowed-roles هنا لعرض الشاشة وشرط أولي فقط، والقرار لـComplaintAccessPolicy، وصاحب التعيين المعتمد مسموح له، وتعذر الوصول يرد 404 أو قائمة فارغة.
       x-source:
         - '5.8'
         - '9'
@@ -12338,7 +12540,7 @@ paths:
       x-release: 1
       x-allowed-roles:
         - departmentManager
-      x-permission: Hr.Complaints.Handle
+      x-permission: Hr.Complaints.Forward
       x-data-scope: assigned
       x-error-codes:
         - Hr:Complaints:ComplaintClosed
@@ -12408,6 +12610,8 @@ paths:
 
         يُستخدم 403 هنا فقط لبوابات الحساب (تغيير كلمة السر والتحقق بخطوتين) قبل أي بحث عن الشكوى. فشل الصلاحية على
         الشكوى يرجع 404 دائمًا.
+
+        x-permission وx-allowed-roles هنا لعرض الشاشة وشرط أولي فقط، والقرار لـComplaintAccessPolicy، وصاحب التعيين المعتمد مسموح له، وتعذر الوصول يرد 404 أو قائمة فارغة.
       x-source:
         - '5.8'
         - '9.1'
@@ -12560,7 +12764,6 @@ paths:
         - Hr:Complaints:ComplaintClosed
         - Hr:Complaints:AttachmentRejected
         - Hr:Complaints:AttachmentTooLarge
-        - Hr:Document:FileTooLarge
         - Hr:Document:FileTypeNotAllowed
       x-added-route: جدول ComplaintAttachments وتشفير المرفقات (6 و7 و9)
       parameters:
@@ -13500,6 +13703,8 @@ paths:
 
 
         **قرار معتمد:** 5 أيام دوام من تاريخ الرفع.
+
+        الاعتراض بعد 5 أيام دوام من تأكيد التقييم يرد Evaluations:ObjectionWindowClosed (القرار 41).
       x-source:
         - '5.9'
         - '10'
@@ -13510,6 +13715,7 @@ paths:
       x-data-scope: self
       x-error-codes:
         - Hr:Evaluations:ObjectionAlreadyPending
+        - Hr:Evaluations:ObjectionWindowClosed
       parameters:
         - $ref: '#/components/parameters/Id'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -13566,12 +13772,15 @@ paths:
 
 
         **قرار معتمد:** يعدل مدير الموارد البشرية الدرجة مع سبب، ويبت المدير التنفيذي في اعتراضه.
+
+        المدير التنفيذي يبت في اعتراض مدير الموارد البشرية فقط، وأي اعتراض غيره يرد 403. عند accepted يمكن إرسال scores، وتستبدل درجات المعايير المذكورة، وتبقى الدرجات السابقة في سجل التدقيق.
       x-source:
         - '5.9'
         - '10'
       x-release: 2
       x-allowed-roles:
         - hrManager
+        - executiveDirector
       x-permission: Hr.Evaluations.DecideObjection
       x-data-scope: company
       x-error-codes:
@@ -14702,13 +14911,346 @@ paths:
         '422':
           $ref: '#/components/responses/BusinessRuleViolation'
       x-module: complaints-evaluation
+  /api/app/review-report:
+    get:
+      operationId: ReviewReport_GetList
+      tags:
+        - ReviewReports
+      summary: List reviewer follow-up reports
+      description: >-
+        تقارير متابعة المراجع. يكتب المراجع تقريرًا يوميًا أو أسبوعيًا أو شهريًا يقيّم فيه عمل كل فريق، والفريق هو مدير
+        القسم ومن يرتبط به من الموظفين، ثم يرفعه إلى المدير التنفيذي.
+
+
+        - المراجع يرى تقاريره فقط، المسودات والمرفوعة.
+
+        - المدير التنفيذي يرى التقارير المرفوعة فقط، ولا يرى المسودات أبدًا.
+
+
+        حقول الترتيب: periodFrom، submittedAt، creationTime. الافتراضي periodFrom desc.
+
+
+        **قرار معتمد (زينب، 2026-11-07):** إضافة تقرير متابعة المراجع للمدير التنفيذي.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+        - executiveDirector
+      x-permission: Hr.ReviewReports.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: قرار المالك 2026-11-07، تقرير متابعة المراجع للمدير التنفيذي.
+      parameters:
+        - name: periodType
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReviewReportPeriodType'
+        - name: status
+          in: query
+          required: false
+          description: للمراجع فقط. المدير التنفيذي يرى submitted دائمًا.
+          schema:
+            $ref: '#/components/schemas/ReviewReportStatus'
+        - $ref: '#/components/parameters/SkipCount'
+        - $ref: '#/components/parameters/MaxResultCount'
+        - $ref: '#/components/parameters/Sorting'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportSummaryPagedResultDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+      x-module: complaints-evaluation
+      x-data-scope-by-role:
+        reviewer: self
+        executiveDirector: company
+    post:
+      operationId: ReviewReport_Create
+      tags:
+        - ReviewReports
+      summary: Start a reviewer follow-up report
+      description: >-
+        ينشئ مسودة. يملأ الخادم صفوف الفرق من الموجود عند الإنشاء: كل حامل نشط لدور departmentManager له ملف موظف نشط
+        صف واحد، مع قسمه وعدد من يرتبط به. نسبة الإنجاز والملاحظات تبدأ فارغة ويكتبها المراجع.
+
+
+        قواعد الفترة (Hr:ReviewReports:InvalidPeriod):
+
+        - daily: periodFrom = periodTo.
+
+        - weekly: سبعة أيام بالضبط، periodTo = periodFrom + 6.
+
+        - monthly: من أول الشهر إلى آخره.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+      x-permission: Hr.ReviewReports.Manage
+      x-data-scope: self
+      x-error-codes:
+        - Hr:ReviewReports:InvalidPeriod
+        - Hr:ReviewReports:NoTeams
+      x-added-route: قرار المالك 2026-11-07، تقرير متابعة المراجع للمدير التنفيذي.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportCreateDto'
+            example:
+              periodType: weekly
+              periodFrom: '2026-11-01'
+              periodTo: '2026-11-07'
+              summary: null
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
+      x-module: complaints-evaluation
+  /api/app/review-report/{id}:
+    get:
+      operationId: ReviewReport_Get
+      tags:
+        - ReviewReports
+      summary: Get a reviewer follow-up report
+      description: >-
+        يرد 404 لغير كاتب التقرير، وللمدير التنفيذي على المسودة. أول فتح للمدير التنفيذي لتقرير مرفوع يسجل viewedAt مرة
+        واحدة، ويبقى بعدها ثابتًا.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+        - executiveDirector
+      x-permission: Hr.ReviewReports.Read
+      x-data-scope: company
+      x-error-codes: []
+      x-added-route: قرار المالك 2026-11-07، تقرير متابعة المراجع للمدير التنفيذي.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportDto'
+              example:
+                id: 3d1f6a20-5b8c-4e71-9a02-c4e8b7d6f103
+                reviewer:
+                  id: 91b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
+                  displayName: نور حسن
+                periodType: weekly
+                periodFrom: '2026-11-01'
+                periodTo: '2026-11-07'
+                status: submitted
+                summary: تحسن الإنجاز في أغلب الفرق، مع تأخر في مشروع الأرشفة.
+                averageCompletion: 78
+                teams:
+                  - manager:
+                      id: c15e8f37-92ab-4d10-a7c4-6b3e1d9f0a04
+                      fullName: ليث ناصر
+                      departmentName: قسم المبيعات
+                    department:
+                      id: 70bc8d31-9cef-41ba-a1be-05d2b19dae14
+                      name: قسم المبيعات
+                    membersCount: 8
+                    completionPercent: 85
+                    notes: التزام جيد بالمواعيد.
+                    projectNotes: حملة نهاية السنة على المسار.
+                submittedAt: '2026-11-07T10:15:00Z'
+                viewedAt: null
+                concurrencyStamp: 5c2e9f1ab04d4c5e8a6f3d21
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-module: complaints-evaluation
+      x-data-scope-by-role:
+        reviewer: self
+        executiveDirector: company
+    put:
+      operationId: ReviewReport_Update
+      tags:
+        - ReviewReports
+      summary: Save a reviewer report draft
+      description: >-
+        يحفظ المسودة. teams يحمل صفوف الفرق المعدلة فقط، ويُعرف كل صف بـmanagerEmployeeId، وأي مدير غير موجود في
+        التقرير يُرفض بـHr:ReviewReports:UnknownTeam. الصفوف غير المرسلة تبقى كما هي. يرد 404 لغير كاتب التقرير.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+      x-permission: Hr.ReviewReports.Manage
+      x-data-scope: self
+      x-error-codes:
+        - Hr:ReviewReports:AlreadySubmitted
+        - Hr:ReviewReports:InvalidPeriod
+        - Hr:ReviewReports:UnknownTeam
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportUpdateDto'
+            example:
+              periodType: weekly
+              periodFrom: '2026-11-01'
+              periodTo: '2026-11-07'
+              summary: تحسن الإنجاز في أغلب الفرق.
+              teams:
+                - managerEmployeeId: c15e8f37-92ab-4d10-a7c4-6b3e1d9f0a04
+                  completionPercent: 85
+                  notes: التزام جيد بالمواعيد.
+                  projectNotes: حملة نهاية السنة على المسار.
+              concurrencyStamp: 5c2e9f1ab04d4c5e8a6f3d21
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
+      x-module: complaints-evaluation
+    delete:
+      operationId: ReviewReport_Delete
+      tags:
+        - ReviewReports
+      summary: Delete a reviewer report draft
+      description: يحذف مسودة فقط. التقرير المرفوع لا يُحذف. يرد 404 لغير كاتب التقرير.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+      x-permission: Hr.ReviewReports.Manage
+      x-data-scope: self
+      x-error-codes:
+        - Hr:ReviewReports:AlreadySubmitted
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '204':
+          description: Draft deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
+      x-module: complaints-evaluation
+  /api/app/review-report/{id}/submit:
+    post:
+      operationId: ReviewReport_Submit
+      tags:
+        - ReviewReports
+      summary: Submit the reviewer report to the executive director
+      description: >-
+        يرفع التقرير إلى المدير التنفيذي. يشترط أن يحمل كل فريق completionPercent، وإلا يُرفض بـHr:ReviewReports:IncompleteTeams.
+        بعد الرفع لا يتعدل ولا يُحذف. يصل للمدير التنفيذي إشعار reviewReportSubmitted. يرد 404 لغير كاتب التقرير.
+      x-source:
+        - '3'
+        - '5.11'
+      x-release: 2
+      x-allowed-roles:
+        - reviewer
+      x-permission: Hr.ReviewReports.Manage
+      x-data-scope: self
+      x-error-codes:
+        - Hr:ReviewReports:AlreadySubmitted
+        - Hr:ReviewReports:IncompleteTeams
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportSubmitDto'
+            example:
+              concurrencyStamp: 5c2e9f1ab04d4c5e8a6f3d21
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
+      x-module: complaints-evaluation
   /api/app/report/team-attendance:
     get:
       operationId: Report_GetTeamAttendance
       tags:
         - Reports
       summary: Team attendance report
-      description: حضور موظفي المدير المرتبطين به يومًا بيوم. لا يحتوي بيانات مالية. يُصدَّر عبر export بالرمز teamAttendance.
+      description: |-
+        حضور موظفي المدير المرتبطين به يومًا بيوم. لا يحتوي بيانات مالية. يُصدَّر عبر export بالرمز teamAttendance.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
         - '10'
@@ -14779,7 +15321,10 @@ paths:
       tags:
         - Reports
       summary: Team lateness and absence report
-      description: مجموع التأخر والغياب لكل موظف في الفريق خلال الفترة. لا يحتوي بيانات مالية. يُصدَّر بالرمز teamLatenessAbsence.
+      description: |-
+        مجموع التأخر والغياب لكل موظف في الفريق خلال الفترة. لا يحتوي بيانات مالية. يُصدَّر بالرمز teamLatenessAbsence.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
       x-release: 1
@@ -14848,7 +15393,10 @@ paths:
       tags:
         - Reports
       summary: Team leaves report
-      description: إجازات الفريق في الفترة. يُصدَّر بالرمز teamLeaves.
+      description: |-
+        إجازات الفريق في الفترة. يُصدَّر بالرمز teamLeaves.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
         - '10'
@@ -14923,6 +15471,8 @@ paths:
       description: >-
         الطلبات المعلقة لموظفي الفريق. لا تشمل الشكاوى إطلاقًا، ولا طلبات المحاسب بتفاصيلها المالية. يُصدَّر بالرمز
         teamPending.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
         - '10'
@@ -14979,10 +15529,12 @@ paths:
         عهد الفريق والعهد المشتركة للقسم. لا يحتوي بيانات مالية. يُصدَّر بالرمز teamCustody.
 
         يرجع قائمة فارغة إلى أن تُطلق وحدته في الإصدار 2.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
         - '5.7'
-      x-release: 1
+      x-release: 2
       x-allowed-roles:
         - departmentManager
       x-permission: Hr.Reports.Team
@@ -15045,10 +15597,12 @@ paths:
 
 
         يرجع قائمة فارغة إلى أن تُطلق وحدته في الإصدار 2.
+
+        employeeId خارج نطاق المستدعي يعيد قائمة فارغة.
       x-source:
         - '5.11'
         - '5.9'
-      x-release: 1
+      x-release: 2
       x-allowed-roles:
         - departmentManager
       x-permission: Hr.Reports.Team
@@ -15236,7 +15790,7 @@ paths:
         - '5.9'
         - '5.11'
         - '10'
-      x-release: 1
+      x-release: 2
       x-allowed-roles:
         - reviewer
       x-permission: Hr.Reports.Review
@@ -15952,6 +16506,7 @@ paths:
       x-allowed-roles:
         - departmentManager
         - hrManager
+        - executiveDirector
       x-permission: Hr.Circulars.Send
       x-data-scope: self
       x-error-codes: []
@@ -16040,6 +16595,7 @@ paths:
       x-allowed-roles:
         - departmentManager
         - hrManager
+        - executiveDirector
       x-permission: Hr.Circulars.Send
       x-data-scope: assigned
       x-error-codes: []
@@ -16811,7 +17367,7 @@ paths:
       x-release: 3
       x-allowed-roles:
         - hrManager
-      x-permission: Hr.Warning.Read
+      x-permission: Hr.Warning.ReadAll
       x-data-scope: company
       x-error-codes: []
       x-added-route: شاشة الإنذارات للموارد البشرية ومراجعة التوصيات (5.14 و8)
@@ -17788,7 +18344,7 @@ paths:
       x-allowed-roles:
         - hrManager
         - executiveDirector
-      x-permission: Hr.AppreciationLetter.Read
+      x-permission: Hr.AppreciationLetter.ReadAll
       x-data-scope: company
       x-error-codes: []
       x-added-route: متابعة الكتب الصادرة وتأكيد استلامها (5.15)
@@ -23349,6 +23905,7 @@ components:
     EmployeeCreateDto:
       type: object
       required:
+        - email
         - fullNameAr
         - departmentId
         - jobTitle
@@ -23365,9 +23922,9 @@ components:
           maxLength: 200
           nullable: true
         email:
+          description: "Required for every employee. An account email that is left empty takes this value."
           type: string
           format: email
-          nullable: true
         phoneNumber:
           type: string
           maxLength: 32
@@ -23433,12 +23990,29 @@ components:
           $ref: '#/components/schemas/EmployeeHrDto'
         credentials:
           $ref: '#/components/schemas/TemporaryCredentialsDto'
+    EmployeeHireDateCorrectionDto:
+      type: object
+      required:
+        - hireDate
+        - reason
+        - concurrencyStamp
+      properties:
+        hireDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        concurrencyStamp:
+          type: string
     EmployeeUpdateDto:
       type: object
       description: >-
         Manager, shift and roles are not here. Each has its own route, because each has its own history and side
         effects.
       required:
+        - email
         - fullNameAr
         - departmentId
         - jobTitle
@@ -23456,9 +24030,8 @@ components:
           nullable: true
         email:
           type: string
-          description: Also updates the account email.
+          description: "Required for every employee. An account email that is left empty takes this value."
           format: email
-          nullable: true
         phoneNumber:
           type: string
           maxLength: 32
@@ -23537,7 +24110,7 @@ components:
         movedPendingItemCount:
           type: integer
           format: int32
-          description: Pending requests moved to the new manager. Complaints are never counted.
+          description: "Pending items moved to the new manager: requests, memos and incidents. Complaints are never counted."
           minimum: 0
         concurrencyStamp:
           type: string
@@ -23811,6 +24384,11 @@ components:
         - endsAt
         - reason
       properties:
+        fromUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "HR only: the absent approver being delegated for. Empty means the caller. Recorded in the task log."
         toUserId:
           type: string
           format: uuid
@@ -24683,6 +25261,7 @@ components:
         - invalidDateTime
         - emptyDeviceUserId
         - futurePunch
+        - invalidDeviceUserId
     AttendanceImportErrorDto:
       type: object
       required:
@@ -27018,7 +27597,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: الصنف المتعطل عند التحويل إلى بلاغ، إن وُجد.
+          description: "For target = storeItem only. With target = leaveRequest it must be empty, otherwise Memo:LeaveDetailsInvalid."
         note:
           type: string
           nullable: true
@@ -28096,6 +28675,7 @@ components:
         - storeOfficer
         - hrManager
         - reviewer
+        - accountant
     ComplaintHandlerRole:
       type: string
       description: الجهة المعالجة في مسار الشكوى.
@@ -28305,9 +28885,10 @@ components:
     ComplaintComplainantDetailDto:
       type: object
       description: >-
-        عرض مقدم الشكوى. لا يحتوي الإجراءات الداخلية ولا قرار الإغلاق ولا المعالج ولا سجل الاطلاع ولا المهلة ولا فئة
+        عرض مقدم الشكوى. لا يحتوي الإجراءات الداخلية ولا المعالج ولا سجل الاطلاع ولا المهلة ولا فئة
         المشتكى عليه. الحقول غائبة وليست null.
       required:
+        - closureDecision
         - id
         - referenceNumber
         - targetKind
@@ -28321,6 +28902,10 @@ components:
         - closedAt
         - concurrencyStamp
       properties:
+        closureDecision:
+          type: string
+          nullable: true
+          description: "The final decision, once the complaint is closed."
         id:
           type: string
           format: uuid
@@ -29433,6 +30018,12 @@ components:
         - reason
         - concurrencyStamp
       properties:
+        scores:
+          type: array
+          nullable: true
+          description: "With decision = accepted: the corrected grades. Criteria not listed keep their grade."
+          items:
+            $ref: '#/components/schemas/EvaluationScoreInputDto'
         decision:
           $ref: '#/components/schemas/EvaluationObjectionDecision'
         reason:
@@ -30044,6 +30635,259 @@ components:
         concurrencyStamp:
           type: string
     DepartmentReportSubmitDto:
+      type: object
+      required:
+        - concurrencyStamp
+      properties:
+        concurrencyStamp:
+          type: string
+    ReviewReportPeriodType:
+      type: string
+      description: فترة تقرير المراجع.
+      enum:
+        - daily
+        - weekly
+        - monthly
+    ReviewReportStatus:
+      type: string
+      description: حالة تقرير المراجع.
+      enum:
+        - draft
+        - submitted
+    ReviewReportTeamDto:
+      type: object
+      description: >-
+        فريق واحد في تقرير المراجع: مدير القسم ومن يرتبط به. الصف لقطة من وقت إنشاء التقرير، ولا يحتوي أي بيانات مالية
+        أو بيانات شكاوى.
+      required:
+        - manager
+        - department
+        - membersCount
+        - completionPercent
+        - notes
+        - projectNotes
+      properties:
+        manager:
+          $ref: '#/components/schemas/EmployeeRefDto'
+        department:
+          allOf:
+            - $ref: '#/components/schemas/DepartmentRefDto'
+          nullable: true
+          type: object
+        membersCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: من يرتبط بالمدير وقت إنشاء التقرير، دون المنتهية خدمتهم.
+        completionPercent:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: نسبة الإنجاز التي يقدّرها المراجع. null ما دام لم يكتبها.
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: ملاحظات المراجع على أداء المدير والفريق.
+        projectNotes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: ملاحظات تخص مشاريع الفريق.
+    ReviewReportDto:
+      type: object
+      required:
+        - id
+        - reviewer
+        - periodType
+        - periodFrom
+        - periodTo
+        - status
+        - summary
+        - averageCompletion
+        - teams
+        - submittedAt
+        - viewedAt
+        - concurrencyStamp
+      properties:
+        id:
+          type: string
+          format: uuid
+        reviewer:
+          $ref: '#/components/schemas/UserRefDto'
+        periodType:
+          $ref: '#/components/schemas/ReviewReportPeriodType'
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ReviewReportStatus'
+        summary:
+          type: string
+          maxLength: 4000
+          nullable: true
+          description: الملخص العام للتقرير.
+        averageCompletion:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: متوسط completionPercent للفرق التي تحمل قيمة، مقربًا لأقرب عدد صحيح. null إذا لم تحمل أي فريق قيمة.
+        teams:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewReportTeamDto'
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        viewedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: أول اطلاع للمدير التنفيذي على التقرير المرفوع.
+        concurrencyStamp:
+          type: string
+    ReviewReportSummaryDto:
+      type: object
+      required:
+        - id
+        - reviewer
+        - periodType
+        - periodFrom
+        - periodTo
+        - status
+        - teamsCount
+        - averageCompletion
+        - submittedAt
+        - viewedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        reviewer:
+          $ref: '#/components/schemas/UserRefDto'
+        periodType:
+          $ref: '#/components/schemas/ReviewReportPeriodType'
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ReviewReportStatus'
+        teamsCount:
+          type: integer
+          format: int32
+          minimum: 0
+        averageCompletion:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          nullable: true
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        viewedAt:
+          type: string
+          format: date-time
+          nullable: true
+    ReviewReportSummaryPagedResultDto:
+      type: object
+      required:
+        - totalCount
+        - items
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewReportSummaryDto'
+    ReviewReportCreateDto:
+      type: object
+      required:
+        - periodType
+        - periodFrom
+        - periodTo
+      properties:
+        periodType:
+          $ref: '#/components/schemas/ReviewReportPeriodType'
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        summary:
+          type: string
+          maxLength: 4000
+          nullable: true
+    ReviewReportTeamInputDto:
+      type: object
+      required:
+        - managerEmployeeId
+        - completionPercent
+        - notes
+        - projectNotes
+      properties:
+        managerEmployeeId:
+          type: string
+          format: uuid
+        completionPercent:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          nullable: true
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+        projectNotes:
+          type: string
+          maxLength: 2000
+          nullable: true
+    ReviewReportUpdateDto:
+      type: object
+      required:
+        - periodType
+        - periodFrom
+        - periodTo
+        - summary
+        - teams
+        - concurrencyStamp
+      properties:
+        periodType:
+          $ref: '#/components/schemas/ReviewReportPeriodType'
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        summary:
+          type: string
+          maxLength: 4000
+          nullable: true
+        teams:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ReviewReportTeamInputDto'
+        concurrencyStamp:
+          type: string
+    ReviewReportSubmitDto:
       type: object
       required:
         - concurrencyStamp
@@ -30755,7 +31599,7 @@ components:
           format: date-time
         acknowledgementRequired:
           type: boolean
-          description: true لتعميمات departmentManagers.
+          description: "Always true: acknowledgement is required on every circular."
         acknowledgedAt:
           type: string
           format: date-time
@@ -32925,6 +33769,8 @@ components:
         | custodyReturned | custody | مستلم العهدة | GET /api/app/custody/{resourceId} |
 
         | custodyCountDifference | none | مدير الموارد البشرية | شاشة الجرد |
+
+        | reviewReportSubmitted | reviewReport | المدير التنفيذي | GET /api/app/review-report/{resourceId} |
       enum:
         - requestPendingAction
         - requestStatusChanged
@@ -32966,6 +33812,7 @@ components:
         - accountSecurityChanged
         - custodyReturned
         - custodyCountDifference
+        - reviewReportSubmitted
     NotificationResourceType:
       type: string
       description: نوع المورد الذي يشير إليه resourceId. القيمة none تعني عدم وجود مورد.
@@ -32985,6 +33832,7 @@ components:
         - adjustmentSuggestion
         - none
         - secureItem
+        - reviewReport
     NotificationDto:
       type: object
       description: >-
@@ -33622,10 +34470,17 @@ x-global-rules:
       - employeeHasRole: departmentManager
         managerMustHoldRole: systemAdmin
         note: مسؤول النظام هو المدير الأعلى لمديري الأقسام.
+      - employeeHasRole: reviewer
+        managerMustHoldRole: executiveDirector
+        managerMayHoldRoleInstead: hrManager
+        note: >-
+          يصلح مديرًا للمراجع المدير التنفيذي أو مدير الموارد البشرية. لا يمر طلبه بخطوة مدير ويبدأ من الموارد البشرية.
+          قرار معتمد (زينب، 2026-11-07).
       - employeeHasRole: anyOther
         managerMustHoldRole: departmentManager
         note: موظفو الموارد البشرية يرتبطون بمديرها إذا حمل دور departmentManager أيضًا.
   error-codes-meaning:
+    Hr:Request:NoApproverAvailable: A step on the route has no active owner at submission, for example no accountant in the system.
     Hr:Identity:SingletonRoleAlreadyAssigned: hrManager or executiveDirector already belongs to another active user.
     Hr:Identity:ProtectedPermissionNotGrantable: A permission starting with Hr.Complaint was sent.
     Hr:Identity:FinancialPermissionNotGrantable: >-
@@ -33678,9 +34533,12 @@ x-module-rules:
 
     |---|---|---|---|
 
-    | الموظف، ومنه المراجع والمحاسب ومسؤول المخزن | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم
+    | الموظف، ومنه المحاسب ومسؤول المخزن | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم
     approved | مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed |
     مدير القسم (pendingManager) ثم الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
+
+    | المراجع | الموارد البشرية (pendingHr) ثم approved | الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم
+    completed | الموارد البشرية (pendingHr) ثم المحاسب (pendingDestination) ثم completed |
 
     | مدير القسم | مسؤول النظام (pendingManager) ثم الموارد البشرية (pendingHr) ثم approved | مسؤول النظام
     (pendingManager) ثم الموارد البشرية (pendingHr) ثم المخزن (pendingDestination) ثم completed | مسؤول النظام
@@ -33699,6 +34557,10 @@ x-module-rules:
 
     قواعد ملزمة:
 
+
+    - المراجع يرتبط بالمدير التنفيذي أو بمدير الموارد البشرية، فلا يمر بخطوة مدير، ويبدأ طلبه من pendingHr. وتبدأ
+    مطالعته من الموارد البشرية مباشرة، وكذلك بلاغه. **قرار معتمد (زينب، 2026-11-07).** إذا حمل الشخص
+    departmentManager مع reviewer يطبق صف مدير القسم.
 
     - مديرو الأقسام يمرون عبر مسؤول النظام لأنه المدير الأعلى لهم. لا توجد قيمة حالة خاصة به، فالحالة pendingManager
     وcurrentApproverRole = systemAdmin.
@@ -33762,7 +34624,7 @@ x-module-rules:
 
     قواعد عامة في هذا الملف:
 
-    - كل نجاح يرد 200، حسب سلوك ABP الافتراضي.
+    - رمز النجاح محدد في كل عملية: 200 أو 201 أو 202 أو 204.
 
     - كل معرفات {id} في المسارات مقيدة بنوع GUID في التوجيه، لذلك لا تتعارض مع المقاطع الثابتة مثل my وteam وassigned
     وsent.

@@ -1,0 +1,36 @@
+const fs=require('fs');const st=setTimeout;global.setTimeout=(f,ms)=>st(f,Math.min(ms||0,3));
+global.matchMedia=()=>({matches:false});
+class DCLogic{constructor(){this.props={}}setState(u){const n=typeof u==='function'?u(this.state):u;this.state={...this.state,...n}}}
+global.DCLogic=DCLogic;
+(0,eval)(fs.readFileSync('script.js','utf8')+'\n;globalThis.__C=Component;');
+const C=new globalThis.__C();const sl=ms=>new Promise(r=>st(r,ms||40));
+const out=[];const ok=(c,m)=>{out.push((c?'PASS ':'FAIL ')+m);if(!c)process.exitCode=1};
+(async()=>{
+ C.setState({persona:'emp'});await C.doSignin();await sl(250);
+ C.go('ds');await sl(60);let r=C.renderVals();
+ ok(r.isDs&&r.ds.rows.length===5&&r.ds.sw.length===10&&r.ds.tabs.length===3&&r.ds.mo.length===16&&r.ds.tl.length===4&&r.ds.kc.length===3,'showcase view-model shape');
+ ok(r.nav.some(n=>n.label==='نظام التصميم'),'Design system nav item (Arabic)');
+ ok(r.ds.D.s7==='الحركة'&&r.ds.crumbs.length===3,'Arabic strings + breadcrumbs');
+ C.dsTog('sw1');ok(C.renderVals().ds.sw1c==='','switch toggles off');C.dsTog('sw1');ok(C.renderVals().ds.sw1c==='on','switch toggles on');
+ C.renderVals().ds.tabs[2].go();ok(C.renderVals().ds.tabI===2&&C.renderVals().ds.tabs[2].cls==='on','tabs select (indicator index 2)');
+ C.renderVals().ds.progInc();ok(C.renderVals().ds.prog===60,'progress +15');C.renderVals().ds.progDec();C.renderVals().ds.progDec();C.renderVals().ds.progDec();C.renderVals().ds.progDec();ok(C.renderVals().ds.prog===0,'progress clamps at 0');
+ C.renderVals().ds.sortTog();ok(C.renderVals().ds.sortArrow==='▼','table sort toggles');
+ const a=C.renderVals().ds.rows.map(x=>x.n);C.renderVals().ds.sortTog();const b=C.renderVals().ds.rows.map(x=>x.n);ok(a.join()===b.slice().reverse().join(),'sorted order reverses');
+ C.renderVals().ds.rds[2].pick();ok(C.renderVals().ds.rds[2].on&&!C.renderVals().ds.rds[1].on,'radio selection');
+ C.renderVals().ds.modalO();ok(C.renderVals().ds.modal,'modal opens');C.renderVals().ds.modalC();ok(!C.renderVals().ds.modal,'modal closes');
+ C.renderVals().ds.drO();ok(C.renderVals().ds.drCls==='open','drawer opens');C.renderVals().ds.drC();ok(C.renderVals().ds.drCls==='','drawer closes');
+ C.renderVals().ds.ddT();ok(C.renderVals().ds.dd,'dropdown opens');C.renderVals().ds.ddItems[2].go();ok(!C.renderVals().ds.dd,'dropdown item closes menu');
+ ok(C.state.toasts.length===1&&C.state.toasts[0].k==='er','toast kind error from dropdown item');
+ C.renderVals().ds.tks.forEach(k=>k.go());ok(C.state.toasts.length===5&&['ok','in','wr','er'].every(k=>C.state.toasts.some(t=>t.k===k)),'4 toast kinds');
+ C.renderVals().ds.onQ({target:{value:'abc'}});ok(C.renderVals().ds.hasQ,'search field value');C.renderVals().ds.qClear();ok(!C.renderVals().ds.hasQ,'search clear');
+ C.renderVals().ds.onDate({target:{value:'2026-11-05'}});ok(C.renderVals().ds.dateTx!=='—','date picker formats date');
+ C.dsFile({target:{files:[{name:'a.pdf',size:2048}]}});await sl(1200);ok(C.renderVals().ds.hasFile&&C.state.dsx.fp>=100,'file upload UI with progress');
+ C.renderVals().ds.fileRm();ok(!C.renderVals().ds.hasFile,'file removed');
+ C.renderVals().ds.miniTog();ok(C.renderVals().ds.miniCls==='cl','mini sidebar collapses');
+ C.dsReplay();ok(C.state.dsx.show===false,'replay unmounts');await sl(200);ok(C.state.dsx.show===true,'replay remounts');
+ C.renderVals().ds.setVm();ok(C.renderVals().ds.vpw==='390px','viewport simulator mobile');
+ C.renderVals().toggleLang();await sl(50);r=C.renderVals();ok(r.ds.D.s7==='Motion'&&r.dir==='ltr','English strings + LTR');
+ C.renderVals().toggleTheme();ok(C.renderVals().th==='light','theme switch');
+ ok(!C.renderVals().isSoon,'ds page is not routed to coming-soon');
+ console.log(out.join('\n'));
+})();

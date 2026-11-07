@@ -1,60 +1,89 @@
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-
+$solutionRoot = Join-Path $scriptRoot "../../"
 
 function Write-StudioStep([string]$Message) {
     [Console]::Out.WriteLine("[STUDIO:STEP] $Message")
     [Console]::Out.Flush()
 }
 
-function Run-Step {
-    param(
-        [string] $Name,
-        [string] $Message,
-        [scriptblock] $Action
-    )
+Write-StudioStep "Building solution"
+Set-Location $solutionRoot
+dotnet build
 
-    Write-StudioStep $Message
-
-    try {
-        & $Action
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Step '$Name' exited with code $LASTEXITCODE"
-        }
-    }
-    catch {
-        [Console]::Error.WriteLine("Step '$Name' FAILED")
-        exit -1
-    }
+if ($LASTEXITCODE -ne 0) {
+    [Console]::Error.WriteLine("dotnet build FAILED with exit code $LASTEXITCODE")
+    exit -1
 }
 
-Run-Step "Build" "Building solution" {
-    Set-Location (Join-Path $scriptRoot "..\..\")
-    dotnet build
-}
+$jobs = @()
 
-Run-Step "InstallLibs" "Installing client-side libraries" {
-    Set-Location (Join-Path $scriptRoot "..\..\")
+Write-StudioStep "Installing client-side libraries"
+$jobs += Start-Job -Name "InstallLibs" -ScriptBlock {
+    $ErrorActionPreference = "Stop"
+    Set-Location (Join-Path $using:scriptRoot "../../")
     abp install-libs
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "abp install-libs exited with code $LASTEXITCODE"
+    }
 }
 
-Run-Step "DbMigrator" "Running database migrator" {
-    $projectDir = Join-Path $scriptRoot "../../HR_Mangment2"
+$jobs += Start-Job -Name "DbMigrator" -ScriptBlock {
+    $ErrorActionPreference = "Stop"
+    $migratorDir = Join-Path $using:scriptRoot "../../src/HR_Mangment2.DbMigrator"
+    $efProjectDir = Join-Path $using:scriptRoot "../../src/HR_Mangment2.EntityFrameworkCore"
     # The CLI creates the migration and then runs the migrator. Do not start another
     # dotnet run until that process exits; a parallel run can seed before AbpSettings exists.
-    if (-not (Test-Path (Join-Path $projectDir "Migrations"))) {
-        & abp create-migration-and-run-migrator $projectDir --nolayers
+    if (-not (Test-Path (Join-Path $efProjectDir "Migrations"))) {
+        & abp create-migration-and-run-migrator $efProjectDir
     }
     else {
-        Set-Location $projectDir
-        dotnet run --migrate-database
+        Set-Location $migratorDir
+        dotnet run
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "DbMigrator exited with code $LASTEXITCODE"
     }
 }
 
-Run-Step "DevCert" "Creating development certificate" {
-    Set-Location (Join-Path $scriptRoot "../../HR_Mangment2")
-    dotnet dev-certs https -v -ep openiddict.pfx -p <CERTIFICATE_PASSPHRASE>
+Write-StudioStep "Creating development certificate"
+$jobs += Start-Job -Name "DevCert" -ScriptBlock {
+    $ErrorActionPreference = "Stop"
+    Set-Location (Join-Path $using:scriptRoot "../../src/HR_Mangment2.HttpApi.Host")
+    dotnet dev-certs https -v -ep openiddict.pfx -p bcbbbe4f-0c5d-4cab-b449-0eaa883eaf96
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet dev-certs exited with code $LASTEXITCODE"
+    }
 }
 
+
+Write-StudioStep "Waiting for initialization jobs"
+while (($jobs | Where-Object { $_.State -eq 'Running' }).Count -gt 0) {
+    $running = ($jobs | Where-Object { $_.State -eq 'Running' } | ForEach-Object { $_.Name }) -join ', '
+    if (-not [string]::IsNullOrWhiteSpace($running)) {
+        Write-StudioStep "Running: $running"
+    }
+    Start-Sleep -Seconds 2
+}
+
+Wait-Job $jobs | Out-Null
+# Native tools can write warnings to stderr; keep them visible without failing completed jobs.
+$jobs | Receive-Job -ErrorAction Continue
+
+$failed = $jobs | Where-Object { $_.State -eq 'Failed' }
+$hasError = $failed.Count -gt 0
+
+if ($hasError) {
+    foreach ($job in $failed) {
+        [Console]::Error.WriteLine("Job '$($job.Name)' FAILED")
+    }
+
+    Remove-Job $jobs | Out-Null
+    exit -1
+}
+
+Remove-Job $jobs | Out-Null
 exit 0
