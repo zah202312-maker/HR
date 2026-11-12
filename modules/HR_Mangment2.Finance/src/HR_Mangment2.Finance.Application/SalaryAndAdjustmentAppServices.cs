@@ -77,6 +77,46 @@ public class SalaryProfileAppService : FinanceAppServiceBase, ISalaryProfileAppS
         };
     }
 
+    /// <summary>
+    /// The executive director's employee salaries page (decision 2026-11-11): every active employee with the base
+    /// salary in force today, nothing else. Read only, and logged as a read of financial data.
+    /// </summary>
+    [Authorize(HrPermissions.FinancePermissions.SalaryProfileReadOverview)]
+    public virtual async Task<EmployeeSalaryOverviewPagedResultDto> GetOverviewAsync(EmployeeOverviewListInput input)
+    {
+        var today = await _companyClock.GetTodayAsync();
+        var search = input.Search?.Trim();
+        var query = (await Employees.GetQueryableAsync())
+            .Where(x => x.Status == EmployeeStatus.Active)
+            .WhereIf(!string.IsNullOrEmpty(search), x =>
+                x.FullNameAr.Contains(search!) ||
+                (x.FullNameEn != null && x.FullNameEn.Contains(search!)) ||
+                (x.EmployeeNumber != null && x.EmployeeNumber.Contains(search!)));
+
+        var total = await AsyncExecuter.LongCountAsync(query);
+        var rows = await AsyncExecuter.ToListAsync(query.OrderBy(x => x.FullNameAr).ThenBy(x => x.Id).Skip(input.SkipCount).Take(input.MaxResultCount));
+        var references = await References.ToRefsAsync(rows);
+        var profiles = await _reader.GetEffectiveAsync(rows.Select(x => x.Id).ToList(), today);
+
+        await LogReadAsync(nameof(SalaryProfile));
+
+        return new EmployeeSalaryOverviewPagedResultDto
+        {
+            TotalCount = total,
+            Items = rows.Select(x =>
+            {
+                var profile = profiles.GetValueOrDefault(x.Id);
+                return new EmployeeSalaryOverviewDto
+                {
+                    Employee = references[x.Id],
+                    BaseSalary = profile?.BaseSalary,
+                    Currency = profile?.Currency,
+                    EffectiveFrom = profile?.EffectiveFrom
+                };
+            }).ToList()
+        };
+    }
+
     [Authorize(HrPermissions.FinancePermissions.SalaryProfileRead)]
     public virtual async Task<SalaryProfileDto> GetAsync(Guid employeeId, SalaryProfileGetInput input)
     {

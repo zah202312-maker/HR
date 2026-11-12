@@ -64,7 +64,10 @@ public class EmployeeLeaveAccount : AuditedAggregateRoot<Guid>, IMultiTenant
     public Guid? TenantId { get; private set; }
     public Guid EmployeeId { get; private set; }
 
-    /// <summary>The next year's entitlement when HR changed it. Null means the same as the current year.</summary>
+    /// <summary>
+    /// No longer read or written: the next year takes the company default (decision 2026-11-10, manual entitlement removed).
+    /// The column stays so old rows keep their history.
+    /// </summary>
     public decimal? NextYearEntitlementDays { get; private set; }
 
     public int Revision { get; private set; }

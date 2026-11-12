@@ -76,6 +76,28 @@ public class SalaryProfileListInput : PagedAndSortedResultRequestDto
     public string? Filter { get; set; }
 }
 
+/// <summary>Search and paging of SalaryProfile_GetOverview (decision 2026-11-11).</summary>
+public class EmployeeOverviewListInput : PagedResultRequestDto
+{
+    [System.ComponentModel.DataAnnotations.StringLength(100)]
+    public string? Search { get; set; }
+}
+
+/// <summary>One line of the executive director's employee salaries page: the base salary only.</summary>
+public class EmployeeSalaryOverviewDto
+{
+    public EmployeeRefDto Employee { get; set; } = null!;
+    public decimal? BaseSalary { get; set; }
+    public string? Currency { get; set; }
+    public DateOnly? EffectiveFrom { get; set; }
+}
+
+public class EmployeeSalaryOverviewPagedResultDto
+{
+    public long TotalCount { get; set; }
+    public List<EmployeeSalaryOverviewDto> Items { get; set; } = new();
+}
+
 public class SalaryProfileGetInput
 {
     public DateOnly? AsOf { get; set; }
@@ -192,6 +214,8 @@ public class PayrollItemDto
     public decimal Deductions { get; set; }
     public decimal Net { get; set; }
     public List<PayrollLineDto> Lines { get; set; } = new();
+    public DateOnly? DeliveredOn { get; set; }
+    public UserRefDto? DeliveredBy { get; set; }
 }
 
 public class PayrollTotalDto
@@ -216,6 +240,7 @@ public class PayrollRunSummaryDto
     public DateTime LastCalculatedAt { get; set; }
     public bool IsStale { get; set; }
     public int EmployeeCount { get; set; }
+    public int DeliveredCount { get; set; }
     public List<PayrollTotalDto> Totals { get; set; } = new();
     public string ConcurrencyStamp { get; set; } = null!;
 }
@@ -266,6 +291,7 @@ public class PayslipSummaryDto
     public decimal Deductions { get; set; }
     public decimal Net { get; set; }
     public DateTime ClosedAt { get; set; }
+    public DateOnly? DeliveredOn { get; set; }
 }
 
 public class PayslipSummaryPagedResultDto
@@ -286,6 +312,7 @@ public class PayslipDto
     public decimal Net { get; set; }
     public List<PayrollLineDto> Lines { get; set; } = new();
     public DateTime ClosedAt { get; set; }
+    public DateOnly? DeliveredOn { get; set; }
 }
 
 public class ExpenseDto
@@ -453,6 +480,7 @@ public class FinanceReportExportInput
 public interface ISalaryProfileAppService : IApplicationService
 {
     Task<SalaryProfileListItemPagedResultDto> GetListAsync(SalaryProfileListInput input);
+    Task<EmployeeSalaryOverviewPagedResultDto> GetOverviewAsync(EmployeeOverviewListInput input);
     Task<SalaryProfileDto> GetAsync(Guid employeeId, SalaryProfileGetInput input);
     Task<SalaryProfileDto> UpdateAsync(Guid employeeId, SalaryProfileUpdateInputDto input);
     Task<SalaryProfilePagedResultDto> GetHistoryAsync(Guid employeeId, PagedAndSortedResultRequestDto input);
@@ -479,6 +507,8 @@ public interface IPayrollRunAppService : IApplicationService
     Task<PayrollRunDto> ApproveAsync(Guid id, PayrollRunActionInputDto input);
     Task<PayrollRunDto> ReturnForChangesAsync(Guid id, ReasonInputDto input);
     Task<PayrollRunDto> CloseAsync(Guid id, PayrollRunActionInputDto input);
+    Task<PayrollRunDto> DeliverAsync(Guid id, PayrollDeliveryInputDto input);
+    Task<PayrollRunDto> UndoDeliveryAsync(Guid id, PayrollUndoDeliveryInputDto input);
     Task<ReportFile> ExportAsync(Guid id, FinanceExportInput input);
     Task<PayslipSummaryPagedResultDto> GetMyPayslipsAsync(PagedAndSortedResultRequestDto input);
     Task<PayslipDto> GetMyPayslipAsync(Guid id);

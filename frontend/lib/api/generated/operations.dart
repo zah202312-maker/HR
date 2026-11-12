@@ -20,6 +20,9 @@ class HrOps {
   static const String ApplicationConfiguration_Get = 'ApplicationConfiguration_Get';
   static const String Me_Get = 'Me_Get';
   static const String Me_Update = 'Me_Update';
+  static const String Me_UploadPhoto = 'Me_UploadPhoto';
+  static const String Me_DeletePhoto = 'Me_DeletePhoto';
+  static const String ProfilePhoto_Get = 'ProfilePhoto_Get';
   static const String Me_GetEmployeeProfile = 'Me_GetEmployeeProfile';
   static const String Me_GetInboxSummary = 'Me_GetInboxSummary';
   static const String Me_GetAdministrativeTaskLog = 'Me_GetAdministrativeTaskLog';
@@ -110,7 +113,6 @@ class HrOps {
   static const String GeoFence_Delete = 'GeoFence_Delete';
   static const String LeaveBalance_GetMy = 'LeaveBalance_GetMy';
   static const String LeaveBalance_GetByEmployee = 'LeaveBalance_GetByEmployee';
-  static const String LeaveBalance_SetEntitlement = 'LeaveBalance_SetEntitlement';
   static const String LeaveBalance_Adjust = 'LeaveBalance_Adjust';
   static const String LeaveLedger_GetByEmployee = 'LeaveLedger_GetByEmployee';
   static const String LeaveLedger_GetMy = 'LeaveLedger_GetMy';
@@ -158,9 +160,45 @@ class HrOps {
   static const String Item_Lookup = 'Item_Lookup';
   static const String Item_Get = 'Item_Get';
   static const String Item_Update = 'Item_Update';
+  static const String Item_Delete = 'Item_Delete';
   static const String Stock_Receive = 'Stock_Receive';
   static const String Stock_Adjust = 'Stock_Adjust';
   static const String Stock_GetMovements = 'Stock_GetMovements';
+  static const String ItemCategory_GetList = 'ItemCategory_GetList';
+  static const String ItemCategory_Create = 'ItemCategory_Create';
+  static const String ItemCategory_Update = 'ItemCategory_Update';
+  static const String ItemUnit_GetList = 'ItemUnit_GetList';
+  static const String ItemUnit_Create = 'ItemUnit_Create';
+  static const String ItemUnit_Update = 'ItemUnit_Update';
+  static const String StorePurchase_GetList = 'StorePurchase_GetList';
+  static const String StorePurchase_Create = 'StorePurchase_Create';
+  static const String StorePurchase_Get = 'StorePurchase_Get';
+  static const String StorePurchase_Update = 'StorePurchase_Update';
+  static const String StorePurchase_Delete = 'StorePurchase_Delete';
+  static const String StorePurchase_Approve = 'StorePurchase_Approve';
+  static const String StorePurchase_Reverse = 'StorePurchase_Reverse';
+  static const String StorePurchase_UploadAttachment = 'StorePurchase_UploadAttachment';
+  static const String StorePurchase_DeleteAttachment = 'StorePurchase_DeleteAttachment';
+  static const String StorePurchase_GetAttachmentDownloadUrl = 'StorePurchase_GetAttachmentDownloadUrl';
+  static const String StoreTeam_GetList = 'StoreTeam_GetList';
+  static const String StoreTeam_Create = 'StoreTeam_Create';
+  static const String StoreTeam_Update = 'StoreTeam_Update';
+  static const String StoreIssueVoucher_GetList = 'StoreIssueVoucher_GetList';
+  static const String StoreIssueVoucher_Create = 'StoreIssueVoucher_Create';
+  static const String StoreIssueVoucher_Get = 'StoreIssueVoucher_Get';
+  static const String StoreIssueVoucher_Update = 'StoreIssueVoucher_Update';
+  static const String StoreIssueVoucher_Delete = 'StoreIssueVoucher_Delete';
+  static const String StoreIssueVoucher_Approve = 'StoreIssueVoucher_Approve';
+  static const String StoreIssueVoucher_Reverse = 'StoreIssueVoucher_Reverse';
+  static const String StoreIssueVoucher_UploadAttachment = 'StoreIssueVoucher_UploadAttachment';
+  static const String StoreIssueVoucher_DeleteAttachment = 'StoreIssueVoucher_DeleteAttachment';
+  static const String StoreIssueVoucher_GetAttachmentDownloadUrl = 'StoreIssueVoucher_GetAttachmentDownloadUrl';
+  static const String StoreDashboard_Get = 'StoreDashboard_Get';
+  static const String StoreReport_GetPurchases = 'StoreReport_GetPurchases';
+  static const String StoreReport_GetStock = 'StoreReport_GetStock';
+  static const String StoreReport_GetIssuesByTeam = 'StoreReport_GetIssuesByTeam';
+  static const String StoreReport_GetItemMovement = 'StoreReport_GetItemMovement';
+  static const String StoreReport_Export = 'StoreReport_Export';
   static const String StockIssue_GetList = 'StockIssue_GetList';
   static const String StockIssue_Get = 'StockIssue_Get';
   static const String StockIssue_Acknowledge = 'StockIssue_Acknowledge';
@@ -211,16 +249,16 @@ class HrOps {
   static const String EvaluationInternalNote_SaveDraft = 'EvaluationInternalNote_SaveDraft';
   static const String EvaluationAnnualSummary_GetMy = 'EvaluationAnnualSummary_GetMy';
   static const String EvaluationAnnualSummary_GetForEmployee = 'EvaluationAnnualSummary_GetForEmployee';
-  static const String EvaluationCriterion_GetList = 'EvaluationCriterion_GetList';
-  static const String EvaluationCriterion_Create = 'EvaluationCriterion_Create';
-  static const String EvaluationCriterion_Update = 'EvaluationCriterion_Update';
-  static const String EvaluationGrade_GetList = 'EvaluationGrade_GetList';
-  static const String EvaluationGrade_Create = 'EvaluationGrade_Create';
-  static const String EvaluationGrade_Update = 'EvaluationGrade_Update';
   static const String DepartmentReport_GetList = 'DepartmentReport_GetList';
   static const String DepartmentReport_Get = 'DepartmentReport_Get';
   static const String DepartmentReport_UpdateNotes = 'DepartmentReport_UpdateNotes';
   static const String DepartmentReport_Submit = 'DepartmentReport_Submit';
+  static const String ReviewRoom_GetCandidates = 'ReviewRoom_GetCandidates';
+  static const String ReviewRoom_GetList = 'ReviewRoom_GetList';
+  static const String ReviewRoom_Create = 'ReviewRoom_Create';
+  static const String ReviewRoom_Get = 'ReviewRoom_Get';
+  static const String ReviewRoom_Update = 'ReviewRoom_Update';
+  static const String ReviewRoom_Delete = 'ReviewRoom_Delete';
   static const String ReviewReport_GetList = 'ReviewReport_GetList';
   static const String ReviewReport_Create = 'ReviewReport_Create';
   static const String ReviewReport_Get = 'ReviewReport_Get';
@@ -235,6 +273,7 @@ class HrOps {
   static const String Report_GetTeamEvaluations = 'Report_GetTeamEvaluations';
   static const String Report_GetReviewDashboard = 'Report_GetReviewDashboard';
   static const String Report_GetEvaluationConsistency = 'Report_GetEvaluationConsistency';
+  static const String Report_GetTodayAttendanceSummary = 'Report_GetTodayAttendanceSummary';
   static const String Report_GetHrAttendance = 'Report_GetHrAttendance';
   static const String Report_GetHrLeaveBalances = 'Report_GetHrLeaveBalances';
   static const String Report_GetHrRequests = 'Report_GetHrRequests';
@@ -247,14 +286,47 @@ class HrOps {
   static const String Circular_Get = 'Circular_Get';
   static const String Circular_GetReceipts = 'Circular_GetReceipts';
   static const String Circular_Acknowledge = 'Circular_Acknowledge';
+  static const String Notice_GetReceivedList = 'Notice_GetReceivedList';
+  static const String Notice_Create = 'Notice_Create';
+  static const String Notice_GetSentList = 'Notice_GetSentList';
+  static const String Notice_Get = 'Notice_Get';
+  static const String Notice_GetReceipts = 'Notice_GetReceipts';
+  static const String Notice_Acknowledge = 'Notice_Acknowledge';
+  static const String HrEvaluationCriterion_GetList = 'HrEvaluationCriterion_GetList';
+  static const String HrEvaluationCriterion_Create = 'HrEvaluationCriterion_Create';
+  static const String HrEvaluationCriterion_Update = 'HrEvaluationCriterion_Update';
+  static const String HrEvaluation_GetList = 'HrEvaluation_GetList';
+  static const String HrEvaluation_Create = 'HrEvaluation_Create';
+  static const String HrEvaluation_Get = 'HrEvaluation_Get';
+  static const String HrEvaluation_Send = 'HrEvaluation_Send';
+  static const String HrEvaluationReport_GetList = 'HrEvaluationReport_GetList';
+  static const String HrEvaluationReport_Send = 'HrEvaluationReport_Send';
+  static const String HrEvaluationReport_Get = 'HrEvaluationReport_Get';
+  static const String HrEvaluationAlert_GetList = 'HrEvaluationAlert_GetList';
+  static const String HrEvaluationAlert_Get = 'HrEvaluationAlert_Get';
+  static const String ReviewerEvaluationCriterion_GetList = 'ReviewerEvaluationCriterion_GetList';
+  static const String ReviewerEvaluationCriterion_Create = 'ReviewerEvaluationCriterion_Create';
+  static const String ReviewerEvaluationCriterion_Update = 'ReviewerEvaluationCriterion_Update';
+  static const String ReviewerEvaluation_GetList = 'ReviewerEvaluation_GetList';
+  static const String ReviewerEvaluation_Create = 'ReviewerEvaluation_Create';
+  static const String ReviewerEvaluation_GetCandidates = 'ReviewerEvaluation_GetCandidates';
+  static const String ReviewerEvaluation_Get = 'ReviewerEvaluation_Get';
+  static const String ReviewerEvaluation_Send = 'ReviewerEvaluation_Send';
+  static const String ReviewerEvaluationReport_GetList = 'ReviewerEvaluationReport_GetList';
+  static const String ReviewerEvaluationReport_Send = 'ReviewerEvaluationReport_Send';
+  static const String ReviewerEvaluationReport_Get = 'ReviewerEvaluationReport_Get';
   static const String Contract_List = 'Contract_List';
   static const String Contract_Create = 'Contract_Create';
+  static const String Contract_GetOverview = 'Contract_GetOverview';
   static const String Contract_GetExpiring = 'Contract_GetExpiring';
   static const String Contract_Get = 'Contract_Get';
+  static const String Contract_GetAttachmentDownloadUrl = 'Contract_GetAttachmentDownloadUrl';
+  static const String Contract_DeleteAttachment = 'Contract_DeleteAttachment';
   static const String Contract_Recommend = 'Contract_Recommend';
   static const String Contract_Decide = 'Contract_Decide';
   static const String Contract_GetMyList = 'Contract_GetMyList';
   static const String Contract_GetMy = 'Contract_GetMy';
+  static const String Contract_GetMyAttachmentDownloadUrl = 'Contract_GetMyAttachmentDownloadUrl';
   static const String Warning_Create = 'Warning_Create';
   static const String Warning_List = 'Warning_List';
   static const String Warning_GetObjections = 'Warning_GetObjections';
@@ -276,6 +348,7 @@ class HrOps {
   static const String AppreciationLetter_Get = 'AppreciationLetter_Get';
   static const String AppreciationLetter_GetDownloadUrl = 'AppreciationLetter_GetDownloadUrl';
   static const String AppreciationLetter_Acknowledge = 'AppreciationLetter_Acknowledge';
+  static const String SalaryProfile_GetOverview = 'SalaryProfile_GetOverview';
   static const String SalaryProfile_List = 'SalaryProfile_List';
   static const String SalaryProfile_Get = 'SalaryProfile_Get';
   static const String SalaryProfile_Update = 'SalaryProfile_Update';
@@ -298,6 +371,18 @@ class HrOps {
   static const String Payslip_GetMyList = 'Payslip_GetMyList';
   static const String Payslip_GetMy = 'Payslip_GetMy';
   static const String Payslip_DownloadMyPdf = 'Payslip_DownloadMyPdf';
+  static const String PayrollRun_Deliver = 'PayrollRun_Deliver';
+  static const String PayrollRun_UndoDelivery = 'PayrollRun_UndoDelivery';
+  static const String PettyCashType_GetList = 'PettyCashType_GetList';
+  static const String PettyCashType_Create = 'PettyCashType_Create';
+  static const String PettyCashType_Update = 'PettyCashType_Update';
+  static const String PettyCashAssignment_GetList = 'PettyCashAssignment_GetList';
+  static const String PettyCashAssignment_Create = 'PettyCashAssignment_Create';
+  static const String PettyCashAssignment_Update = 'PettyCashAssignment_Update';
+  static const String PettyCashEntry_GetMonth = 'PettyCashEntry_GetMonth';
+  static const String PettyCashEntry_Update = 'PettyCashEntry_Update';
+  static const String PettyCashEntry_Deliver = 'PettyCashEntry_Deliver';
+  static const String PettyCashEntry_UndoDelivery = 'PettyCashEntry_UndoDelivery';
   static const String Expense_List = 'Expense_List';
   static const String Expense_Create = 'Expense_Create';
   static const String Expense_Export = 'Expense_Export';
@@ -324,6 +409,10 @@ class HrOps {
   static const String SystemSettings_UpdateComplaints = 'SystemSettings_UpdateComplaints';
   static const String SystemSettings_GetHourlyLeave = 'SystemSettings_GetHourlyLeave';
   static const String SystemSettings_UpdateHourlyLeave = 'SystemSettings_UpdateHourlyLeave';
+  static const String SystemSettings_GetAnnualLeave = 'SystemSettings_GetAnnualLeave';
+  static const String SystemSettings_UpdateAnnualLeave = 'SystemSettings_UpdateAnnualLeave';
+  static const String SystemSettings_GetHrEvaluationAlert = 'SystemSettings_GetHrEvaluationAlert';
+  static const String SystemSettings_UpdateHrEvaluationAlert = 'SystemSettings_UpdateHrEvaluationAlert';
   static const String SystemSettings_GetFinance = 'SystemSettings_GetFinance';
   static const String SystemSettings_UpdateFinance = 'SystemSettings_UpdateFinance';
   static const String AuditLog_List = 'AuditLog_List';
@@ -338,6 +427,9 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'ApplicationConfiguration_Get': HrOperationMeta(method: 'GET', path: '/api/abp/application-configuration', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Me_Get': HrOperationMeta(method: 'GET', path: '/api/app/me', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Me_Update': HrOperationMeta(method: 'PATCH', path: '/api/app/me', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
+  'Me_UploadPhoto': HrOperationMeta(method: 'POST', path: '/api/app/me/photo', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>['Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed']),
+  'Me_DeletePhoto': HrOperationMeta(method: 'DELETE', path: '/api/app/me/photo', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
+  'ProfilePhoto_Get': HrOperationMeta(method: 'GET', path: '/api/app/profile-photo/{id}', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Me_GetEmployeeProfile': HrOperationMeta(method: 'GET', path: '/api/app/me/employee-profile', permission: 'Hr.Employee.ReadSelf', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Me_GetInboxSummary': HrOperationMeta(method: 'GET', path: '/api/app/me/inbox-summary', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Me_GetAdministrativeTaskLog': HrOperationMeta(method: 'GET', path: '/api/app/me/administrative-task-log', permission: 'Hr.Employee.ReadOwnTaskLog', roles: <String>['departmentManager'], release: '1', errorCodes: <String>[]),
@@ -368,7 +460,7 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Department_Update': HrOperationMeta(method: 'PUT', path: '/api/app/department/{id}', permission: 'Hr.Department.Manage', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
   'Department_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/department/{id}', permission: 'Hr.Department.Manage', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Department:HasEmployees', 'Hr:Department:HasSharedCustody']),
   'Employee_List': HrOperationMeta(method: 'GET', path: '/api/app/employee', permission: 'Hr.Employee.Read', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
-  'Employee_Create': HrOperationMeta(method: 'POST', path: '/api/app/employee', permission: 'Hr.Employee.Create', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Department:NotFound', 'Hr:Employee:WorkShiftRequired', 'Hr:Employee:WorkShiftNotFound', 'Hr:Employee:ManagerRequired', 'Hr:Employee:ExecutiveCannotHaveManager', 'Hr:Employee:ManagerNotFound', 'Hr:Employee:ManagerNotActive', 'Hr:Employee:InvalidManagerForRole', 'Hr:Identity:RoleNotFound', 'Hr:Identity:SingletonRoleAlreadyAssigned', 'Hr:Identity:ProtectedRoleChangeRequiresApproval', 'Hr:Identity:ForbiddenRoleCombination', 'Hr:Shift:ShiftInactive']),
+  'Employee_Create': HrOperationMeta(method: 'POST', path: '/api/app/employee', permission: 'Hr.Employee.Create', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Department:NotFound', 'Hr:Employee:WorkShiftRequired', 'Hr:Employee:WorkShiftNotFound', 'Hr:Employee:ManagerRequired', 'Hr:Employee:ExecutiveCannotHaveManager', 'Hr:Employee:ManagerNotFound', 'Hr:Employee:ManagerNotActive', 'Hr:Employee:InvalidManagerForRole', 'Hr:Identity:RoleNotFound', 'Hr:Identity:SingletonRoleAlreadyAssigned', 'Hr:Identity:ProtectedRoleChangeRequiresApproval', 'Hr:Identity:ForbiddenRoleCombination', 'Hr:Shift:ShiftInactive', 'Hr:Finance:EffectiveDateInLockedPeriod']),
   'Employee_Lookup': HrOperationMeta(method: 'GET', path: '/api/app/employee/lookup', permission: 'Hr.Employee.Lookup', roles: <String>['storeOfficer', 'hrManager', 'executiveDirector', 'accountant', 'reviewer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'Employee_Get': HrOperationMeta(method: 'GET', path: '/api/app/employee/{id}', permission: 'Hr.Employee.Read', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
   'Employee_Update': HrOperationMeta(method: 'PUT', path: '/api/app/employee/{id}', permission: 'Hr.Employee.Update', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Department:NotFound', 'Hr:Employee:HasDirectReports', 'Hr:Employee:HireDateLocked', 'Hr:Employee:HasOutstandingCustody']),
@@ -377,17 +469,17 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Employee_GetManagerHistory': HrOperationMeta(method: 'GET', path: '/api/app/employee/{id}/manager-history', permission: 'Hr.Employee.ReadManagerHistory', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
   'Employee_GetAdministrativeTaskLog': HrOperationMeta(method: 'GET', path: '/api/app/employee/{id}/administrative-task-log', permission: 'Hr.Employee.ReadTaskLog', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
   'Manager_AssignEmployees': HrOperationMeta(method: 'POST', path: '/api/app/manager/{id}/assign-employees', permission: 'Hr.Employee.AssignManager', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Employee:ExecutiveCannotHaveManager', 'Hr:Employee:ManagerNotActive', 'Hr:Employee:InvalidManagerForRole', 'Hr:Employee:CannotManageSelf', 'Hr:Employee:ManagerCycle', 'Hr:Employee:EmployeeEnded', 'Hr:Employee:EmployeeNotFound']),
-  'Manager_GetMyTeam': HrOperationMeta(method: 'GET', path: '/api/app/manager/my-team', permission: 'Hr.Employee.ReadTeam', roles: <String>['departmentManager', 'systemAdmin'], release: '1', errorCodes: <String>[]),
-  'Manager_GetTeamMember': HrOperationMeta(method: 'GET', path: '/api/app/manager/my-team/{id}', permission: 'Hr.Employee.ReadTeam', roles: <String>['departmentManager', 'systemAdmin'], release: '1', errorCodes: <String>[]),
+  'Manager_GetMyTeam': HrOperationMeta(method: 'GET', path: '/api/app/manager/my-team', permission: 'Hr.Employee.ReadTeam', roles: <String>['departmentManager', 'hrManager'], release: '1', errorCodes: <String>[]),
+  'Manager_GetTeamMember': HrOperationMeta(method: 'GET', path: '/api/app/manager/my-team/{id}', permission: 'Hr.Employee.ReadTeam', roles: <String>['departmentManager', 'hrManager'], release: '1', errorCodes: <String>[]),
   'EmployeeDocument_List': HrOperationMeta(method: 'GET', path: '/api/app/employee/{id}/documents', permission: 'Hr.Employee.Document.Read', roles: <String>['employee', 'departmentManager', 'systemAdmin', 'hrManager'], release: '1', errorCodes: <String>[]),
   'EmployeeDocument_Upload': HrOperationMeta(method: 'POST', path: '/api/app/employee/{id}/documents', permission: 'Hr.Employee.Document.Upload', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed', 'Hr:Employee:EmployeeEnded']),
   'EmployeeDocument_GetDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/document/{id}/download-url', permission: 'Hr.Employee.Document.Read', roles: <String>['employee', 'departmentManager', 'systemAdmin', 'hrManager'], release: '1', errorCodes: <String>['Hr:Document:NotAvailable']),
   'EmployeeDocument_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/document/{id}', permission: 'Hr.Employee.Document.Delete', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
   'Delegation_List': HrOperationMeta(method: 'GET', path: '/api/app/delegation', permission: 'Hr.Delegation.ReadAll', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
-  'Delegation_Create': HrOperationMeta(method: 'POST', path: '/api/app/delegation', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant'], release: '1', errorCodes: <String>['Hr:Delegation:CannotDelegateToSelf', 'Hr:Delegation:InvalidPeriod', 'Hr:Delegation:DelegateNotEligible', 'Hr:Delegation:OverlappingDelegation', 'Hr:Delegation:DelegatorNotEligible']),
+  'Delegation_Create': HrOperationMeta(method: 'POST', path: '/api/app/delegation', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant', 'reviewer'], release: '1', errorCodes: <String>['Hr:Delegation:CannotDelegateToSelf', 'Hr:Delegation:InvalidPeriod', 'Hr:Delegation:DelegateNotEligible', 'Hr:Delegation:OverlappingDelegation', 'Hr:Delegation:DelegatorNotEligible']),
   'Delegation_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/delegation/my', permission: null, roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '1', errorCodes: <String>[]),
-  'Delegation_GetCandidates': HrOperationMeta(method: 'GET', path: '/api/app/delegation/candidate', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant'], release: '1', errorCodes: <String>[]),
-  'Delegation_Cancel': HrOperationMeta(method: 'DELETE', path: '/api/app/delegation/{id}', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant'], release: '1', errorCodes: <String>['Hr:Delegation:AlreadyEnded']),
+  'Delegation_GetCandidates': HrOperationMeta(method: 'GET', path: '/api/app/delegation/candidate', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant', 'reviewer'], release: '1', errorCodes: <String>[]),
+  'Delegation_Cancel': HrOperationMeta(method: 'DELETE', path: '/api/app/delegation/{id}', permission: 'Hr.Delegation.Manage', roles: <String>['departmentManager', 'hrManager', 'executiveDirector', 'systemAdmin', 'accountant', 'reviewer'], release: '1', errorCodes: <String>['Hr:Delegation:AlreadyEnded']),
   'WorkShift_List': HrOperationMeta(method: 'GET', path: '/api/app/work-shift', permission: 'Hr.WorkShift.View', roles: <String>['hrManager', 'systemAdmin'], release: '1', errorCodes: <String>[]),
   'WorkShift_Create': HrOperationMeta(method: 'POST', path: '/api/app/work-shift', permission: 'Hr.WorkShift.Manage', roles: <String>['hrManager', 'systemAdmin'], release: '1', errorCodes: <String>['Hr:Shift:InvalidSchedule', 'Hr:Shift:CrossesMidnightMismatch']),
   'WorkShift_Get': HrOperationMeta(method: 'GET', path: '/api/app/work-shift/{id}', permission: 'Hr.WorkShift.View', roles: <String>['hrManager', 'systemAdmin'], release: '1', errorCodes: <String>[]),
@@ -428,7 +520,6 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'GeoFence_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/geo-fence/{id}', permission: 'Hr.Attendance.GeoFence.Manage', roles: <String>['systemAdmin'], release: 'later', errorCodes: <String>[]),
   'LeaveBalance_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/leave-balance/my', permission: 'Hr.Leave.Balance.ViewOwn', roles: <String>['employee', 'departmentManager', 'hrManager', 'systemAdmin'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible']),
   'LeaveBalance_GetByEmployee': HrOperationMeta(method: 'GET', path: '/api/app/leave-balance/employee/{id}', permission: 'Hr.Leave.Balance.View', roles: <String>['departmentManager', 'hrManager', 'systemAdmin', 'executiveDirector'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible']),
-  'LeaveBalance_SetEntitlement': HrOperationMeta(method: 'PUT', path: '/api/app/leave-balance/employee/{id}/entitlement', permission: 'Hr.Leave.Balance.SetEntitlement', roles: <String>['hrManager', 'executiveDirector'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible', 'Hr:Leave:SelfAdjustmentNotAllowed']),
   'LeaveBalance_Adjust': HrOperationMeta(method: 'POST', path: '/api/app/leave-balance/employee/{id}/adjust', permission: 'Hr.Leave.Balance.Adjust', roles: <String>['hrManager', 'executiveDirector'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible', 'Hr:Leave:EntitlementNotSet', 'Hr:Leave:AdjustmentExceedsBalance', 'Hr:Leave:SelfAdjustmentNotAllowed']),
   'LeaveLedger_GetByEmployee': HrOperationMeta(method: 'GET', path: '/api/app/leave-ledger/employee/{id}', permission: 'Hr.Leave.Ledger.View', roles: <String>['departmentManager', 'hrManager', 'systemAdmin', 'executiveDirector'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible']),
   'LeaveLedger_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/leave-ledger/my', permission: 'Hr.Leave.Ledger.ViewOwn', roles: <String>['employee', 'departmentManager', 'hrManager', 'systemAdmin'], release: '1', errorCodes: <String>['Hr:Leave:ExecutiveDirectorNotEligible']),
@@ -472,13 +563,49 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Incident_UpdateStatus': HrOperationMeta(method: 'PATCH', path: '/api/app/incident/{id}', permission: 'Hr.Incident.UpdateStatus', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Incident:InvalidTransition']),
   'Incident_Forward': HrOperationMeta(method: 'POST', path: '/api/app/incident/{id}/forward', permission: 'Hr.Incident.Forward', roles: <String>['departmentManager'], release: '1', errorCodes: <String>['Hr:Incident:InvalidState']),
   'Item_GetList': HrOperationMeta(method: 'GET', path: '/api/app/item', permission: 'Hr.Store.Item.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
-  'Item_Create': HrOperationMeta(method: 'POST', path: '/api/app/item', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Item:NameAlreadyExists']),
+  'Item_Create': HrOperationMeta(method: 'POST', path: '/api/app/item', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Item:NameAlreadyExists', 'Hr:Item:SkuAlreadyExists', 'Hr:Item:CategoryInactive', 'Hr:Item:UnitInactive']),
   'Item_Lookup': HrOperationMeta(method: 'GET', path: '/api/app/item/lookup', permission: 'Hr.Store.Item.Lookup', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
   'Item_Get': HrOperationMeta(method: 'GET', path: '/api/app/item/{id}', permission: 'Hr.Store.Item.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
-  'Item_Update': HrOperationMeta(method: 'PUT', path: '/api/app/item/{id}', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Item:KindLocked', 'Hr:Item:NameAlreadyExists']),
+  'Item_Update': HrOperationMeta(method: 'PUT', path: '/api/app/item/{id}', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Item:KindLocked', 'Hr:Item:NameAlreadyExists', 'Hr:Item:SkuAlreadyExists', 'Hr:Item:CategoryInactive', 'Hr:Item:UnitInactive']),
+  'Item_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/item/{id}', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Item:HasMovements']),
   'Stock_Receive': HrOperationMeta(method: 'POST', path: '/api/app/stock/receive', permission: 'Hr.Store.Stock.Receive', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Stock:ItemInactive', 'Hr:Stock:PurchaseCostRequired', 'Hr:Stock:IssueNotPurchasing', 'Hr:Stock:IssueItemMismatch']),
   'Stock_Adjust': HrOperationMeta(method: 'POST', path: '/api/app/stock/adjust', permission: 'Hr.Store.Stock.Adjust', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Stock:InsufficientStock', 'Hr:Stock:ZeroQuantity', 'Hr:Stock:MovementAlreadyReversed']),
   'Stock_GetMovements': HrOperationMeta(method: 'GET', path: '/api/app/stock/movements', permission: 'Hr.Store.Stock.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'ItemCategory_GetList': HrOperationMeta(method: 'GET', path: '/api/app/store/item-category', permission: 'Hr.Store.Item.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'ItemCategory_Create': HrOperationMeta(method: 'POST', path: '/api/app/store/item-category', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:ItemCategory:NameAlreadyExists']),
+  'ItemCategory_Update': HrOperationMeta(method: 'PUT', path: '/api/app/store/item-category/{id}', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:ItemCategory:NameAlreadyExists']),
+  'ItemUnit_GetList': HrOperationMeta(method: 'GET', path: '/api/app/store/item-unit', permission: 'Hr.Store.Item.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'ItemUnit_Create': HrOperationMeta(method: 'POST', path: '/api/app/store/item-unit', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:ItemUnit:NameAlreadyExists']),
+  'ItemUnit_Update': HrOperationMeta(method: 'PUT', path: '/api/app/store/item-unit/{id}', permission: 'Hr.Store.Item.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:ItemUnit:NameAlreadyExists']),
+  'StorePurchase_GetList': HrOperationMeta(method: 'GET', path: '/api/app/store/purchase', permission: 'Hr.Store.Purchase.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StorePurchase_Create': HrOperationMeta(method: 'POST', path: '/api/app/store/purchase', permission: 'Hr.Store.Purchase.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StorePurchase:ReceiptNumberAlreadyExists', 'Hr:StorePurchase:InvalidDates', 'Hr:StorePurchase:DuplicateItem', 'Hr:Stock:ItemInactive']),
+  'StorePurchase_Get': HrOperationMeta(method: 'GET', path: '/api/app/store/purchase/{id}', permission: 'Hr.Store.Purchase.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StorePurchase_Update': HrOperationMeta(method: 'PUT', path: '/api/app/store/purchase/{id}', permission: 'Hr.Store.Purchase.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StorePurchase:NotDraft', 'Hr:StorePurchase:ReceiptNumberAlreadyExists', 'Hr:StorePurchase:InvalidDates', 'Hr:StorePurchase:DuplicateItem', 'Hr:Stock:ItemInactive']),
+  'StorePurchase_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/store/purchase/{id}', permission: 'Hr.Store.Purchase.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StorePurchase:NotDraft']),
+  'StorePurchase_Approve': HrOperationMeta(method: 'POST', path: '/api/app/store/purchase/{id}/approve', permission: 'Hr.Store.Purchase.Approve', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StorePurchase:NotDraft', 'Hr:Stock:ItemInactive']),
+  'StorePurchase_Reverse': HrOperationMeta(method: 'POST', path: '/api/app/store/purchase/{id}/reverse', permission: 'Hr.Store.Purchase.Reverse', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StorePurchase:NotApproved', 'Hr:Stock:InsufficientStock']),
+  'StorePurchase_UploadAttachment': HrOperationMeta(method: 'POST', path: '/api/app/store/purchase/{id}/attachment', permission: 'Hr.Store.Purchase.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed', 'Hr:StoreDocument:AttachmentRejected']),
+  'StorePurchase_DeleteAttachment': HrOperationMeta(method: 'DELETE', path: '/api/app/store/purchase/{id}/attachment', permission: 'Hr.Store.Purchase.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StorePurchase_GetAttachmentDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/store/purchase/{id}/attachment-download-url', permission: 'Hr.Store.Purchase.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreTeam_GetList': HrOperationMeta(method: 'GET', path: '/api/app/store/team', permission: 'Hr.Store.Team.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreTeam_Create': HrOperationMeta(method: 'POST', path: '/api/app/store/team', permission: 'Hr.Store.Team.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreTeam:NameAlreadyExists', 'Hr:StoreTeam:DepartmentInvalid']),
+  'StoreTeam_Update': HrOperationMeta(method: 'PUT', path: '/api/app/store/team/{id}', permission: 'Hr.Store.Team.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreTeam:NameAlreadyExists', 'Hr:StoreTeam:DepartmentInvalid']),
+  'StoreIssueVoucher_GetList': HrOperationMeta(method: 'GET', path: '/api/app/store/issue-voucher', permission: 'Hr.Store.IssueVoucher.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreIssueVoucher_Create': HrOperationMeta(method: 'POST', path: '/api/app/store/issue-voucher', permission: 'Hr.Store.IssueVoucher.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreIssueVoucher:VoucherNumberAlreadyExists', 'Hr:StoreIssueVoucher:InvalidDate', 'Hr:StoreIssueVoucher:DuplicateItem', 'Hr:StoreIssueVoucher:TeamInactive', 'Hr:StoreIssueVoucher:EmployeeNotActive', 'Hr:Stock:ItemInactive']),
+  'StoreIssueVoucher_Get': HrOperationMeta(method: 'GET', path: '/api/app/store/issue-voucher/{id}', permission: 'Hr.Store.IssueVoucher.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreIssueVoucher_Update': HrOperationMeta(method: 'PUT', path: '/api/app/store/issue-voucher/{id}', permission: 'Hr.Store.IssueVoucher.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreIssueVoucher:NotDraft', 'Hr:StoreIssueVoucher:VoucherNumberAlreadyExists', 'Hr:StoreIssueVoucher:InvalidDate', 'Hr:StoreIssueVoucher:DuplicateItem', 'Hr:StoreIssueVoucher:TeamInactive', 'Hr:StoreIssueVoucher:EmployeeNotActive', 'Hr:Stock:ItemInactive']),
+  'StoreIssueVoucher_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/store/issue-voucher/{id}', permission: 'Hr.Store.IssueVoucher.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreIssueVoucher:NotDraft']),
+  'StoreIssueVoucher_Approve': HrOperationMeta(method: 'POST', path: '/api/app/store/issue-voucher/{id}/approve', permission: 'Hr.Store.IssueVoucher.Approve', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreIssueVoucher:NotDraft', 'Hr:StoreIssueVoucher:TeamInactive', 'Hr:StoreIssueVoucher:EmployeeNotActive', 'Hr:StoreIssueVoucher:TeamHasNoDepartment', 'Hr:Stock:ItemInactive', 'Hr:Stock:InsufficientStock']),
+  'StoreIssueVoucher_Reverse': HrOperationMeta(method: 'POST', path: '/api/app/store/issue-voucher/{id}/reverse', permission: 'Hr.Store.IssueVoucher.Reverse', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:StoreIssueVoucher:NotApproved', 'Hr:StoreIssueVoucher:CustodyAlreadyReturned']),
+  'StoreIssueVoucher_UploadAttachment': HrOperationMeta(method: 'POST', path: '/api/app/store/issue-voucher/{id}/attachment', permission: 'Hr.Store.IssueVoucher.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed', 'Hr:StoreDocument:AttachmentRejected']),
+  'StoreIssueVoucher_DeleteAttachment': HrOperationMeta(method: 'DELETE', path: '/api/app/store/issue-voucher/{id}/attachment', permission: 'Hr.Store.IssueVoucher.Manage', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreIssueVoucher_GetAttachmentDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/store/issue-voucher/{id}/attachment-download-url', permission: 'Hr.Store.IssueVoucher.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreDashboard_Get': HrOperationMeta(method: 'GET', path: '/api/app/store/dashboard', permission: 'Hr.Store.Stock.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreReport_GetPurchases': HrOperationMeta(method: 'GET', path: '/api/app/store/report/purchases', permission: 'Hr.Store.Report.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
+  'StoreReport_GetStock': HrOperationMeta(method: 'GET', path: '/api/app/store/report/stock', permission: 'Hr.Store.Report.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
+  'StoreReport_GetIssuesByTeam': HrOperationMeta(method: 'GET', path: '/api/app/store/report/issues-by-team', permission: 'Hr.Store.Report.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
+  'StoreReport_GetItemMovement': HrOperationMeta(method: 'GET', path: '/api/app/store/report/item-movement', permission: 'Hr.Store.Report.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
+  'StoreReport_Export': HrOperationMeta(method: 'GET', path: '/api/app/store/report/{code}/export', permission: 'Hr.Store.Report.Export', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Reports:InvalidPeriod', 'Hr:Reports:MissingFilter']),
   'StockIssue_GetList': HrOperationMeta(method: 'GET', path: '/api/app/stock-issue', permission: 'Hr.Store.Issue.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
   'StockIssue_Get': HrOperationMeta(method: 'GET', path: '/api/app/stock-issue/{id}', permission: 'Hr.Store.Issue.View', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>[]),
   'StockIssue_Acknowledge': HrOperationMeta(method: 'POST', path: '/api/app/stock-issue/{id}/acknowledge', permission: 'Hr.Store.Issue.Process', roles: <String>['storeOfficer'], release: '2', errorCodes: <String>['Hr:Stock:IssueInvalidState']),
@@ -529,22 +656,22 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'EvaluationInternalNote_SaveDraft': HrOperationMeta(method: 'PUT', path: '/api/app/evaluation/{id}/internal-note/draft', permission: 'Hr.Evaluations.InternalNote.Write', roles: <String>['departmentManager'], release: '2', errorCodes: <String>['Hr:Evaluations:NotEditable']),
   'EvaluationAnnualSummary_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/evaluation-annual-summary/my', permission: 'Hr.Evaluations.ViewOwn', roles: <String>['employee'], release: '2', errorCodes: <String>[]),
   'EvaluationAnnualSummary_GetForEmployee': HrOperationMeta(method: 'GET', path: '/api/app/evaluation-annual-summary/employee/{employeeId}', permission: 'Hr.Evaluations.AnnualSummary.Read', roles: <String>['departmentManager', 'hrManager'], release: '2', errorCodes: <String>[]),
-  'EvaluationCriterion_GetList': HrOperationMeta(method: 'GET', path: '/api/app/evaluation-criterion', permission: 'Hr.Evaluations.Criteria.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>[]),
-  'EvaluationCriterion_Create': HrOperationMeta(method: 'POST', path: '/api/app/evaluation-criterion', permission: 'Hr.Evaluations.Criteria.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>[]),
-  'EvaluationCriterion_Update': HrOperationMeta(method: 'PUT', path: '/api/app/evaluation-criterion/{id}', permission: 'Hr.Evaluations.Criteria.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>['Hr:Evaluations:LastActiveCriterion']),
-  'EvaluationGrade_GetList': HrOperationMeta(method: 'GET', path: '/api/app/evaluation-grade', permission: 'Hr.Evaluations.Grades.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>[]),
-  'EvaluationGrade_Create': HrOperationMeta(method: 'POST', path: '/api/app/evaluation-grade', permission: 'Hr.Evaluations.Grades.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>[]),
-  'EvaluationGrade_Update': HrOperationMeta(method: 'PUT', path: '/api/app/evaluation-grade/{id}', permission: 'Hr.Evaluations.Grades.Manage', roles: <String>['systemAdmin'], release: '2', errorCodes: <String>['Hr:Evaluations:MinimumActiveGrades']),
   'DepartmentReport_GetList': HrOperationMeta(method: 'GET', path: '/api/app/department-report', permission: 'Hr.DepartmentReports.Read', roles: <String>['departmentManager', 'hrManager'], release: '2', errorCodes: <String>[]),
   'DepartmentReport_Get': HrOperationMeta(method: 'GET', path: '/api/app/department-report/{id}', permission: 'Hr.DepartmentReports.Read', roles: <String>['departmentManager', 'hrManager'], release: '2', errorCodes: <String>[]),
   'DepartmentReport_UpdateNotes': HrOperationMeta(method: 'PATCH', path: '/api/app/department-report/{id}', permission: 'Hr.DepartmentReports.Manage', roles: <String>['departmentManager'], release: '2', errorCodes: <String>['Hr:DepartmentReports:AlreadySubmitted']),
   'DepartmentReport_Submit': HrOperationMeta(method: 'POST', path: '/api/app/department-report/{id}/submit', permission: 'Hr.DepartmentReports.Manage', roles: <String>['departmentManager'], release: '2', errorCodes: <String>['Hr:DepartmentReports:AlreadySubmitted']),
+  'ReviewRoom_GetCandidates': HrOperationMeta(method: 'GET', path: '/api/app/review-room/candidates', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewRoom_GetList': HrOperationMeta(method: 'GET', path: '/api/app/review-room', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewRoom_Create': HrOperationMeta(method: 'POST', path: '/api/app/review-room', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewRooms:NotADepartmentManager', 'Hr:ReviewRooms:MemberNotLinked', 'Hr:ReviewRooms:ManagerAlreadyHasRoom']),
+  'ReviewRoom_Get': HrOperationMeta(method: 'GET', path: '/api/app/review-room/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewRoom_Update': HrOperationMeta(method: 'PUT', path: '/api/app/review-room/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewRooms:NotADepartmentManager', 'Hr:ReviewRooms:MemberNotLinked', 'Hr:ReviewRooms:ManagerAlreadyHasRoom']),
+  'ReviewRoom_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/review-room/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
   'ReviewReport_GetList': HrOperationMeta(method: 'GET', path: '/api/app/review-report', permission: 'Hr.ReviewReports.Read', roles: <String>['reviewer', 'executiveDirector'], release: '2', errorCodes: <String>[]),
-  'ReviewReport_Create': HrOperationMeta(method: 'POST', path: '/api/app/review-report', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:InvalidPeriod', 'Hr:ReviewReports:NoTeams']),
+  'ReviewReport_Create': HrOperationMeta(method: 'POST', path: '/api/app/review-report', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:InvalidDate', 'Hr:ReviewReports:DateAlreadyReported', 'Hr:ReviewReports:NoRooms']),
   'ReviewReport_Get': HrOperationMeta(method: 'GET', path: '/api/app/review-report/{id}', permission: 'Hr.ReviewReports.Read', roles: <String>['reviewer', 'executiveDirector'], release: '2', errorCodes: <String>[]),
-  'ReviewReport_Update': HrOperationMeta(method: 'PUT', path: '/api/app/review-report/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:AlreadySubmitted', 'Hr:ReviewReports:InvalidPeriod', 'Hr:ReviewReports:UnknownTeam']),
+  'ReviewReport_Update': HrOperationMeta(method: 'PUT', path: '/api/app/review-report/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:AlreadySubmitted', 'Hr:ReviewReports:InvalidDate', 'Hr:ReviewReports:DateAlreadyReported', 'Hr:ReviewReports:UnknownTeam']),
   'ReviewReport_Delete': HrOperationMeta(method: 'DELETE', path: '/api/app/review-report/{id}', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:AlreadySubmitted']),
-  'ReviewReport_Submit': HrOperationMeta(method: 'POST', path: '/api/app/review-report/{id}/submit', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:AlreadySubmitted', 'Hr:ReviewReports:IncompleteTeams']),
+  'ReviewReport_Submit': HrOperationMeta(method: 'POST', path: '/api/app/review-report/{id}/submit', permission: 'Hr.ReviewReports.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewReports:AlreadySubmitted', 'Hr:ReviewReports:ContentRequired', 'Hr:ReviewReports:IncompleteTeams']),
   'Report_GetTeamAttendance': HrOperationMeta(method: 'GET', path: '/api/app/report/team-attendance', permission: 'Hr.Reports.Team', roles: <String>['departmentManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
   'Report_GetTeamLatenessAbsence': HrOperationMeta(method: 'GET', path: '/api/app/report/team-lateness-absence', permission: 'Hr.Reports.Team', roles: <String>['departmentManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
   'Report_GetTeamLeaves': HrOperationMeta(method: 'GET', path: '/api/app/report/team-leaves', permission: 'Hr.Reports.Team', roles: <String>['departmentManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
@@ -553,8 +680,9 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Report_GetTeamEvaluations': HrOperationMeta(method: 'GET', path: '/api/app/report/team-evaluations', permission: 'Hr.Reports.Team', roles: <String>['departmentManager'], release: '2', errorCodes: <String>[]),
   'Report_GetReviewDashboard': HrOperationMeta(method: 'GET', path: '/api/app/report/review-dashboard', permission: 'Hr.Reports.Review', roles: <String>['reviewer'], release: '1', errorCodes: <String>[]),
   'Report_GetEvaluationConsistency': HrOperationMeta(method: 'GET', path: '/api/app/report/evaluation-consistency', permission: 'Hr.Reports.Review', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'Report_GetTodayAttendanceSummary': HrOperationMeta(method: 'GET', path: '/api/app/report/today-attendance-summary', permission: 'Hr.Reports.TodaySummary', roles: <String>['executiveDirector'], release: '1', errorCodes: <String>[]),
   'Report_GetHrAttendance': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-attendance', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
-  'Report_GetHrLeaveBalances': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-leave-balances', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
+  'Report_GetHrLeaveBalances': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-leave-balances', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
   'Report_GetHrRequests': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-requests', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '1', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
   'Report_GetHrContracts': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-contracts', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
   'Report_GetHrWarnings': HrOperationMeta(method: 'GET', path: '/api/app/report/hr-warnings', permission: 'Hr.Reports.Hr', roles: <String>['hrManager'], release: '3', errorCodes: <String>['Hr:Reports:InvalidPeriod']),
@@ -565,14 +693,47 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Circular_Get': HrOperationMeta(method: 'GET', path: '/api/app/circular/{id}', permission: 'Hr.Circulars.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
   'Circular_GetReceipts': HrOperationMeta(method: 'GET', path: '/api/app/circular/{id}/receipt', permission: 'Hr.Circulars.Send', roles: <String>['departmentManager', 'hrManager', 'executiveDirector'], release: '2', errorCodes: <String>[]),
   'Circular_Acknowledge': HrOperationMeta(method: 'POST', path: '/api/app/circular/{id}/acknowledge', permission: 'Hr.Circulars.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
+  'Notice_GetReceivedList': HrOperationMeta(method: 'GET', path: '/api/app/notice', permission: 'Hr.Notices.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
+  'Notice_Create': HrOperationMeta(method: 'POST', path: '/api/app/notice', permission: 'Hr.Notices.Send', roles: <String>['hrManager', 'executiveDirector', 'reviewer'], release: '2', errorCodes: <String>['Hr:Notices:RecipientNotAllowed']),
+  'Notice_GetSentList': HrOperationMeta(method: 'GET', path: '/api/app/notice/sent', permission: 'Hr.Notices.Send', roles: <String>['hrManager', 'executiveDirector', 'reviewer'], release: '2', errorCodes: <String>[]),
+  'Notice_Get': HrOperationMeta(method: 'GET', path: '/api/app/notice/{id}', permission: 'Hr.Notices.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
+  'Notice_GetReceipts': HrOperationMeta(method: 'GET', path: '/api/app/notice/{id}/receipt', permission: 'Hr.Notices.Send', roles: <String>['hrManager', 'executiveDirector', 'reviewer'], release: '2', errorCodes: <String>[]),
+  'Notice_Acknowledge': HrOperationMeta(method: 'POST', path: '/api/app/notice/{id}/acknowledge', permission: 'Hr.Notices.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector', 'reviewer', 'accountant', 'storeOfficer', 'systemAdmin'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationCriterion_GetList': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation-criterion', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationCriterion_Create': HrOperationMeta(method: 'POST', path: '/api/app/hr-evaluation-criterion', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationCriterion_Update': HrOperationMeta(method: 'PUT', path: '/api/app/hr-evaluation-criterion/{id}', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluation_GetList': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluation_Create': HrOperationMeta(method: 'POST', path: '/api/app/hr-evaluation', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>['Hr:HrEvaluation:ScoresIncomplete', 'Hr:HrEvaluation:CriterionNotFound', 'Hr:HrEvaluation:EmployeeNotAllowed']),
+  'HrEvaluation_Get': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation/{id}', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluation_Send': HrOperationMeta(method: 'POST', path: '/api/app/hr-evaluation/{id}/send', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>['Hr:HrEvaluation:AlreadySent']),
+  'HrEvaluationReport_GetList': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation-report', permission: 'Hr.HrEvaluation.ReadReports', roles: <String>['hrManager', 'executiveDirector'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationReport_Send': HrOperationMeta(method: 'POST', path: '/api/app/hr-evaluation-report', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>['Hr:HrEvaluation:NothingToSend']),
+  'HrEvaluationReport_Get': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation-report/{id}', permission: 'Hr.HrEvaluation.ReadReports', roles: <String>['hrManager', 'executiveDirector'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationAlert_GetList': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation-alert', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'HrEvaluationAlert_Get': HrOperationMeta(method: 'GET', path: '/api/app/hr-evaluation-alert/{id}', permission: 'Hr.HrEvaluation.Manage', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluationCriterion_GetList': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation-criterion', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluationCriterion_Create': HrOperationMeta(method: 'POST', path: '/api/app/reviewer-evaluation-criterion', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluationCriterion_Update': HrOperationMeta(method: 'PUT', path: '/api/app/reviewer-evaluation-criterion/{id}', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluation_GetList': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluation_Create': HrOperationMeta(method: 'POST', path: '/api/app/reviewer-evaluation', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewerEvaluation:ItemsIncomplete', 'Hr:ReviewerEvaluation:CriterionNotFound', 'Hr:ReviewerEvaluation:EmployeeNotAllowed']),
+  'ReviewerEvaluation_GetCandidates': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation/candidate', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluation_Get': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation/{id}', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluation_Send': HrOperationMeta(method: 'POST', path: '/api/app/reviewer-evaluation/{id}/send', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewerEvaluation:AlreadySent']),
+  'ReviewerEvaluationReport_GetList': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation-report', permission: 'Hr.ReviewerEvaluation.ReadReports', roles: <String>['reviewer', 'executiveDirector'], release: '2', errorCodes: <String>[]),
+  'ReviewerEvaluationReport_Send': HrOperationMeta(method: 'POST', path: '/api/app/reviewer-evaluation-report', permission: 'Hr.ReviewerEvaluation.Manage', roles: <String>['reviewer'], release: '2', errorCodes: <String>['Hr:ReviewerEvaluation:NothingToSend']),
+  'ReviewerEvaluationReport_Get': HrOperationMeta(method: 'GET', path: '/api/app/reviewer-evaluation-report/{id}', permission: 'Hr.ReviewerEvaluation.ReadReports', roles: <String>['reviewer', 'executiveDirector'], release: '2', errorCodes: <String>[]),
   'Contract_List': HrOperationMeta(method: 'GET', path: '/api/app/contract', permission: 'Hr.Contract.Read', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
-  'Contract_Create': HrOperationMeta(method: 'POST', path: '/api/app/contract', permission: 'Hr.Contract.Create', roles: <String>['hrManager'], release: '3', errorCodes: <String>['Hr:Contract:EmployeeNotFound', 'Hr:Contract:InvalidDateRange', 'Hr:Contract:OverlappingContract', 'Hr:Contract:InvalidPreviousContract']),
+  'Contract_Create': HrOperationMeta(method: 'POST', path: '/api/app/contract', permission: 'Hr.Contract.Create', roles: <String>['hrManager'], release: '3', errorCodes: <String>['Hr:Contract:EmployeeNotFound', 'Hr:Contract:InvalidDateRange', 'Hr:Contract:OverlappingContract', 'Hr:Contract:InvalidPreviousContract', 'Hr:Contract:AttachmentRejected', 'Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed']),
+  'Contract_GetOverview': HrOperationMeta(method: 'GET', path: '/api/app/contract/overview', permission: 'Hr.Contract.ReadOverview', roles: <String>['executiveDirector'], release: '3', errorCodes: <String>[]),
   'Contract_GetExpiring': HrOperationMeta(method: 'GET', path: '/api/app/contract/expiring', permission: 'Hr.Contract.Read', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
   'Contract_Get': HrOperationMeta(method: 'GET', path: '/api/app/contract/{id}', permission: 'Hr.Contract.Read', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
+  'Contract_GetAttachmentDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/contract/{id}/attachment/{attachmentId}/download-url', permission: 'Hr.Contract.Read', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
+  'Contract_DeleteAttachment': HrOperationMeta(method: 'DELETE', path: '/api/app/contract/{id}/attachment/{attachmentId}', permission: 'Hr.Contract.Create', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
   'Contract_Recommend': HrOperationMeta(method: 'POST', path: '/api/app/contract/{id}/recommend', permission: 'Hr.Contract.Recommend', roles: <String>['hrManager'], release: '3', errorCodes: <String>['Hr:Contract:InvalidStatus', 'Hr:Contract:SelfActionNotAllowed']),
   'Contract_Decide': HrOperationMeta(method: 'POST', path: '/api/app/contract/{id}/decide', permission: 'Hr.Contract.Decide', roles: <String>['hrManager'], release: '3', errorCodes: <String>['Hr:Contract:InvalidStatus', 'Hr:Contract:SelfActionNotAllowed']),
   'Contract_GetMyList': HrOperationMeta(method: 'GET', path: '/api/app/contract/my', permission: 'Hr.Contract.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
   'Contract_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/contract/my/{id}', permission: 'Hr.Contract.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
+  'Contract_GetMyAttachmentDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/contract/my/{id}/attachment/{attachmentId}/download-url', permission: 'Hr.Contract.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
   'Warning_Create': HrOperationMeta(method: 'POST', path: '/api/app/warning', permission: 'Hr.Warning.Recommend', roles: <String>['departmentManager', 'reviewer'], release: '3', errorCodes: <String>['Hr:Warning:EmployeeNotFound', 'Hr:Warning:TargetNotInTeam', 'Hr:Warning:TargetIsDepartmentManager', 'Hr:Warning:TargetNotDepartmentManager', 'Hr:Warning:SelfRecommendationNotAllowed', 'Hr:Warning:IncidentDateInFuture', 'Hr:Warning:AttachmentRejected', 'Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed']),
   'Warning_List': HrOperationMeta(method: 'GET', path: '/api/app/warning', permission: 'Hr.Warning.ReadAll', roles: <String>['hrManager'], release: '3', errorCodes: <String>[]),
   'Warning_GetObjections': HrOperationMeta(method: 'GET', path: '/api/app/warning/objection', permission: 'Hr.Warning.ResolveObjection', roles: <String>['executiveDirector'], release: '3', errorCodes: <String>[]),
@@ -594,6 +755,7 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'AppreciationLetter_Get': HrOperationMeta(method: 'GET', path: '/api/app/appreciation-letter/{id}', permission: 'Hr.AppreciationLetter.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector'], release: '3', errorCodes: <String>[]),
   'AppreciationLetter_GetDownloadUrl': HrOperationMeta(method: 'GET', path: '/api/app/appreciation-letter/{id}/download-url', permission: 'Hr.AppreciationLetter.Read', roles: <String>['employee', 'departmentManager', 'hrManager', 'executiveDirector'], release: '3', errorCodes: <String>[]),
   'AppreciationLetter_Acknowledge': HrOperationMeta(method: 'POST', path: '/api/app/appreciation-letter/{id}/acknowledge', permission: 'Hr.AppreciationLetter.Acknowledge', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
+  'SalaryProfile_GetOverview': HrOperationMeta(method: 'GET', path: '/api/app/finance/salary-profile/overview', permission: 'Hr.Finance.SalaryProfile.ReadOverview', roles: <String>['executiveDirector'], release: '3', errorCodes: <String>[]),
   'SalaryProfile_List': HrOperationMeta(method: 'GET', path: '/api/app/finance/salary-profile', permission: 'Hr.Finance.SalaryProfile.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
   'SalaryProfile_Get': HrOperationMeta(method: 'GET', path: '/api/app/finance/salary-profile/{employeeId}', permission: 'Hr.Finance.SalaryProfile.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
   'SalaryProfile_Update': HrOperationMeta(method: 'PUT', path: '/api/app/finance/salary-profile/{employeeId}', permission: 'Hr.Finance.SalaryProfile.Update', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:EffectiveDateNotAfterLatest', 'Hr:Finance:EffectiveDateInLockedPeriod', 'Hr:Finance:DuplicateComponentName', 'Hr:Finance:SelfChangeNotAllowed']),
@@ -616,6 +778,18 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'Payslip_GetMyList': HrOperationMeta(method: 'GET', path: '/api/app/finance/payslip/my', permission: 'Hr.Finance.Payslip.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
   'Payslip_GetMy': HrOperationMeta(method: 'GET', path: '/api/app/finance/payslip/my/{id}', permission: 'Hr.Finance.Payslip.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
   'Payslip_DownloadMyPdf': HrOperationMeta(method: 'GET', path: '/api/app/finance/payslip/my/{id}/pdf', permission: 'Hr.Finance.Payslip.ReadOwn', roles: <String>['employee'], release: '3', errorCodes: <String>[]),
+  'PayrollRun_Deliver': HrOperationMeta(method: 'POST', path: '/api/app/finance/payroll-run/{id}/deliver', permission: 'Hr.Finance.PayrollRun.Deliver', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:InvalidPayrollRunStatus', 'Hr:Finance:EmployeeNotInPayroll', 'Hr:Finance:DeliveryDateInFuture']),
+  'PayrollRun_UndoDelivery': HrOperationMeta(method: 'POST', path: '/api/app/finance/payroll-run/{id}/undo-delivery', permission: 'Hr.Finance.PayrollRun.Deliver', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:InvalidPayrollRunStatus', 'Hr:Finance:EmployeeNotInPayroll']),
+  'PettyCashType_GetList': HrOperationMeta(method: 'GET', path: '/api/app/finance/petty-cash-type', permission: 'Hr.Finance.PettyCash.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
+  'PettyCashType_Create': HrOperationMeta(method: 'POST', path: '/api/app/finance/petty-cash-type', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:PettyCashTypeNameAlreadyExists']),
+  'PettyCashType_Update': HrOperationMeta(method: 'PUT', path: '/api/app/finance/petty-cash-type/{id}', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:PettyCashTypeNameAlreadyExists']),
+  'PettyCashAssignment_GetList': HrOperationMeta(method: 'GET', path: '/api/app/finance/petty-cash-assignment', permission: 'Hr.Finance.PettyCash.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
+  'PettyCashAssignment_Create': HrOperationMeta(method: 'POST', path: '/api/app/finance/petty-cash-assignment', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:EmployeeNotFound', 'Hr:Finance:SelfChangeNotAllowed', 'Hr:Finance:PettyCashTypeInactive', 'Hr:Finance:PettyCashAssignmentOverlap', 'Hr:Finance:InvalidPeriodRange']),
+  'PettyCashAssignment_Update': HrOperationMeta(method: 'PUT', path: '/api/app/finance/petty-cash-assignment/{id}', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:SelfChangeNotAllowed', 'Hr:Finance:PettyCashAssignmentOverlap', 'Hr:Finance:InvalidPeriodRange']),
+  'PettyCashEntry_GetMonth': HrOperationMeta(method: 'GET', path: '/api/app/finance/petty-cash/month', permission: 'Hr.Finance.PettyCash.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:FuturePeriod']),
+  'PettyCashEntry_Update': HrOperationMeta(method: 'PUT', path: '/api/app/finance/petty-cash/entry/{id}', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:PettyCashEntryNotPending', 'Hr:Finance:SelfChangeNotAllowed']),
+  'PettyCashEntry_Deliver': HrOperationMeta(method: 'POST', path: '/api/app/finance/petty-cash/deliver', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:PettyCashEntryNotPending', 'Hr:Finance:DeliveryDateInFuture', 'Hr:Finance:SelfChangeNotAllowed']),
+  'PettyCashEntry_UndoDelivery': HrOperationMeta(method: 'POST', path: '/api/app/finance/petty-cash/entry/{id}/undo-delivery', permission: 'Hr.Finance.PettyCash.Manage', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:PettyCashEntryNotDelivered', 'Hr:Finance:SelfChangeNotAllowed']),
   'Expense_List': HrOperationMeta(method: 'GET', path: '/api/app/finance/expense', permission: 'Hr.Finance.Expense.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
   'Expense_Create': HrOperationMeta(method: 'POST', path: '/api/app/finance/expense', permission: 'Hr.Finance.Expense.Create', roles: <String>['accountant'], release: '3', errorCodes: <String>['Hr:Finance:AttachmentRejected', 'Hr:Finance:RequestNotAtAccountantStep', 'Hr:Document:FileTooLarge', 'Hr:Document:FileTypeNotAllowed']),
   'Expense_Export': HrOperationMeta(method: 'GET', path: '/api/app/finance/expense/export', permission: 'Hr.Finance.Expense.Read', roles: <String>['accountant'], release: '3', errorCodes: <String>[]),
@@ -642,6 +816,10 @@ const Map<String, HrOperationMeta> hrOperations = <String, HrOperationMeta>{
   'SystemSettings_UpdateComplaints': HrOperationMeta(method: 'PUT', path: '/api/app/system-settings/complaints', permission: 'Hr.Settings.Complaints', roles: <String>['systemAdmin'], release: '1', errorCodes: <String>[]),
   'SystemSettings_GetHourlyLeave': HrOperationMeta(method: 'GET', path: '/api/app/system-settings/hourly-leave', permission: 'Hr.Settings.HourlyLeave', roles: <String>['systemAdmin'], release: '1', errorCodes: <String>[]),
   'SystemSettings_UpdateHourlyLeave': HrOperationMeta(method: 'PUT', path: '/api/app/system-settings/hourly-leave', permission: 'Hr.Settings.HourlyLeave', roles: <String>['systemAdmin'], release: '1', errorCodes: <String>[]),
+  'SystemSettings_GetAnnualLeave': HrOperationMeta(method: 'GET', path: '/api/app/system-settings/annual-leave', permission: 'Hr.Settings.AnnualLeave', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
+  'SystemSettings_UpdateAnnualLeave': HrOperationMeta(method: 'PUT', path: '/api/app/system-settings/annual-leave', permission: 'Hr.Settings.AnnualLeave', roles: <String>['hrManager'], release: '1', errorCodes: <String>[]),
+  'SystemSettings_GetHrEvaluationAlert': HrOperationMeta(method: 'GET', path: '/api/app/system-settings/hr-evaluation-alert', permission: 'Hr.Settings.HrEvaluationAlert', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
+  'SystemSettings_UpdateHrEvaluationAlert': HrOperationMeta(method: 'PUT', path: '/api/app/system-settings/hr-evaluation-alert', permission: 'Hr.Settings.HrEvaluationAlert', roles: <String>['hrManager'], release: '2', errorCodes: <String>[]),
   'SystemSettings_GetFinance': HrOperationMeta(method: 'GET', path: '/api/app/system-settings/finance', permission: 'Hr.Settings.Finance', roles: <String>['systemAdmin'], release: '3', errorCodes: <String>[]),
   'SystemSettings_UpdateFinance': HrOperationMeta(method: 'PUT', path: '/api/app/system-settings/finance', permission: 'Hr.Settings.Finance', roles: <String>['systemAdmin'], release: '3', errorCodes: <String>[]),
   'AuditLog_List': HrOperationMeta(method: 'GET', path: '/api/app/audit-log', permission: 'Hr.AuditLog.Read', roles: <String>['systemAdmin', 'executiveDirector'], release: '1', errorCodes: <String>[]),

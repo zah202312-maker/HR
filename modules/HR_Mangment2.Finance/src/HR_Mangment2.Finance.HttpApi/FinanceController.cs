@@ -84,6 +84,9 @@ public class FinanceController : HR_Mangment2Controller
         _reports = reports;
     }
 
+    [HttpGet("salary-profile/overview", Name = "SalaryProfile_GetOverview")]
+    public Task<EmployeeSalaryOverviewPagedResultDto> GetSalaryOverviewAsync([FromQuery] EmployeeOverviewListInput input) => _profiles.GetOverviewAsync(input);
+
     [HttpGet("salary-profile", Name = "SalaryProfile_List")]
     public Task<SalaryProfileListItemPagedResultDto> GetSalaryProfilesAsync([FromQuery] SalaryProfileListInput input) => _profiles.GetListAsync(input);
 
@@ -156,6 +159,12 @@ public class FinanceController : HR_Mangment2Controller
 
     [HttpPost("payroll-run/{id:guid}/close", Name = "PayrollRun_Close")]
     public Task<PayrollRunDto> CloseAsync(Guid id, [FromBody] PayrollRunActionInputDto input) => _runs.CloseAsync(id, input);
+
+    [HttpPost("payroll-run/{id:guid}/deliver", Name = "PayrollRun_Deliver")]
+    public Task<PayrollRunDto> DeliverAsync(Guid id, [FromBody] PayrollDeliveryInputDto input) => _runs.DeliverAsync(id, input);
+
+    [HttpPost("payroll-run/{id:guid}/undo-delivery", Name = "PayrollRun_UndoDelivery")]
+    public Task<PayrollRunDto> UndoDeliveryAsync(Guid id, [FromBody] PayrollUndoDeliveryInputDto input) => _runs.UndoDeliveryAsync(id, input);
 
     [HttpGet("payroll-run/{id:guid}/export", Name = "PayrollRun_Export")]
     public async Task<IActionResult> ExportRunAsync(Guid id, [FromQuery] FinanceExportInput input)

@@ -9,77 +9,6 @@ using Volo.Abp.Application.Services;
 
 namespace HR_Mangment2.Evaluations;
 
-public class EvaluationCriterionDto
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = null!;
-    public string NameAr { get; set; } = null!;
-    public string NameEn { get; set; } = null!;
-    public int SortOrder { get; set; }
-    public bool IsActive { get; set; }
-    public string ConcurrencyStamp { get; set; } = null!;
-}
-
-public class EvaluationCriterionPagedResultDto
-{
-    public long TotalCount { get; set; }
-    public List<EvaluationCriterionDto> Items { get; set; } = new();
-}
-
-public class EvaluationCriterionCreateDto
-{
-    public string NameAr { get; set; } = null!;
-    public string NameEn { get; set; } = null!;
-    public int? SortOrder { get; set; }
-    public bool? IsActive { get; set; }
-}
-
-public class EvaluationCriterionUpdateDto : EvaluationCriterionCreateDto
-{
-    public string ConcurrencyStamp { get; set; } = null!;
-}
-
-public class EvaluationGradeDto
-{
-    public Guid Id { get; set; }
-    public string Code { get; set; } = null!;
-    public string Name { get; set; } = null!;
-    public string NameAr { get; set; } = null!;
-    public string NameEn { get; set; } = null!;
-    public int SortOrder { get; set; }
-    public bool IsActive { get; set; }
-    public string ConcurrencyStamp { get; set; } = null!;
-}
-
-public class EvaluationGradePagedResultDto
-{
-    public long TotalCount { get; set; }
-    public List<EvaluationGradeDto> Items { get; set; } = new();
-}
-
-public class EvaluationGradeUpdateDto
-{
-    public string NameAr { get; set; } = null!;
-    public string NameEn { get; set; } = null!;
-    public int? SortOrder { get; set; }
-    public bool? IsActive { get; set; }
-    public string ConcurrencyStamp { get; set; } = null!;
-}
-
-public class EvaluationGradeCreateDto
-{
-    public string Code { get; set; } = null!;
-    public string NameAr { get; set; } = null!;
-    public string NameEn { get; set; } = null!;
-    public int? SortOrder { get; set; }
-    public bool? IsActive { get; set; }
-}
-
-public class EvaluationScaleListInput : PagedAndSortedResultRequestDto
-{
-    public bool? IsActive { get; set; }
-}
-
 public class EvaluationManagerProgressDto
 {
     public int ExpectedCount { get; set; }
@@ -249,6 +178,7 @@ public class EvaluationHrDto
     public DateTime? AcknowledgedAt { get; set; }
     public EvaluationObjectionStatus ObjectionStatus { get; set; }
     public List<EvaluationResponseDto> Responses { get; set; } = new();
+    public List<EvaluationGradeOptionDto> AvailableGrades { get; set; } = new();
     public string ConcurrencyStamp { get; set; } = null!;
 }
 
@@ -548,20 +478,6 @@ public class CircularReceivedListInput : PagedAndSortedResultRequestDto
 public class CircularReceiptListInput : PagedAndSortedResultRequestDto
 {
     public bool? IsAcknowledged { get; set; }
-}
-
-public interface IEvaluationCriterionAppService : IApplicationService
-{
-    Task<EvaluationCriterionPagedResultDto> GetListAsync(EvaluationScaleListInput input);
-    Task<EvaluationCriterionDto> CreateAsync(EvaluationCriterionCreateDto input);
-    Task<EvaluationCriterionDto> UpdateAsync(Guid id, EvaluationCriterionUpdateDto input);
-}
-
-public interface IEvaluationGradeAppService : IApplicationService
-{
-    Task<EvaluationGradePagedResultDto> GetListAsync(EvaluationScaleListInput input);
-    Task<EvaluationGradeDto> CreateAsync(EvaluationGradeCreateDto input);
-    Task<EvaluationGradeDto> UpdateAsync(Guid id, EvaluationGradeUpdateDto input);
 }
 
 public interface IEvaluationCycleAppService : IApplicationService

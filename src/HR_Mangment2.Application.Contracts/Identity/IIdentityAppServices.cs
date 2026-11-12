@@ -10,6 +10,9 @@ public interface IMyAccountAppService : IApplicationService
     Task<MyAccountDto> GetAsync();
     Task<MyAccountDto> UpdateAsync(MyAccountUpdateDto input);
     Task<ChangePasswordResultDto> ChangePasswordAsync(ChangePasswordInputDto input);
+    Task<MyPhotoDto> UploadPhotoAsync(MyPhotoUploadInput input);
+    Task DeletePhotoAsync();
+    Task<ProfilePhotoContent> GetPhotoAsync(Guid photoId);
 }
 
 public interface IMfaAppService : IApplicationService

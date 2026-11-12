@@ -373,6 +373,54 @@ public class PayrollClosedMonthReader : IAttendanceClosedMonthReader, ITransient
     }
 }
 
+/// <summary>
+/// The salary agreed at hiring becomes the employee's first salary version, effective from the hire date and with no
+/// components, for the accountant to manage from then on (decision 2026-11-10).
+/// </summary>
+[Dependency(ReplaceServices = true)]
+[ExposeServices(typeof(IInitialSalaryGateway))]
+public class FinanceInitialSalaryGateway : IInitialSalaryGateway, ITransientDependency
+{
+    private readonly IRepository<SalaryProfile, Guid> _profiles;
+    private readonly PayrollPeriodGuard _periods;
+    private readonly IConfiguration _configuration;
+    private readonly IGuidGenerator _guidGenerator;
+    private readonly ICurrentTenant _currentTenant;
+
+    public FinanceInitialSalaryGateway(
+        IRepository<SalaryProfile, Guid> profiles,
+        PayrollPeriodGuard periods,
+        IConfiguration configuration,
+        IGuidGenerator guidGenerator,
+        ICurrentTenant currentTenant)
+    {
+        _profiles = profiles;
+        _periods = periods;
+        _configuration = configuration;
+        _guidGenerator = guidGenerator;
+        _currentTenant = currentTenant;
+    }
+
+    public virtual async Task RecordAsync(Employee employee, decimal baseSalary, string? currency)
+    {
+        if (await _periods.IsDateLockedAsync(employee.HireDate))
+        {
+            throw new Volo.Abp.BusinessException(HR_Mangment2.Errors.HrErrorCodes.Finance.EffectiveDateInLockedPeriod);
+        }
+
+        var profile = new SalaryProfile(
+            _guidGenerator.Create(),
+            _currentTenant.Id,
+            employee.Id,
+            baseSalary,
+            currency ?? _configuration["Finance:DefaultCurrency"] ?? FinanceStockExpenseGateway.DefaultCurrency,
+            employee.HireDate);
+
+        await _profiles.InsertAsync(profile, autoSave: true);
+        await _periods.MarkDraftsStaleFromAsync(employee.HireDate);
+    }
+}
+
 /// <summary>The store records a total cost without a currency, so purchases use the configured one: see Q120.</summary>
 [Dependency(ReplaceServices = true)]
 [ExposeServices(typeof(IStockExpenseGateway))]
@@ -401,7 +449,7 @@ public class FinanceStockExpenseGateway : IStockExpenseGateway, ITransientDepend
         _currentTenant = currentTenant;
     }
 
-    public async Task OnPurchaseRecordedAsync(StockMovement movement)
+    public async Task OnPurchaseRecordedAsync(StockMovement movement, string? description = null)
     {
         await _expenses.InsertAsync(new Expense(
             _guidGenerator.Create(),
@@ -410,7 +458,7 @@ public class FinanceStockExpenseGateway : IStockExpenseGateway, ITransientDepend
             movement.TotalCost!.Value,
             _configuration["Finance:DefaultCurrency"] ?? DefaultCurrency,
             await _companyClock.GetTodayAsync(),
-            null,
+            description,
             ExpenseSource.StorePurchase,
             movement.Id), autoSave: true);
     }

@@ -27,7 +27,8 @@ public static class MemoRoutePlanner
     public static PlannedMemoStage? FirstStage(RequestOwnerRow row) => row switch
     {
         RequestOwnerRow.Employee => new PlannedMemoStage(MemoStatus.PendingManager, HrRoles.DepartmentManager, true),
-        RequestOwnerRow.DepartmentManager => new PlannedMemoStage(MemoStatus.PendingManager, HrRoles.SystemAdmin, true),
+        // Decision 2026-11-10: the department manager reports to the HR manager, so the memo starts at HR.
+        RequestOwnerRow.DepartmentManager => new PlannedMemoStage(MemoStatus.PendingHr, HrRoles.HrManager, false),
         RequestOwnerRow.SystemAdmin or RequestOwnerRow.HrManager => new PlannedMemoStage(MemoStatus.PendingExecutive, HrRoles.ExecutiveDirector, false),
         RequestOwnerRow.Reviewer => new PlannedMemoStage(MemoStatus.PendingHr, HrRoles.HrManager, false),
         _ => null

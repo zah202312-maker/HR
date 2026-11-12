@@ -72,6 +72,18 @@ public static class HrModelConfiguration
             b.HasIndex(x => new { x.Status, x.ResponseDueDate });
         });
 
+        builder.Entity<HR_Mangment2.EmploymentContracts.ContractAttachment>(b =>
+        {
+            b.ToTable(Prefix + "ContractAttachments");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.FileName).IsRequired().HasMaxLength(FileDownloadLink.MaxFileNameLength);
+            b.Property(x => x.ContentType).IsRequired().HasMaxLength(FileDownloadLink.MaxContentTypeLength);
+            b.Property(x => x.BlobName).IsRequired().HasMaxLength(FileDownloadLink.MaxBlobNameLength);
+            b.HasOne<HR_Mangment2.EmploymentContracts.EmploymentContract>().WithMany().HasForeignKey(x => x.ContractId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.ContractId);
+        });
+
         builder.Entity<HR_Mangment2.Warnings.WarningAttachment>(b =>
         {
             b.ToTable(Prefix + "WarningAttachments");
@@ -256,7 +268,15 @@ public static class HrModelConfiguration
             b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
             b.Property(x => x.MinQuantity).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
             b.Property(x => x.QuantityOnHand).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
+            b.Property(x => x.AverageUnitCost).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.Property(x => x.Sku).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxSkuLength);
             b.Ignore(x => x.IsBelowMinimum);
+            b.Ignore(x => x.StockValue);
+            b.Ignore(x => x.StockStatus);
+            b.HasOne<HR_Mangment2.Store.ItemCategory>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.Store.ItemUnit>().WithMany().HasForeignKey(x => x.UnitId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.TenantId, x.Sku }).IsUnique();
+            b.HasIndex(x => x.CategoryId);
             b.HasIndex(x => new { x.TenantId, x.NameAr }).IsUnique();
             b.HasIndex(x => new { x.TenantId, x.NameEn }).IsUnique();
             b.HasIndex(x => new { x.TenantId, x.IsActive });
@@ -270,8 +290,17 @@ public static class HrModelConfiguration
             b.Property(x => x.Quantity).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
             b.Property(x => x.BalanceAfter).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
             b.Property(x => x.TotalCost).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.Property(x => x.UnitCost).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.Property(x => x.DocumentNumber).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxDocumentNumberLength);
             b.Property(x => x.Note).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNoteLength);
             b.HasOne<HR_Mangment2.Store.Item>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.Store.StorePurchase>().WithMany().HasForeignKey(x => x.PurchaseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.Store.StoreIssueVoucher>().WithMany().HasForeignKey(x => x.IssueVoucherId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.Store.StoreTeam>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.PurchaseId);
+            b.HasIndex(x => x.IssueVoucherId);
+            b.HasIndex(x => new { x.TeamId, x.CreationTime });
+            b.HasIndex(x => new { x.TenantId, x.DocumentNumber });
             b.HasIndex(x => new { x.ItemId, x.CreationTime });
             b.HasIndex(x => new { x.TenantId, x.Type, x.CreationTime });
             b.HasIndex(x => x.ReversesMovementId).IsUnique().HasFilter("\"ReversesMovementId\" IS NOT NULL");
@@ -309,6 +338,8 @@ public static class HrModelConfiguration
             b.HasIndex(x => x.ItemId);
         });
 
+        ConfigureStoreDevelopment(builder);
+
         builder.Entity<HR_Mangment2.Store.CustodyCount>(b =>
         {
             b.ToTable(Prefix + "CustodyCounts");
@@ -334,17 +365,126 @@ public static class HrModelConfiguration
         });
     }
 
+    /// <summary>Categories, units, teams, purchase receipts and issue vouchers (decision 2026-11-11).</summary>
+    private static void ConfigureStoreDevelopment(ModelBuilder builder)
+    {
+        builder.Entity<HR_Mangment2.Store.ItemCategory>(b =>
+        {
+            b.ToTable(Prefix + "ItemCategories");
+            b.ConfigureByConvention();
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNameLength);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNameLength);
+            b.HasIndex(x => new { x.TenantId, x.NameAr }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.NameEn }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.Store.ItemUnit>(b =>
+        {
+            b.ToTable(Prefix + "ItemUnits");
+            b.ConfigureByConvention();
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNameLength);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNameLength);
+            b.HasIndex(x => new { x.TenantId, x.NameAr }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.NameEn }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.Store.StoreTeam>(b =>
+        {
+            b.ToTable(Prefix + "StoreTeams");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNameLength);
+            b.HasOne<Department>().WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.Store.StorePurchase>(b =>
+        {
+            b.ToTable(Prefix + "StorePurchases");
+            b.ConfigureByConvention();
+            b.Property(x => x.ReceiptNumber).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxDocumentNumberLength);
+            b.Property(x => x.SupplierName).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxSupplierNameLength);
+            b.Property(x => x.Currency).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxCurrencyLength);
+            b.Property(x => x.Note).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNoteLength);
+            b.Property(x => x.ReverseReason).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNoteLength);
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            b.Ignore(x => x.TotalQuantity);
+            b.Ignore(x => x.TotalAmount);
+            b.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.PurchaseId).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.TenantId, x.ReceiptNumber }).IsUnique().HasFilter("\"IsDeleted\" = false");
+            b.HasIndex(x => new { x.TenantId, x.Status, x.PurchaseDate });
+            b.HasIndex(x => x.SupplierName);
+        });
+
+        builder.Entity<HR_Mangment2.Store.StorePurchaseLine>(b =>
+        {
+            b.ToTable(Prefix + "StorePurchaseLines");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.Sku).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxSkuLength);
+            b.Property(x => x.Quantity).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
+            b.Property(x => x.UnitPrice).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.Property(x => x.LineTotal).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.HasOne<HR_Mangment2.Store.Item>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.ItemId);
+        });
+
+        builder.Entity<HR_Mangment2.Store.StoreIssueVoucher>(b =>
+        {
+            b.ToTable(Prefix + "StoreIssueVouchers");
+            b.ConfigureByConvention();
+            b.Property(x => x.VoucherNumber).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxDocumentNumberLength);
+            b.Property(x => x.Currency).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxCurrencyLength);
+            b.Property(x => x.Note).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNoteLength);
+            b.Property(x => x.ReverseReason).HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxNoteLength);
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            b.Ignore(x => x.TotalQuantity);
+            b.Ignore(x => x.TotalValue);
+            b.HasOne<HR_Mangment2.Store.StoreTeam>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.IssueVoucherId).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.TenantId, x.VoucherNumber }).IsUnique().HasFilter("\"IsDeleted\" = false");
+            b.HasIndex(x => new { x.TenantId, x.Status, x.IssueDate });
+            b.HasIndex(x => new { x.TeamId, x.IssueDate });
+        });
+
+        builder.Entity<HR_Mangment2.Store.StoreIssueVoucherLine>(b =>
+        {
+            b.ToTable(Prefix + "StoreIssueVoucherLines");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.Sku).IsRequired().HasMaxLength(HR_Mangment2.Store.StoreConsts.MaxSkuLength);
+            b.Property(x => x.Quantity).HasPrecision(HR_Mangment2.Store.StoreConsts.QuantityPrecision, HR_Mangment2.Store.StoreConsts.QuantityScale);
+            b.Property(x => x.UnitCost).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.Property(x => x.LineValue).HasPrecision(HR_Mangment2.Store.StoreConsts.CostPrecision, HR_Mangment2.Store.StoreConsts.CostScale);
+            b.HasOne<HR_Mangment2.Store.Item>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.Store.Custody>().WithMany().HasForeignKey(x => x.CustodyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.ItemId);
+        });
+
+        builder.Entity<HR_Mangment2.Store.StoreDocumentAttachment>(b =>
+        {
+            b.ToTable(Prefix + "StoreDocumentAttachments");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.FileName).IsRequired().HasMaxLength(FileDownloadLink.MaxFileNameLength);
+            b.Property(x => x.ContentType).IsRequired().HasMaxLength(FileDownloadLink.MaxContentTypeLength);
+            b.Property(x => x.BlobName).IsRequired().HasMaxLength(FileDownloadLink.MaxBlobNameLength);
+            b.HasIndex(x => x.DocumentId);
+        });
+    }
+
     private static void ConfigureReviewReports(ModelBuilder builder)
     {
         builder.Entity<HR_Mangment2.ReviewReports.ReviewReport>(b =>
         {
             b.ToTable(Prefix + "ReviewReports");
             b.ConfigureByConvention();
-            b.Property(x => x.PeriodType).HasConversion<string>().HasMaxLength(16);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
-            b.Property(x => x.Summary).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxSummaryLength);
+            b.Property(x => x.Content).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxContentLength);
             b.HasMany(x => x.Teams).WithOne().HasForeignKey(x => x.ReviewReportId).OnDelete(DeleteBehavior.Restrict);
-            b.HasIndex(x => new { x.ReviewerUserId, x.PeriodFrom });
+
+            // One daily report per reviewer per day; a deleted draft frees the day (decision 2026-11-11).
+            b.HasIndex(x => new { x.ReviewerUserId, x.ReportDate }).IsUnique().HasFilter("\"IsDeleted\" = false");
             b.HasIndex(x => new { x.Status, x.SubmittedAt });
         });
 
@@ -353,20 +493,166 @@ public static class HrModelConfiguration
             b.ToTable(Prefix + "ReviewReportTeams");
             b.ConfigureByConvention();
             b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.RoomName).IsRequired().HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxRoomNameLength);
+            b.Property(x => x.BackendGrade).HasConversion<string>().HasMaxLength(16);
+            b.Property(x => x.FrontendGrade).HasConversion<string>().HasMaxLength(16);
+            b.Property(x => x.BackendNotes).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxNotesLength);
+            b.Property(x => x.FrontendNotes).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxNotesLength);
             b.Property(x => x.Notes).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxNotesLength);
-            b.Property(x => x.ProjectNotes).HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxNotesLength);
             b.HasOne<Employee>().WithMany().HasForeignKey(x => x.ManagerEmployeeId).OnDelete(DeleteBehavior.Restrict);
-            b.HasIndex(x => new { x.ReviewReportId, x.ManagerEmployeeId }).IsUnique();
+            b.HasIndex(x => new { x.ReviewReportId, x.RoomId }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.ReviewReports.ReviewRoom>(b =>
+        {
+            b.ToTable(Prefix + "ReviewRooms");
+            b.ConfigureByConvention();
+            b.Property(x => x.Name).IsRequired().HasMaxLength(HR_Mangment2.ReviewReports.ReviewReportConsts.MaxRoomNameLength);
+            b.HasOne<Employee>().WithMany().HasForeignKey(x => x.ManagerEmployeeId).OnDelete(DeleteBehavior.Restrict);
+
+            // A manager leads one room per reviewer (decision 2026-11-11).
+            b.HasIndex(x => new { x.ReviewerUserId, x.ManagerEmployeeId }).IsUnique().HasFilter("\"IsDeleted\" = false");
+        });
+    }
+
+    private static void ConfigureNotices(ModelBuilder builder)
+    {
+        builder.Entity<HR_Mangment2.Notices.Notice>(b =>
+        {
+            b.ToTable(Prefix + "Notices");
+            b.ConfigureByConvention();
+            b.Property(x => x.Title).IsRequired().HasMaxLength(HR_Mangment2.Notices.Notice.MaxTitleLength);
+            b.Property(x => x.Content).IsRequired().HasMaxLength(HR_Mangment2.Notices.Notice.MaxContentLength);
+            b.HasMany(x => x.Recipients).WithOne().HasForeignKey(x => x.NoticeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.SenderUserId, x.SentAt });
+        });
+
+        builder.Entity<HR_Mangment2.Notices.NoticeRecipient>(b =>
+        {
+            b.ToTable(Prefix + "NoticeRecipients");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.NoticeId, x.UserId }).IsUnique();
+            b.HasIndex(x => new { x.UserId, x.AcknowledgedAt });
+        });
+    }
+
+
+    /// <summary>The reviewer's graded evaluations (decision 2026-11-11).</summary>
+    private static void ConfigureReviewerEvaluations(ModelBuilder builder)
+    {
+        builder.Entity<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationCriterion>(b =>
+        {
+            b.ToTable(Prefix + "ReviewerEvaluationCriteria");
+            b.ConfigureByConvention();
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationCriterion.MaxNameLength);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationCriterion.MaxNameLength);
+            b.HasIndex(x => new { x.IsActive, x.SortOrder });
+        });
+
+        builder.Entity<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluation>(b =>
+        {
+            b.ToTable(Prefix + "ReviewerEvaluations");
+            b.ConfigureByConvention();
+            b.Property(x => x.Notes).HasMaxLength(HR_Mangment2.ReviewerEvaluations.ReviewerEvaluation.MaxNotesLength);
+            b.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.ReviewerEvaluationId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.EmployeeId, x.EvaluationDate });
+            b.HasIndex(x => new { x.EvaluatedByUserId, x.ReportId });
+        });
+
+        builder.Entity<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationItem>(b =>
+        {
+            b.ToTable(Prefix + "ReviewerEvaluationItems");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.Grade).HasConversion<string>().HasMaxLength(16);
+            b.Property(x => x.Reason).HasMaxLength(HR_Mangment2.ReviewerEvaluations.ReviewerEvaluation.MaxReasonLength);
+            b.HasOne<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationCriterion>().WithMany().HasForeignKey(x => x.CriterionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.ReviewerEvaluationId, x.CriterionId }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationReport>(b =>
+        {
+            b.ToTable(Prefix + "ReviewerEvaluationReports");
+            b.ConfigureByConvention();
+            b.Property(x => x.Note).HasMaxLength(HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationReport.MaxNoteLength);
+            b.HasIndex(x => new { x.SentByUserId, x.SentAt });
+        });
+    }
+    private static void ConfigureHrEvaluations(ModelBuilder builder)
+    {
+        builder.Entity<HR_Mangment2.HrEvaluations.HrEvaluationCriterion>(b =>
+        {
+            b.ToTable(Prefix + "HrEvaluationCriteria");
+            b.ConfigureByConvention();
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(HR_Mangment2.HrEvaluations.HrEvaluationCriterion.MaxNameLength);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(HR_Mangment2.HrEvaluations.HrEvaluationCriterion.MaxNameLength);
+            b.HasIndex(x => new { x.IsActive, x.SortOrder });
+        });
+
+        builder.Entity<HR_Mangment2.HrEvaluations.HrEvaluation>(b =>
+        {
+            b.ToTable(Prefix + "HrEvaluations");
+            b.ConfigureByConvention();
+            b.Property(x => x.Notes).HasMaxLength(HR_Mangment2.HrEvaluations.HrEvaluation.MaxNotesLength);
+            b.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<HR_Mangment2.HrEvaluations.HrEvaluationReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Scores).WithOne().HasForeignKey(x => x.HrEvaluationId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.EmployeeId, x.EvaluatedAt });
+            b.HasIndex(x => new { x.EvaluatedByUserId, x.ReportId });
+        });
+
+        builder.Entity<HR_Mangment2.HrEvaluations.HrEvaluationScore>(b =>
+        {
+            b.ToTable(Prefix + "HrEvaluationScores");
+            b.ConfigureByConvention();
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.HasOne<HR_Mangment2.HrEvaluations.HrEvaluationCriterion>().WithMany().HasForeignKey(x => x.CriterionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.HrEvaluationId, x.CriterionId }).IsUnique();
+        });
+
+        builder.Entity<HR_Mangment2.HrEvaluations.HrEvaluationReport>(b =>
+        {
+            b.ToTable(Prefix + "HrEvaluationReports");
+            b.ConfigureByConvention();
+            b.Property(x => x.Note).HasMaxLength(HR_Mangment2.HrEvaluations.HrEvaluationReport.MaxNoteLength);
+            b.HasIndex(x => new { x.SentByUserId, x.SentAt });
+        });
+
+        builder.Entity<HR_Mangment2.HrEvaluations.HrEvaluationAlert>(b =>
+        {
+            b.ToTable(Prefix + "HrEvaluationAlerts");
+            b.ConfigureByConvention();
+            b.Property(x => x.AverageScore).HasPrecision(5, 2);
+            b.Property(x => x.Threshold).HasPrecision(5, 2);
+            b.HasOne<HR_Mangment2.HrEvaluations.HrEvaluationCriterion>().WithMany().HasForeignKey(x => x.CriterionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.EmployeeId, x.CriterionId, x.PeriodTo }).IsUnique();
+            b.HasIndex(x => x.PeriodTo);
+        });
+
+        builder.Entity<HR_Mangment2.Identity.ProfilePhoto>(b =>
+        {
+            b.ToTable(Prefix + "ProfilePhotos");
+            b.ConfigureByConvention();
+            b.Property(x => x.BlobName).IsRequired().HasMaxLength(HR_Mangment2.Identity.ProfilePhoto.MaxBlobNameLength);
+            b.Property(x => x.ContentType).IsRequired().HasMaxLength(HR_Mangment2.Identity.ProfilePhoto.MaxContentTypeLength);
+            b.HasIndex(x => x.UserId).IsUnique();
         });
     }
 
     /// <summary>Tables of the main business schema. Each module of the system adds its mapping here.</summary>
     public static void ConfigureHr(this ModelBuilder builder)
     {
+        ConfigureHrEvaluations(builder);
+        ConfigureReviewerEvaluations(builder);
         ConfigureStore(builder);
         ConfigureEvaluations(builder);
         ConfigureEmploymentRecords(builder);
         ConfigureReviewReports(builder);
+        ConfigureNotices(builder);
 
         builder.Entity<Notification>(b =>
         {

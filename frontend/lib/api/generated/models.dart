@@ -102,29 +102,34 @@ enum AppRole {
   String toJson() => value;
 }
 
-/// Minimal employee reference. Safe for store officer lookup. Never add other fields.
+/// Minimal employee reference. Safe for store officer lookup. Never add other fields; photoId is the only exception (decision 2026-11-11: the photo shows next to the name wherever the name shows).
 class EmployeeRefDto {
   const EmployeeRefDto({
     required this.id,
     required this.fullName,
     this.departmentName,
+    this.photoId,
   });
 
   final String id;
   final String fullName;
   /// Localized by Accept-Language.
   final String? departmentName;
+  /// The profile photo of the employee's account, read with ProfilePhoto_Get. Null when there is none.
+  final String? photoId;
 
   factory EmployeeRefDto.fromJson(Map<String, dynamic> json) => EmployeeRefDto(
         id: (json['id']) as String,
         fullName: (json['fullName']) as String,
         departmentName: json['departmentName'] == null ? null : (json['departmentName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'fullName': fullName,
         if (departmentName != null) 'departmentName': departmentName!,
+        if (photoId != null) 'photoId': photoId!,
       };
 }
 
@@ -132,19 +137,24 @@ class UserRefDto {
   const UserRefDto({
     required this.id,
     required this.displayName,
+    this.photoId,
   });
 
   final String id;
   final String displayName;
+  /// The user's profile photo, read with ProfilePhoto_Get. Null when there is none.
+  final String? photoId;
 
   factory UserRefDto.fromJson(Map<String, dynamic> json) => UserRefDto(
         id: (json['id']) as String,
         displayName: (json['displayName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'displayName': displayName,
+        if (photoId != null) 'photoId': photoId!,
       };
 }
 
@@ -748,6 +758,7 @@ class MyAccountDto {
     required this.mustChangePassword,
     required this.mfaRequired,
     required this.mfaEnabled,
+    this.photoId,
   });
 
   final String userId;
@@ -765,6 +776,8 @@ class MyAccountDto {
   /// True when the user holds hrManager, executiveDirector, accountant or systemAdmin.
   final bool mfaRequired;
   final bool mfaEnabled;
+  /// My profile photo, read with ProfilePhoto_Get. Null when there is none. (decision 2026-11-11)
+  final String? photoId;
 
   factory MyAccountDto.fromJson(Map<String, dynamic> json) => MyAccountDto(
         userId: (json['userId']) as String,
@@ -779,6 +792,7 @@ class MyAccountDto {
         mustChangePassword: (json['mustChangePassword']) as bool,
         mfaRequired: (json['mfaRequired']) as bool,
         mfaEnabled: (json['mfaEnabled']) as bool,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -794,6 +808,43 @@ class MyAccountDto {
         'mustChangePassword': mustChangePassword,
         'mfaRequired': mfaRequired,
         'mfaEnabled': mfaEnabled,
+        if (photoId != null) 'photoId': photoId!,
+      };
+}
+
+class MyPhotoUploadDto {
+  const MyPhotoUploadDto({
+    required this.file,
+  });
+
+  /// image/jpeg, image/png or image/webp, up to 1048576 bytes.
+  final MultipartFile file;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+      };
+
+  /// multipart/form-data body: null parts omitted, invariant numbers, ISO dates,
+  /// one part per file for arrays (x-server-requirements.multipart).
+  FormData toFormData() {
+    final form = FormData();
+    form.files.add(MapEntry('file', file));
+    return form;
+  }
+}
+
+class MyPhotoDto {
+  const MyPhotoDto({
+    required this.photoId,
+  });
+
+  final String photoId;
+
+  factory MyPhotoDto.fromJson(Map<String, dynamic> json) => MyPhotoDto(
+        photoId: (json['photoId']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'photoId': photoId,
       };
 }
 
@@ -872,6 +923,7 @@ enum InboxCategory {
   warningDecision('warningDecision'),
   contractDecision('contractDecision'),
   appreciationLetterAcknowledgement('appreciationLetterAcknowledgement'),
+  noticeAcknowledgement('noticeAcknowledgement'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -948,6 +1000,7 @@ enum AdministrativeTaskType {
   custodyCountRecorded('custodyCountRecorded'),
   warningRecommended('warningRecommended'),
   delegationCreated('delegationCreated'),
+  noticeSent('noticeSent'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -1750,6 +1803,7 @@ class EmployeeSelfDto {
   const EmployeeSelfDto({
     required this.id,
     required this.fullName,
+    this.photoId,
     required this.fullNameAr,
     this.fullNameEn,
     this.email,
@@ -1771,6 +1825,8 @@ class EmployeeSelfDto {
   final String id;
   /// Localized by Accept-Language.
   final String fullName;
+  /// The profile photo of the employee's account, read with ProfilePhoto_Get. (decision 2026-11-11)
+  final String? photoId;
   final String fullNameAr;
   final String? fullNameEn;
   final String? email;
@@ -1795,6 +1851,7 @@ class EmployeeSelfDto {
   factory EmployeeSelfDto.fromJson(Map<String, dynamic> json) => EmployeeSelfDto(
         id: (json['id']) as String,
         fullName: (json['fullName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
         fullNameAr: (json['fullNameAr']) as String,
         fullNameEn: json['fullNameEn'] == null ? null : (json['fullNameEn']) as String,
         email: json['email'] == null ? null : (json['email']) as String,
@@ -1816,6 +1873,7 @@ class EmployeeSelfDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'fullName': fullName,
+        if (photoId != null) 'photoId': photoId!,
         'fullNameAr': fullNameAr,
         if (fullNameEn != null) 'fullNameEn': fullNameEn!,
         if (email != null) 'email': email!,
@@ -1840,6 +1898,7 @@ class EmployeeTeamMemberDto {
   const EmployeeTeamMemberDto({
     required this.id,
     required this.fullName,
+    this.photoId,
     this.email,
     this.phoneNumber,
     required this.department,
@@ -1852,6 +1911,8 @@ class EmployeeTeamMemberDto {
   final String id;
   /// Localized by Accept-Language.
   final String fullName;
+  /// The profile photo of the employee's account, read with ProfilePhoto_Get. (decision 2026-11-11)
+  final String? photoId;
   final String? email;
   final String? phoneNumber;
   final DepartmentRefDto department;
@@ -1863,6 +1924,7 @@ class EmployeeTeamMemberDto {
   factory EmployeeTeamMemberDto.fromJson(Map<String, dynamic> json) => EmployeeTeamMemberDto(
         id: (json['id']) as String,
         fullName: (json['fullName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
         email: json['email'] == null ? null : (json['email']) as String,
         phoneNumber: json['phoneNumber'] == null ? null : (json['phoneNumber']) as String,
         department: DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
@@ -1875,6 +1937,7 @@ class EmployeeTeamMemberDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'fullName': fullName,
+        if (photoId != null) 'photoId': photoId!,
         if (email != null) 'email': email!,
         if (phoneNumber != null) 'phoneNumber': phoneNumber!,
         'department': department.toJson(),
@@ -1950,6 +2013,7 @@ class EmployeeHrDto {
   const EmployeeHrDto({
     required this.id,
     required this.fullName,
+    this.photoId,
     required this.fullNameAr,
     this.fullNameEn,
     this.email,
@@ -1975,6 +2039,8 @@ class EmployeeHrDto {
   final String id;
   /// Localized by Accept-Language.
   final String fullName;
+  /// The profile photo of the employee's account, read with ProfilePhoto_Get. (decision 2026-11-11)
+  final String? photoId;
   final String fullNameAr;
   final String? fullNameEn;
   final String? email;
@@ -2003,6 +2069,7 @@ class EmployeeHrDto {
   factory EmployeeHrDto.fromJson(Map<String, dynamic> json) => EmployeeHrDto(
         id: (json['id']) as String,
         fullName: (json['fullName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
         fullNameAr: (json['fullNameAr']) as String,
         fullNameEn: json['fullNameEn'] == null ? null : (json['fullNameEn']) as String,
         email: json['email'] == null ? null : (json['email']) as String,
@@ -2028,6 +2095,7 @@ class EmployeeHrDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'fullName': fullName,
+        if (photoId != null) 'photoId': photoId!,
         'fullNameAr': fullNameAr,
         if (fullNameEn != null) 'fullNameEn': fullNameEn!,
         if (email != null) 'email': email!,
@@ -2055,6 +2123,7 @@ class EmployeeListItemDto {
   const EmployeeListItemDto({
     required this.id,
     required this.fullName,
+    this.photoId,
     required this.department,
     required this.jobTitle,
     required this.hireDate,
@@ -2067,6 +2136,8 @@ class EmployeeListItemDto {
   final String id;
   /// Localized by Accept-Language.
   final String fullName;
+  /// The profile photo of the employee's account, read with ProfilePhoto_Get. (decision 2026-11-11)
+  final String? photoId;
   final DepartmentRefDto department;
   final String jobTitle;
   final DateTime hireDate;
@@ -2078,6 +2149,7 @@ class EmployeeListItemDto {
   factory EmployeeListItemDto.fromJson(Map<String, dynamic> json) => EmployeeListItemDto(
         id: (json['id']) as String,
         fullName: (json['fullName']) as String,
+        photoId: json['photoId'] == null ? null : (json['photoId']) as String,
         department: DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
         jobTitle: (json['jobTitle']) as String,
         hireDate: hrDateFromJson((json['hireDate']) as String),
@@ -2090,6 +2162,7 @@ class EmployeeListItemDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'fullName': fullName,
+        if (photoId != null) 'photoId': photoId!,
         'department': department.toJson(),
         'jobTitle': jobTitle,
         'hireDate': hrDateToJson(hireDate),
@@ -2157,6 +2230,8 @@ class EmployeeCreateDto {
     required this.roleNames,
     this.gender,
     this.employeeNumber,
+    this.baseSalary,
+    this.salaryCurrency,
   });
 
   final String fullNameAr;
@@ -2169,9 +2244,9 @@ class EmployeeCreateDto {
   final String departmentId;
   final String jobTitle;
   final DateTime hireDate;
-  /// Required for everyone except the executive director. Takes effect from hireDate.
+  /// Required for everyone except the executive director, the HR manager and the system admin. Takes effect from hireDate.
   final String? workShiftId;
-  /// Required, and must follow x-global-rules.manager-link. Must be null for the executive director.
+  /// Required, and must follow x-global-rules.manager-link. Must be null for the executive director and the system admin (x-global-rules.manager-link).
   final String? managerEmployeeId;
   /// Account user name.
   final String userName;
@@ -2180,6 +2255,10 @@ class EmployeeCreateDto {
   final AppGender? gender;
   /// الرقم الوظيفي.
   final String? employeeNumber;
+  /// الراتب المتفق عليه عند التعيين، اختياري. يصبح أول نسخة في الملف المالي للموظف (SalaryProfile) بتاريخ سريان hireDate وبلا مخصصات، ثم يديره المحاسب. لا يعود في أي استجابة لمدير الموارد ولا يدخل سجل التدقيق. قرار زينب 2026-11-10.
+  final double? baseSalary;
+  /// ISO 4217، مع baseSalary فقط. إذا غاب تُستخدم عملة الشركة الافتراضية (Finance:DefaultCurrency، وافتراضها IQD).
+  final String? salaryCurrency;
 
   factory EmployeeCreateDto.fromJson(Map<String, dynamic> json) => EmployeeCreateDto(
         fullNameAr: (json['fullNameAr']) as String,
@@ -2197,6 +2276,8 @@ class EmployeeCreateDto {
         roleNames: ((json['roleNames']) as List).map((e) => (e) as String).toList(),
         gender: json['gender'] == null ? null : AppGender.fromJson(json['gender']),
         employeeNumber: json['employeeNumber'] == null ? null : (json['employeeNumber']) as String,
+        baseSalary: json['baseSalary'] == null ? null : ((json['baseSalary']) as num).toDouble(),
+        salaryCurrency: json['salaryCurrency'] == null ? null : (json['salaryCurrency']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -2215,6 +2296,8 @@ class EmployeeCreateDto {
         'roleNames': roleNames,
         if (gender != null) 'gender': gender!.toJson(),
         if (employeeNumber != null) 'employeeNumber': employeeNumber!,
+        if (baseSalary != null) 'baseSalary': baseSalary!,
+        if (salaryCurrency != null) 'salaryCurrency': salaryCurrency!,
       };
 }
 
@@ -2683,11 +2766,12 @@ class EmployeeDocumentUploadDto {
   }
 }
 
-/// Which approval work moves to the delegate. Complaint handling, finance and evaluations can never be delegated.
+/// Which work moves to the delegate. Complaint handling, finance and evaluations can never be delegated. reviewReports (decision 2026-11-11): the reviewer's follow-up reports; the only scope a reviewer may delegate, and no one else may use it. allApprovals does not include it.
 enum DelegationScope {
   allApprovals('allApprovals'),
   requests('requests'),
   memosAndIncidents('memosAndIncidents'),
+  reviewReports('reviewReports'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -5122,7 +5206,7 @@ class LeaveBalanceDto {
   });
 
   final EmployeeRefDto employee;
-  /// false إذا لم يحدد مدير الموارد البشرية عدد الأيام بعد. عندها كل قيم الأيام 0 وتُرفض طلبات الرصيد بـHr:Leave:EntitlementNotSet.
+  /// false إذا لم تُفتح سنة بعد. تُفتح تلقائيًا بالعدد الافتراضي (system-settings/annual-leave) عند إنشاء الموظف أو أول قراءة لرصيده، فلا تبقى false إلا لمن لا إجازة له. عندها كل قيم الأيام 0 وتُرفض طلبات الرصيد بـHr:Leave:EntitlementNotSet. (قرار زينب 2026-11-10)
   final bool isEntitlementSet;
   /// null فقط إذا لم تُفتح سنة بعد، أي عندما isEntitlementSet = false.
   final String? leaveYearId;
@@ -5132,7 +5216,7 @@ class LeaveBalanceDto {
   final DateTime yearEndDate;
   /// بداية سنة الموظف القادمة، بقاعدة 29 فبراير نفسها.
   final DateTime nextYearStartDate;
-  /// استحقاق السنة الحالية كما حدده مدير الموارد البشرية.
+  /// استحقاق السنة الحالية، وهو العدد الافتراضي وقت بدايتها.
   final double currentYearEntitlementDays;
   /// ما رُحِّل كاملًا من السنة السابقة. تسميته في الواجهة: «الإجازات المضافة من السنة الماضية» / Added from last year.
   final double carriedDays;
@@ -5150,12 +5234,12 @@ class LeaveBalanceDto {
   final double currentYearRemainingDays;
   /// أيام محجوزة على سنة الموظف القادمة من إجازات ممتدة أو واقعة فيها، ولا تدخل في remainingDays.
   final double futureYearHeldDays;
-  /// استحقاق السنة القادمة إذا غيّره مدير الموارد البشرية، ويساوي الاستحقاق الحالي إن لم يتغير.
+  /// استحقاق السنة القادمة: العدد الافتراضي الحالي في system-settings/annual-leave، ويُثبت عند بدايتها. (قرار زينب 2026-11-10)
   final double? nextYearEntitlementDays;
   final LeaveHourlyBalanceDto hourly;
   /// استخدام الأنواع الأخرى النشطة في السنة الحالية.
   final List<OtherLeaveUsageDto> otherLeaveUsages;
-  /// مطلوب عند تحديد الاستحقاق.
+  /// يتغير مع كل حركة على الرصيد.
   final String concurrencyStamp;
 
   factory LeaveBalanceDto.fromJson(Map<String, dynamic> json) => LeaveBalanceDto(
@@ -5199,32 +5283,6 @@ class LeaveBalanceDto {
         if (nextYearEntitlementDays != null) 'nextYearEntitlementDays': nextYearEntitlementDays!,
         'hourly': hourly.toJson(),
         'otherLeaveUsages': otherLeaveUsages.map((e) => e.toJson()).toList(),
-        'concurrencyStamp': concurrencyStamp,
-      };
-}
-
-class LeaveEntitlementUpdateDto {
-  const LeaveEntitlementUpdateDto({
-    required this.entitlementDays,
-    this.reason,
-    required this.concurrencyStamp,
-  });
-
-  /// عدد الأيام، مثل 21 أو 24.
-  final double entitlementDays;
-  /// سبب اختياري يُحفظ في الحركة.
-  final String? reason;
-  final String concurrencyStamp;
-
-  factory LeaveEntitlementUpdateDto.fromJson(Map<String, dynamic> json) => LeaveEntitlementUpdateDto(
-        entitlementDays: ((json['entitlementDays']) as num).toDouble(),
-        reason: json['reason'] == null ? null : (json['reason']) as String,
-        concurrencyStamp: (json['concurrencyStamp']) as String,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'entitlementDays': entitlementDays,
-        if (reason != null) 'reason': reason!,
         'concurrencyStamp': concurrencyStamp,
       };
 }
@@ -7588,16 +7646,22 @@ class ItemRefPagedResultDto {
       };
 }
 
-/// صنف لمسؤول المخزن.
+/// مادة لمسؤول المخزن، مع أسعارها (قرار زينب 2026-11-11).
 class ItemDto {
   const ItemDto({
     required this.id,
     required this.nameAr,
     required this.nameEn,
+    required this.sku,
+    this.category,
+    this.unit,
     required this.kind,
     required this.minQuantity,
     required this.quantityOnHand,
     required this.isBelowMinimum,
+    required this.averageUnitCost,
+    required this.stockValue,
+    required this.stockStatus,
     required this.isActive,
     required this.concurrencyStamp,
     required this.creationTime,
@@ -7610,6 +7674,12 @@ class ItemDto {
   final String nameAr;
   /// الاسم بالإنجليزية.
   final String nameEn;
+  /// رمز المادة، فريد بالشركة. المواد القديمة أخذت رمزًا تلقائيًا ITM-0001 وما بعده.
+  final String sku;
+  /// التصنيف. null للمواد القديمة لحد ما تتعدل.
+  final StoreLookupRefDto? category;
+  /// وحدة القياس. null للمواد القديمة لحد ما تتعدل.
+  final StoreLookupRefDto? unit;
   final ItemKind kind;
   /// الحد الأدنى.
   final double minQuantity;
@@ -7617,7 +7687,12 @@ class ItemDto {
   final double quantityOnHand;
   /// quantityOnHand أقل من minQuantity.
   final bool isBelowMinimum;
-  /// غير المفعل لا يظهر عند تقديم الطلبات.
+  /// متوسط تكلفة الوحدة المرجّح من المشتريات المعتمدة. سعر الوحدة بالشاشات.
+  final double averageUnitCost;
+  /// quantityOnHand × averageUnitCost.
+  final double stockValue;
+  final StockStatus stockStatus;
+  /// غير المفعل (المؤرشف) لا يظهر عند تقديم الطلبات ولا بالشراء ولا بالصرف.
   final bool isActive;
   /// يُعاد إرساله في التحديث. عدم المطابقة يعيد 409.
   final String concurrencyStamp;
@@ -7630,10 +7705,16 @@ class ItemDto {
         id: (json['id']) as String,
         nameAr: (json['nameAr']) as String,
         nameEn: (json['nameEn']) as String,
+        sku: (json['sku']) as String,
+        category: json['category'] == null ? null : StoreLookupRefDto.fromJson((json['category']) as Map<String, dynamic>),
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
         kind: ItemKind.fromJson(json['kind']),
         minQuantity: ((json['minQuantity']) as num).toDouble(),
         quantityOnHand: ((json['quantityOnHand']) as num).toDouble(),
         isBelowMinimum: (json['isBelowMinimum']) as bool,
+        averageUnitCost: ((json['averageUnitCost']) as num).toDouble(),
+        stockValue: ((json['stockValue']) as num).toDouble(),
+        stockStatus: StockStatus.fromJson(json['stockStatus']),
         isActive: (json['isActive']) as bool,
         concurrencyStamp: (json['concurrencyStamp']) as String,
         creationTime: DateTime.parse((json['creationTime']) as String),
@@ -7644,10 +7725,16 @@ class ItemDto {
         'id': id,
         'nameAr': nameAr,
         'nameEn': nameEn,
+        'sku': sku,
+        'category': category == null ? null : category!.toJson(),
+        'unit': unit == null ? null : unit!.toJson(),
         'kind': kind.toJson(),
         'minQuantity': minQuantity,
         'quantityOnHand': quantityOnHand,
         'isBelowMinimum': isBelowMinimum,
+        'averageUnitCost': averageUnitCost,
+        'stockValue': stockValue,
+        'stockStatus': stockStatus.toJson(),
         'isActive': isActive,
         'concurrencyStamp': concurrencyStamp,
         'creationTime': hrDateTimeToJson(creationTime),
@@ -7681,6 +7768,9 @@ class ItemCreateInputDto {
   const ItemCreateInputDto({
     required this.nameAr,
     required this.nameEn,
+    required this.sku,
+    required this.categoryId,
+    required this.unitId,
     required this.kind,
     required this.minQuantity,
   });
@@ -7689,6 +7779,12 @@ class ItemCreateInputDto {
   final String nameAr;
   /// الاسم بالإنجليزية.
   final String nameEn;
+  /// رمز المادة، فريد بالشركة.
+  final String sku;
+  /// التصنيف، مفعل.
+  final String categoryId;
+  /// وحدة القياس، مفعلة.
+  final String unitId;
   final ItemKind kind;
   /// الحد الأدنى.
   final double minQuantity;
@@ -7696,6 +7792,9 @@ class ItemCreateInputDto {
   factory ItemCreateInputDto.fromJson(Map<String, dynamic> json) => ItemCreateInputDto(
         nameAr: (json['nameAr']) as String,
         nameEn: (json['nameEn']) as String,
+        sku: (json['sku']) as String,
+        categoryId: (json['categoryId']) as String,
+        unitId: (json['unitId']) as String,
         kind: ItemKind.fromJson(json['kind']),
         minQuantity: ((json['minQuantity']) as num).toDouble(),
       );
@@ -7703,6 +7802,9 @@ class ItemCreateInputDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'nameAr': nameAr,
         'nameEn': nameEn,
+        'sku': sku,
+        'categoryId': categoryId,
+        'unitId': unitId,
         'kind': kind.toJson(),
         'minQuantity': minQuantity,
       };
@@ -7713,6 +7815,9 @@ class ItemUpdateInputDto {
   const ItemUpdateInputDto({
     required this.nameAr,
     required this.nameEn,
+    required this.sku,
+    required this.categoryId,
+    required this.unitId,
     required this.kind,
     required this.minQuantity,
     required this.isActive,
@@ -7723,6 +7828,12 @@ class ItemUpdateInputDto {
   final String nameAr;
   /// الاسم بالإنجليزية.
   final String nameEn;
+  /// رمز المادة، فريد بالشركة.
+  final String sku;
+  /// التصنيف، مفعل.
+  final String categoryId;
+  /// وحدة القياس، مفعلة.
+  final String unitId;
   /// لا يتغير بعد أول حركة.
   final ItemKind kind;
   /// الحد الأدنى.
@@ -7735,6 +7846,9 @@ class ItemUpdateInputDto {
   factory ItemUpdateInputDto.fromJson(Map<String, dynamic> json) => ItemUpdateInputDto(
         nameAr: (json['nameAr']) as String,
         nameEn: (json['nameEn']) as String,
+        sku: (json['sku']) as String,
+        categoryId: (json['categoryId']) as String,
+        unitId: (json['unitId']) as String,
         kind: ItemKind.fromJson(json['kind']),
         minQuantity: ((json['minQuantity']) as num).toDouble(),
         isActive: (json['isActive']) as bool,
@@ -7744,6 +7858,9 @@ class ItemUpdateInputDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'nameAr': nameAr,
         'nameEn': nameEn,
+        'sku': sku,
+        'categoryId': categoryId,
+        'unitId': unitId,
         'kind': kind.toJson(),
         'minQuantity': minQuantity,
         'isActive': isActive,
@@ -7751,9 +7868,10 @@ class ItemUpdateInputDto {
       };
 }
 
-/// receive: دخول مواد. issue: تسليم أو عهدة مخصومة من المخزن. return: إرجاع عهدة إلى المخزن. adjustment: تصحيح بحركة عكسية.
+/// receive: دخول مواد بـ Stock_Receive. purchase: دخول من وصل شراء معتمد. issue: تسليم أو عهدة أو سند صرف مخصوم من المخزن. return: إرجاع عهدة أو عكس سند صرف. adjustment: تصحيح بحركة عكسية، ومنه عكس وصل شراء.
 enum StockMovementType {
   receive('receive'),
+  purchase('purchase'),
   issue('issue'),
   return_('return'),
   adjustment('adjustment'),
@@ -7774,7 +7892,7 @@ enum StockMovementType {
   String toJson() => value;
 }
 
-/// تسجيل دخول مواد. totalCost حقل كتابة فقط، ولا يعود في أي DTO لمسؤول المخزن.
+/// تسجيل دخول مواد. totalCost يعود في StockMovementDto (قرار زينب 2026-11-11)، ويحدّث متوسط تكلفة المادة.
 class StockReceiveInputDto {
   const StockReceiveInputDto({
     required this.itemId,
@@ -7845,7 +7963,7 @@ class StockAdjustInputDto {
       };
 }
 
-/// حركة مخزن. لا تُعدل ولا تُحذف، ولا تحوي تكلفة لأن مسؤول المخزن هو قارئها.
+/// حركة مخزن. لا تُعدل ولا تُحذف. تحوي التكلفة لمسؤول المخزن (قرار زينب 2026-11-11).
 class StockMovementDto {
   const StockMovementDto({
     required this.id,
@@ -7857,6 +7975,12 @@ class StockMovementDto {
     this.stockIssueId,
     this.custodyId,
     this.reversesMovementId,
+    this.purchaseId,
+    this.issueVoucherId,
+    this.documentNumber,
+    this.team,
+    this.unitCost,
+    this.totalCost,
     this.employee,
     required this.performedBy,
     this.note,
@@ -7879,6 +8003,18 @@ class StockMovementDto {
   final String? custodyId;
   /// الحركة المعكوسة.
   final String? reversesMovementId;
+  /// وصل الشراء المرتبط.
+  final String? purchaseId;
+  /// سند الصرف المرتبط.
+  final String? issueVoucherId;
+  /// رقم الوصل أو السند المرتبط.
+  final String? documentNumber;
+  /// الفريق المستلم في سند الصرف.
+  final StoreLookupRefDto? team;
+  /// تكلفة الوحدة بالحركة. للدخول سعر الشراء، وللخروج متوسط التكلفة وقتها.
+  final double? unitCost;
+  /// الكمية × unitCost بإشارة الحركة.
+  final double? totalCost;
   /// الموظف المستلم أو المرجع.
   final EmployeeRefDto? employee;
   final UserRefDto performedBy;
@@ -7897,6 +8033,12 @@ class StockMovementDto {
         stockIssueId: json['stockIssueId'] == null ? null : (json['stockIssueId']) as String,
         custodyId: json['custodyId'] == null ? null : (json['custodyId']) as String,
         reversesMovementId: json['reversesMovementId'] == null ? null : (json['reversesMovementId']) as String,
+        purchaseId: json['purchaseId'] == null ? null : (json['purchaseId']) as String,
+        issueVoucherId: json['issueVoucherId'] == null ? null : (json['issueVoucherId']) as String,
+        documentNumber: json['documentNumber'] == null ? null : (json['documentNumber']) as String,
+        team: json['team'] == null ? null : StoreLookupRefDto.fromJson((json['team']) as Map<String, dynamic>),
+        unitCost: json['unitCost'] == null ? null : ((json['unitCost']) as num).toDouble(),
+        totalCost: json['totalCost'] == null ? null : ((json['totalCost']) as num).toDouble(),
         employee: json['employee'] == null ? null : EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
         performedBy: UserRefDto.fromJson((json['performedBy']) as Map<String, dynamic>),
         note: json['note'] == null ? null : (json['note']) as String,
@@ -7913,6 +8055,12 @@ class StockMovementDto {
         if (stockIssueId != null) 'stockIssueId': stockIssueId!,
         if (custodyId != null) 'custodyId': custodyId!,
         if (reversesMovementId != null) 'reversesMovementId': reversesMovementId!,
+        if (purchaseId != null) 'purchaseId': purchaseId!,
+        if (issueVoucherId != null) 'issueVoucherId': issueVoucherId!,
+        if (documentNumber != null) 'documentNumber': documentNumber!,
+        if (team != null) 'team': team!.toJson(),
+        if (unitCost != null) 'unitCost': unitCost!,
+        if (totalCost != null) 'totalCost': totalCost!,
         if (employee != null) 'employee': employee!.toJson(),
         'performedBy': performedBy.toJson(),
         if (note != null) 'note': note!,
@@ -7936,6 +8084,1651 @@ class StockMovementPagedResultDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// inStock: الرصيد أكبر من الحد الأدنى أو يساويه. lowStock: الرصيد أكبر من صفر وأقل من الحد الأدنى. outOfStock: الرصيد صفر.
+enum StockStatus {
+  inStock('inStock'),
+  lowStock('lowStock'),
+  outOfStock('outOfStock'),
+
+  /// A value this client does not know yet (newer server).
+  $unknown('');
+
+  const StockStatus(this.value);
+  final String value;
+
+  static StockStatus fromJson(Object? json) {
+    for (final v in StockStatus.values) {
+      if (v.value == json) return v;
+    }
+    return StockStatus.$unknown;
+  }
+
+  String toJson() => value;
+}
+
+/// draft: مسودة تتعدل وتنحذف ولا تأثر على الرصيد. approved: اعتُمدت فتحدّث الرصيد ولا تتعدل. reversed: عُكست بحركات عكسية.
+enum StoreDocumentStatus {
+  draft('draft'),
+  approved('approved'),
+  reversed('reversed'),
+
+  /// A value this client does not know yet (newer server).
+  $unknown('');
+
+  const StoreDocumentStatus(this.value);
+  final String value;
+
+  static StoreDocumentStatus fromJson(Object? json) {
+    for (final v in StoreDocumentStatus.values) {
+      if (v.value == json) return v;
+    }
+    return StoreDocumentStatus.$unknown;
+  }
+
+  String toJson() => value;
+}
+
+/// purchases: المشتريات لفترة. currentStock: المواد الموجودة. lowStock: منخفضة المخزون. outOfStock: النافدة. issuesByTeam: المصروف لكل فريق. stockValue: قيمة المخزون. itemMovement: حركة مادة لفترة.
+enum StoreReportCode {
+  purchases('purchases'),
+  currentStock('currentStock'),
+  lowStock('lowStock'),
+  outOfStock('outOfStock'),
+  issuesByTeam('issuesByTeam'),
+  stockValue('stockValue'),
+  itemMovement('itemMovement'),
+
+  /// A value this client does not know yet (newer server).
+  $unknown('');
+
+  const StoreReportCode(this.value);
+  final String value;
+
+  static StoreReportCode fromJson(Object? json) {
+    for (final v in StoreReportCode.values) {
+      if (v.value == json) return v;
+    }
+    return StoreReportCode.$unknown;
+  }
+
+  String toJson() => value;
+}
+
+/// تصنيف للمواد يديره مسؤول المخزن.
+class ItemCategoryDto {
+  const ItemCategoryDto({
+    required this.id,
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+    required this.creationTime,
+  });
+
+  /// المعرف.
+  final String id;
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  /// غير المفعل لا يظهر عند إضافة مادة.
+  final bool isActive;
+  /// يُعاد إرساله في التحديث. عدم المطابقة يعيد 409.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory ItemCategoryDto.fromJson(Map<String, dynamic> json) => ItemCategoryDto(
+        id: (json['id']) as String,
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من ItemCategoryDto.
+class ItemCategoryPagedResultDto {
+  const ItemCategoryPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ItemCategoryDto> items;
+
+  factory ItemCategoryPagedResultDto.fromJson(Map<String, dynamic> json) => ItemCategoryPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ItemCategoryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// إضافة تصنيف. الاسمان فريدان.
+class ItemCategoryCreateInputDto {
+  const ItemCategoryCreateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+
+  factory ItemCategoryCreateInputDto.fromJson(Map<String, dynamic> json) => ItemCategoryCreateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+      };
+}
+
+/// تعديل تصنيف.
+class ItemCategoryUpdateInputDto {
+  const ItemCategoryUpdateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  /// التفعيل.
+  final bool isActive;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory ItemCategoryUpdateInputDto.fromJson(Map<String, dynamic> json) => ItemCategoryUpdateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// وحدة قياس للمواد يديره مسؤول المخزن.
+class ItemUnitDto {
+  const ItemUnitDto({
+    required this.id,
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+    required this.creationTime,
+  });
+
+  /// المعرف.
+  final String id;
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  /// غير المفعل لا يظهر عند إضافة مادة.
+  final bool isActive;
+  /// يُعاد إرساله في التحديث. عدم المطابقة يعيد 409.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory ItemUnitDto.fromJson(Map<String, dynamic> json) => ItemUnitDto(
+        id: (json['id']) as String,
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من ItemUnitDto.
+class ItemUnitPagedResultDto {
+  const ItemUnitPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ItemUnitDto> items;
+
+  factory ItemUnitPagedResultDto.fromJson(Map<String, dynamic> json) => ItemUnitPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ItemUnitDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// إضافة وحدة قياس. الاسمان فريدان.
+class ItemUnitCreateInputDto {
+  const ItemUnitCreateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+
+  factory ItemUnitCreateInputDto.fromJson(Map<String, dynamic> json) => ItemUnitCreateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+      };
+}
+
+/// تعديل وحدة قياس.
+class ItemUnitUpdateInputDto {
+  const ItemUnitUpdateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  /// التفعيل.
+  final bool isActive;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory ItemUnitUpdateInputDto.fromJson(Map<String, dynamic> json) => ItemUnitUpdateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// مرجع مختصر لتصنيف أو وحدة أو فريق، بالاسم حسب لغة الطلب.
+class StoreLookupRefDto {
+  const StoreLookupRefDto({
+    required this.id,
+    required this.name,
+  });
+
+  /// المعرف.
+  final String id;
+  /// الاسم حسب Accept-Language.
+  final String name;
+
+  factory StoreLookupRefDto.fromJson(Map<String, dynamic> json) => StoreLookupRefDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
+/// فريق أو جهة تستلم المواد. القسم اختياري، ويلزم لصرف مادة تُسترد بلا موظف لأنها تصير عهدة مشتركة على القسم.
+class StoreTeamDto {
+  const StoreTeamDto({
+    required this.id,
+    required this.name,
+    this.department,
+    required this.isActive,
+    required this.concurrencyStamp,
+    required this.creationTime,
+    this.lastModificationTime,
+  });
+
+  /// معرف الفريق.
+  final String id;
+  /// اسم الفريق.
+  final String name;
+  /// القسم المرتبط، إن وُجد.
+  final DepartmentRefDto? department;
+  /// غير المفعل لا يظهر عند الصرف.
+  final bool isActive;
+  /// يُعاد إرساله في التحديث. عدم المطابقة يعيد 409.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+  /// وقت آخر تعديل UTC.
+  final DateTime? lastModificationTime;
+
+  factory StoreTeamDto.fromJson(Map<String, dynamic> json) => StoreTeamDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+        department: json['department'] == null ? null : DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+        lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'department': department == null ? null : department!.toJson(),
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+        if (lastModificationTime != null) 'lastModificationTime': hrDateTimeToJson(lastModificationTime!),
+      };
+}
+
+/// صفحة من StoreTeamDto.
+class StoreTeamPagedResultDto {
+  const StoreTeamPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<StoreTeamDto> items;
+
+  factory StoreTeamPagedResultDto.fromJson(Map<String, dynamic> json) => StoreTeamPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StoreTeamDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// إضافة فريق. الاسم فريد.
+class StoreTeamCreateInputDto {
+  const StoreTeamCreateInputDto({
+    required this.name,
+    this.departmentId,
+  });
+
+  /// اسم الفريق.
+  final String name;
+  /// القسم المرتبط، اختياري.
+  final String? departmentId;
+
+  factory StoreTeamCreateInputDto.fromJson(Map<String, dynamic> json) => StoreTeamCreateInputDto(
+        name: (json['name']) as String,
+        departmentId: json['departmentId'] == null ? null : (json['departmentId']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        if (departmentId != null) 'departmentId': departmentId!,
+      };
+}
+
+/// تعديل فريق.
+class StoreTeamUpdateInputDto {
+  const StoreTeamUpdateInputDto({
+    required this.name,
+    this.departmentId,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  /// اسم الفريق.
+  final String name;
+  /// القسم المرتبط، اختياري.
+  final String? departmentId;
+  /// التفعيل.
+  final bool isActive;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory StoreTeamUpdateInputDto.fromJson(Map<String, dynamic> json) => StoreTeamUpdateInputDto(
+        name: (json['name']) as String,
+        departmentId: json['departmentId'] == null ? null : (json['departmentId']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        if (departmentId != null) 'departmentId': departmentId!,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// سطر مادة في وصل الشراء. التصنيف والوحدة لقطة من المادة وقت الحفظ.
+class StorePurchaseLineDto {
+  const StorePurchaseLineDto({
+    required this.id,
+    required this.item,
+    required this.sku,
+    this.category,
+    this.unit,
+    required this.quantity,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  /// معرف السطر.
+  final String id;
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// التصنيف.
+  final StoreLookupRefDto? category;
+  /// وحدة القياس.
+  final StoreLookupRefDto? unit;
+  /// الكمية المشتراة.
+  final double quantity;
+  /// سعر الوحدة.
+  final double unitPrice;
+  /// الكمية × سعر الوحدة، يحسبه الخادم.
+  final double lineTotal;
+
+  factory StorePurchaseLineDto.fromJson(Map<String, dynamic> json) => StorePurchaseLineDto(
+        id: (json['id']) as String,
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        category: json['category'] == null ? null : StoreLookupRefDto.fromJson((json['category']) as Map<String, dynamic>),
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        quantity: ((json['quantity']) as num).toDouble(),
+        unitPrice: ((json['unitPrice']) as num).toDouble(),
+        lineTotal: ((json['lineTotal']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'item': item.toJson(),
+        'sku': sku,
+        'category': category == null ? null : category!.toJson(),
+        'unit': unit == null ? null : unit!.toJson(),
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'lineTotal': lineTotal,
+      };
+}
+
+/// وصل شراء بمادة أو أكثر. المجاميع يحسبها الخادم.
+class StorePurchaseDto {
+  const StorePurchaseDto({
+    required this.id,
+    required this.receiptNumber,
+    required this.supplierName,
+    required this.purchaseDate,
+    required this.receivedDate,
+    this.note,
+    required this.status,
+    required this.currency,
+    required this.lines,
+    required this.totalQuantity,
+    required this.totalAmount,
+    this.attachment,
+    this.approvedAt,
+    this.approvedBy,
+    this.reversedAt,
+    this.reversedBy,
+    this.reverseReason,
+    required this.createdBy,
+    required this.concurrencyStamp,
+    required this.creationTime,
+    this.lastModificationTime,
+  });
+
+  /// معرف الوصل.
+  final String id;
+  /// رقم الوصل، فريد بالشركة.
+  final String receiptNumber;
+  /// المورد أو جهة الشراء.
+  final String supplierName;
+  /// تاريخ الشراء.
+  final DateTime purchaseDate;
+  /// تاريخ استلام المواد.
+  final DateTime receivedDate;
+  /// ملاحظات.
+  final String? note;
+  final StoreDocumentStatus status;
+  /// عملة الشركة الافتراضية (Finance:DefaultCurrency).
+  final String currency;
+  /// المواد.
+  final List<StorePurchaseLineDto> lines;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// المبلغ الإجمالي للوصل.
+  final double totalAmount;
+  /// صورة أو PDF الوصل، إن وُجد.
+  final AttachmentDto? attachment;
+  /// وقت الاعتماد UTC.
+  final DateTime? approvedAt;
+  /// من اعتمد.
+  final UserRefDto? approvedBy;
+  /// وقت العكس UTC.
+  final DateTime? reversedAt;
+  /// من عكس.
+  final UserRefDto? reversedBy;
+  /// سبب العكس.
+  final String? reverseReason;
+  final UserRefDto createdBy;
+  /// يُعاد إرساله في تعديل الوصل. عدم المطابقة يعيد 409.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+  /// وقت آخر تعديل UTC.
+  final DateTime? lastModificationTime;
+
+  factory StorePurchaseDto.fromJson(Map<String, dynamic> json) => StorePurchaseDto(
+        id: (json['id']) as String,
+        receiptNumber: (json['receiptNumber']) as String,
+        supplierName: (json['supplierName']) as String,
+        purchaseDate: hrDateFromJson((json['purchaseDate']) as String),
+        receivedDate: hrDateFromJson((json['receivedDate']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        status: StoreDocumentStatus.fromJson(json['status']),
+        currency: (json['currency']) as String,
+        lines: ((json['lines']) as List).map((e) => StorePurchaseLineDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalAmount: ((json['totalAmount']) as num).toDouble(),
+        attachment: json['attachment'] == null ? null : AttachmentDto.fromJson((json['attachment']) as Map<String, dynamic>),
+        approvedAt: json['approvedAt'] == null ? null : DateTime.parse((json['approvedAt']) as String),
+        approvedBy: json['approvedBy'] == null ? null : UserRefDto.fromJson((json['approvedBy']) as Map<String, dynamic>),
+        reversedAt: json['reversedAt'] == null ? null : DateTime.parse((json['reversedAt']) as String),
+        reversedBy: json['reversedBy'] == null ? null : UserRefDto.fromJson((json['reversedBy']) as Map<String, dynamic>),
+        reverseReason: json['reverseReason'] == null ? null : (json['reverseReason']) as String,
+        createdBy: UserRefDto.fromJson((json['createdBy']) as Map<String, dynamic>),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+        lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'receiptNumber': receiptNumber,
+        'supplierName': supplierName,
+        'purchaseDate': hrDateToJson(purchaseDate),
+        'receivedDate': hrDateToJson(receivedDate),
+        'note': note == null ? null : note!,
+        'status': status.toJson(),
+        'currency': currency,
+        'lines': lines.map((e) => e.toJson()).toList(),
+        'totalQuantity': totalQuantity,
+        'totalAmount': totalAmount,
+        'attachment': attachment == null ? null : attachment!.toJson(),
+        'approvedAt': approvedAt == null ? null : hrDateTimeToJson(approvedAt!),
+        'approvedBy': approvedBy == null ? null : approvedBy!.toJson(),
+        'reversedAt': reversedAt == null ? null : hrDateTimeToJson(reversedAt!),
+        'reversedBy': reversedBy == null ? null : reversedBy!.toJson(),
+        'reverseReason': reverseReason == null ? null : reverseReason!,
+        'createdBy': createdBy.toJson(),
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+        if (lastModificationTime != null) 'lastModificationTime': hrDateTimeToJson(lastModificationTime!),
+      };
+}
+
+/// سطر في سجل المشتريات.
+class StorePurchaseSummaryDto {
+  const StorePurchaseSummaryDto({
+    required this.id,
+    required this.receiptNumber,
+    required this.supplierName,
+    required this.purchaseDate,
+    required this.receivedDate,
+    required this.status,
+    required this.linesCount,
+    required this.totalQuantity,
+    required this.totalAmount,
+    required this.currency,
+    required this.hasAttachment,
+    required this.createdBy,
+    required this.creationTime,
+  });
+
+  /// معرف الوصل.
+  final String id;
+  /// رقم الوصل.
+  final String receiptNumber;
+  /// المورد.
+  final String supplierName;
+  /// تاريخ الشراء.
+  final DateTime purchaseDate;
+  /// تاريخ الاستلام.
+  final DateTime receivedDate;
+  final StoreDocumentStatus status;
+  /// عدد المواد.
+  final int linesCount;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// المبلغ الإجمالي.
+  final double totalAmount;
+  /// العملة.
+  final String currency;
+  /// يوجد مرفق.
+  final bool hasAttachment;
+  final UserRefDto createdBy;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory StorePurchaseSummaryDto.fromJson(Map<String, dynamic> json) => StorePurchaseSummaryDto(
+        id: (json['id']) as String,
+        receiptNumber: (json['receiptNumber']) as String,
+        supplierName: (json['supplierName']) as String,
+        purchaseDate: hrDateFromJson((json['purchaseDate']) as String),
+        receivedDate: hrDateFromJson((json['receivedDate']) as String),
+        status: StoreDocumentStatus.fromJson(json['status']),
+        linesCount: ((json['linesCount']) as num).toInt(),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalAmount: ((json['totalAmount']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        hasAttachment: (json['hasAttachment']) as bool,
+        createdBy: UserRefDto.fromJson((json['createdBy']) as Map<String, dynamic>),
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'receiptNumber': receiptNumber,
+        'supplierName': supplierName,
+        'purchaseDate': hrDateToJson(purchaseDate),
+        'receivedDate': hrDateToJson(receivedDate),
+        'status': status.toJson(),
+        'linesCount': linesCount,
+        'totalQuantity': totalQuantity,
+        'totalAmount': totalAmount,
+        'currency': currency,
+        'hasAttachment': hasAttachment,
+        'createdBy': createdBy.toJson(),
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من StorePurchaseSummaryDto.
+class StorePurchaseSummaryPagedResultDto {
+  const StorePurchaseSummaryPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<StorePurchaseSummaryDto> items;
+
+  factory StorePurchaseSummaryPagedResultDto.fromJson(Map<String, dynamic> json) => StorePurchaseSummaryPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StorePurchaseSummaryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// مادة في الوصل. التصنيف والوحدة من بطاقة المادة.
+class StorePurchaseLineInputDto {
+  const StorePurchaseLineInputDto({
+    required this.itemId,
+    required this.quantity,
+    required this.unitPrice,
+  });
+
+  /// المادة، مفعلة.
+  final String itemId;
+  /// الكمية، أكبر من صفر.
+  final double quantity;
+  /// سعر الوحدة، صفر أو أكثر.
+  final double unitPrice;
+
+  factory StorePurchaseLineInputDto.fromJson(Map<String, dynamic> json) => StorePurchaseLineInputDto(
+        itemId: (json['itemId']) as String,
+        quantity: ((json['quantity']) as num).toDouble(),
+        unitPrice: ((json['unitPrice']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'itemId': itemId,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+      };
+}
+
+/// وصل شراء جديد كمسودة. المرفق يُرفع بعدها بـ StorePurchase_UploadAttachment.
+class StorePurchaseCreateInputDto {
+  const StorePurchaseCreateInputDto({
+    required this.receiptNumber,
+    required this.supplierName,
+    required this.purchaseDate,
+    required this.receivedDate,
+    this.note,
+    required this.lines,
+  });
+
+  /// رقم الوصل، فريد بالشركة.
+  final String receiptNumber;
+  /// المورد أو جهة الشراء.
+  final String supplierName;
+  /// تاريخ الشراء، مو بالمستقبل.
+  final DateTime purchaseDate;
+  /// تاريخ الاستلام، مو قبل تاريخ الشراء ولا بالمستقبل.
+  final DateTime receivedDate;
+  /// ملاحظات.
+  final String? note;
+  /// مادة أو أكثر، بلا تكرار لنفس المادة.
+  final List<StorePurchaseLineInputDto> lines;
+
+  factory StorePurchaseCreateInputDto.fromJson(Map<String, dynamic> json) => StorePurchaseCreateInputDto(
+        receiptNumber: (json['receiptNumber']) as String,
+        supplierName: (json['supplierName']) as String,
+        purchaseDate: hrDateFromJson((json['purchaseDate']) as String),
+        receivedDate: hrDateFromJson((json['receivedDate']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        lines: ((json['lines']) as List).map((e) => StorePurchaseLineInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'receiptNumber': receiptNumber,
+        'supplierName': supplierName,
+        'purchaseDate': hrDateToJson(purchaseDate),
+        'receivedDate': hrDateToJson(receivedDate),
+        if (note != null) 'note': note!,
+        'lines': lines.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// تعديل مسودة. يستبدل كل المواد.
+class StorePurchaseUpdateInputDto {
+  const StorePurchaseUpdateInputDto({
+    required this.receiptNumber,
+    required this.supplierName,
+    required this.purchaseDate,
+    required this.receivedDate,
+    this.note,
+    required this.lines,
+    required this.concurrencyStamp,
+  });
+
+  /// رقم الوصل، فريد بالشركة.
+  final String receiptNumber;
+  /// المورد أو جهة الشراء.
+  final String supplierName;
+  /// تاريخ الشراء، مو بالمستقبل.
+  final DateTime purchaseDate;
+  /// تاريخ الاستلام، مو قبل تاريخ الشراء ولا بالمستقبل.
+  final DateTime receivedDate;
+  /// ملاحظات.
+  final String? note;
+  /// مادة أو أكثر، بلا تكرار لنفس المادة.
+  final List<StorePurchaseLineInputDto> lines;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory StorePurchaseUpdateInputDto.fromJson(Map<String, dynamic> json) => StorePurchaseUpdateInputDto(
+        receiptNumber: (json['receiptNumber']) as String,
+        supplierName: (json['supplierName']) as String,
+        purchaseDate: hrDateFromJson((json['purchaseDate']) as String),
+        receivedDate: hrDateFromJson((json['receivedDate']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        lines: ((json['lines']) as List).map((e) => StorePurchaseLineInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'receiptNumber': receiptNumber,
+        'supplierName': supplierName,
+        'purchaseDate': hrDateToJson(purchaseDate),
+        'receivedDate': hrDateToJson(receivedDate),
+        if (note != null) 'note': note!,
+        'lines': lines.map((e) => e.toJson()).toList(),
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// ملف واحد يحل محل المرفق السابق إن وُجد.
+class StoreAttachmentUploadInputDto {
+  const StoreAttachmentUploadInputDto({
+    required this.file,
+  });
+
+  /// صورة أو PDF.
+  final MultipartFile file;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+      };
+
+  /// multipart/form-data body: null parts omitted, invariant numbers, ISO dates,
+  /// one part per file for arrays (x-server-requirements.multipart).
+  FormData toFormData() {
+    final form = FormData();
+    form.files.add(MapEntry('file', file));
+    return form;
+  }
+}
+
+/// سطر مادة في سند الصرف. unitCost متوسط تكلفة المادة وقت الاعتماد.
+class StoreIssueVoucherLineDto {
+  const StoreIssueVoucherLineDto({
+    required this.id,
+    required this.item,
+    required this.sku,
+    this.unit,
+    required this.quantity,
+    this.unitCost,
+    this.lineValue,
+    this.custodyId,
+  });
+
+  /// معرف السطر.
+  final String id;
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// وحدة القياس.
+  final StoreLookupRefDto? unit;
+  /// الكمية المصروفة.
+  final double quantity;
+  /// متوسط التكلفة وقت الاعتماد، null للمسودة.
+  final double? unitCost;
+  /// الكمية × unitCost، null للمسودة.
+  final double? lineValue;
+  /// العهدة الناتجة عن مادة تُسترد بعد الاعتماد.
+  final String? custodyId;
+
+  factory StoreIssueVoucherLineDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherLineDto(
+        id: (json['id']) as String,
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        quantity: ((json['quantity']) as num).toDouble(),
+        unitCost: json['unitCost'] == null ? null : ((json['unitCost']) as num).toDouble(),
+        lineValue: json['lineValue'] == null ? null : ((json['lineValue']) as num).toDouble(),
+        custodyId: json['custodyId'] == null ? null : (json['custodyId']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'item': item.toJson(),
+        'sku': sku,
+        'unit': unit == null ? null : unit!.toJson(),
+        'quantity': quantity,
+        'unitCost': unitCost == null ? null : unitCost!,
+        'lineValue': lineValue == null ? null : lineValue!,
+        'custodyId': custodyId == null ? null : custodyId!,
+      };
+}
+
+/// سند صرف مباشر لفريق، ويجوز تحديد الموظف المستلم. مسار ثاني بجانب StockIssue الناتج عن الطلبات.
+class StoreIssueVoucherDto {
+  const StoreIssueVoucherDto({
+    required this.id,
+    required this.voucherNumber,
+    required this.issueDate,
+    required this.team,
+    this.employee,
+    this.note,
+    required this.status,
+    required this.lines,
+    required this.totalQuantity,
+    this.totalValue,
+    required this.currency,
+    this.attachment,
+    this.approvedAt,
+    this.approvedBy,
+    this.reversedAt,
+    this.reversedBy,
+    this.reverseReason,
+    required this.createdBy,
+    required this.concurrencyStamp,
+    required this.creationTime,
+    this.lastModificationTime,
+  });
+
+  /// معرف السند.
+  final String id;
+  /// رقم سند الصرف، فريد بالشركة.
+  final String voucherNumber;
+  /// تاريخ الصرف.
+  final DateTime issueDate;
+  final StoreLookupRefDto team;
+  /// الموظف المستلم، إن وُجد.
+  final EmployeeRefDto? employee;
+  /// ملاحظات.
+  final String? note;
+  final StoreDocumentStatus status;
+  /// المواد.
+  final List<StoreIssueVoucherLineDto> lines;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// إجمالي قيمة المصروف، null للمسودة.
+  final double? totalValue;
+  /// العملة.
+  final String currency;
+  /// مستند الصرف، إن وُجد.
+  final AttachmentDto? attachment;
+  /// وقت الاعتماد UTC.
+  final DateTime? approvedAt;
+  /// من اعتمد.
+  final UserRefDto? approvedBy;
+  /// وقت العكس UTC.
+  final DateTime? reversedAt;
+  /// من عكس.
+  final UserRefDto? reversedBy;
+  /// سبب العكس.
+  final String? reverseReason;
+  final UserRefDto createdBy;
+  /// يُعاد إرساله في تعديل السند. عدم المطابقة يعيد 409.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+  /// وقت آخر تعديل UTC.
+  final DateTime? lastModificationTime;
+
+  factory StoreIssueVoucherDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherDto(
+        id: (json['id']) as String,
+        voucherNumber: (json['voucherNumber']) as String,
+        issueDate: hrDateFromJson((json['issueDate']) as String),
+        team: StoreLookupRefDto.fromJson((json['team']) as Map<String, dynamic>),
+        employee: json['employee'] == null ? null : EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        note: json['note'] == null ? null : (json['note']) as String,
+        status: StoreDocumentStatus.fromJson(json['status']),
+        lines: ((json['lines']) as List).map((e) => StoreIssueVoucherLineDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalValue: json['totalValue'] == null ? null : ((json['totalValue']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        attachment: json['attachment'] == null ? null : AttachmentDto.fromJson((json['attachment']) as Map<String, dynamic>),
+        approvedAt: json['approvedAt'] == null ? null : DateTime.parse((json['approvedAt']) as String),
+        approvedBy: json['approvedBy'] == null ? null : UserRefDto.fromJson((json['approvedBy']) as Map<String, dynamic>),
+        reversedAt: json['reversedAt'] == null ? null : DateTime.parse((json['reversedAt']) as String),
+        reversedBy: json['reversedBy'] == null ? null : UserRefDto.fromJson((json['reversedBy']) as Map<String, dynamic>),
+        reverseReason: json['reverseReason'] == null ? null : (json['reverseReason']) as String,
+        createdBy: UserRefDto.fromJson((json['createdBy']) as Map<String, dynamic>),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+        lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'voucherNumber': voucherNumber,
+        'issueDate': hrDateToJson(issueDate),
+        'team': team.toJson(),
+        'employee': employee == null ? null : employee!.toJson(),
+        'note': note == null ? null : note!,
+        'status': status.toJson(),
+        'lines': lines.map((e) => e.toJson()).toList(),
+        'totalQuantity': totalQuantity,
+        'totalValue': totalValue == null ? null : totalValue!,
+        'currency': currency,
+        'attachment': attachment == null ? null : attachment!.toJson(),
+        'approvedAt': approvedAt == null ? null : hrDateTimeToJson(approvedAt!),
+        'approvedBy': approvedBy == null ? null : approvedBy!.toJson(),
+        'reversedAt': reversedAt == null ? null : hrDateTimeToJson(reversedAt!),
+        'reversedBy': reversedBy == null ? null : reversedBy!.toJson(),
+        'reverseReason': reverseReason == null ? null : reverseReason!,
+        'createdBy': createdBy.toJson(),
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+        if (lastModificationTime != null) 'lastModificationTime': hrDateTimeToJson(lastModificationTime!),
+      };
+}
+
+/// سطر في سجل سندات الصرف.
+class StoreIssueVoucherSummaryDto {
+  const StoreIssueVoucherSummaryDto({
+    required this.id,
+    required this.voucherNumber,
+    required this.issueDate,
+    required this.team,
+    this.employee,
+    required this.status,
+    required this.linesCount,
+    required this.totalQuantity,
+    this.totalValue,
+    required this.currency,
+    required this.hasAttachment,
+    required this.createdBy,
+    required this.creationTime,
+  });
+
+  /// معرف السند.
+  final String id;
+  /// رقم السند.
+  final String voucherNumber;
+  /// تاريخ الصرف.
+  final DateTime issueDate;
+  final StoreLookupRefDto team;
+  /// الموظف المستلم.
+  final EmployeeRefDto? employee;
+  final StoreDocumentStatus status;
+  /// عدد المواد.
+  final int linesCount;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// إجمالي القيمة، null للمسودة.
+  final double? totalValue;
+  /// العملة.
+  final String currency;
+  /// يوجد مرفق.
+  final bool hasAttachment;
+  final UserRefDto createdBy;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory StoreIssueVoucherSummaryDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherSummaryDto(
+        id: (json['id']) as String,
+        voucherNumber: (json['voucherNumber']) as String,
+        issueDate: hrDateFromJson((json['issueDate']) as String),
+        team: StoreLookupRefDto.fromJson((json['team']) as Map<String, dynamic>),
+        employee: json['employee'] == null ? null : EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        status: StoreDocumentStatus.fromJson(json['status']),
+        linesCount: ((json['linesCount']) as num).toInt(),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalValue: json['totalValue'] == null ? null : ((json['totalValue']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        hasAttachment: (json['hasAttachment']) as bool,
+        createdBy: UserRefDto.fromJson((json['createdBy']) as Map<String, dynamic>),
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'voucherNumber': voucherNumber,
+        'issueDate': hrDateToJson(issueDate),
+        'team': team.toJson(),
+        'employee': employee == null ? null : employee!.toJson(),
+        'status': status.toJson(),
+        'linesCount': linesCount,
+        'totalQuantity': totalQuantity,
+        'totalValue': totalValue == null ? null : totalValue!,
+        'currency': currency,
+        'hasAttachment': hasAttachment,
+        'createdBy': createdBy.toJson(),
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من StoreIssueVoucherSummaryDto.
+class StoreIssueVoucherSummaryPagedResultDto {
+  const StoreIssueVoucherSummaryPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<StoreIssueVoucherSummaryDto> items;
+
+  factory StoreIssueVoucherSummaryPagedResultDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherSummaryPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StoreIssueVoucherSummaryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// مادة في السند.
+class StoreIssueVoucherLineInputDto {
+  const StoreIssueVoucherLineInputDto({
+    required this.itemId,
+    required this.quantity,
+  });
+
+  /// المادة، مفعلة.
+  final String itemId;
+  /// الكمية، أكبر من صفر.
+  final double quantity;
+
+  factory StoreIssueVoucherLineInputDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherLineInputDto(
+        itemId: (json['itemId']) as String,
+        quantity: ((json['quantity']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'itemId': itemId,
+        'quantity': quantity,
+      };
+}
+
+/// سند صرف جديد كمسودة. ما يخصم الرصيد قبل الاعتماد.
+class StoreIssueVoucherCreateInputDto {
+  const StoreIssueVoucherCreateInputDto({
+    required this.voucherNumber,
+    required this.issueDate,
+    required this.teamId,
+    this.employeeId,
+    this.note,
+    required this.lines,
+  });
+
+  /// رقم السند، فريد بالشركة.
+  final String voucherNumber;
+  /// تاريخ الصرف، مو بالمستقبل.
+  final DateTime issueDate;
+  /// الفريق المستلم، مفعل.
+  final String teamId;
+  /// الموظف المستلم، اختياري، فعّال.
+  final String? employeeId;
+  /// ملاحظات.
+  final String? note;
+  /// مادة أو أكثر، بلا تكرار لنفس المادة.
+  final List<StoreIssueVoucherLineInputDto> lines;
+
+  factory StoreIssueVoucherCreateInputDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherCreateInputDto(
+        voucherNumber: (json['voucherNumber']) as String,
+        issueDate: hrDateFromJson((json['issueDate']) as String),
+        teamId: (json['teamId']) as String,
+        employeeId: json['employeeId'] == null ? null : (json['employeeId']) as String,
+        note: json['note'] == null ? null : (json['note']) as String,
+        lines: ((json['lines']) as List).map((e) => StoreIssueVoucherLineInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'voucherNumber': voucherNumber,
+        'issueDate': hrDateToJson(issueDate),
+        'teamId': teamId,
+        if (employeeId != null) 'employeeId': employeeId!,
+        if (note != null) 'note': note!,
+        'lines': lines.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// تعديل مسودة. يستبدل كل المواد.
+class StoreIssueVoucherUpdateInputDto {
+  const StoreIssueVoucherUpdateInputDto({
+    required this.voucherNumber,
+    required this.issueDate,
+    required this.teamId,
+    this.employeeId,
+    this.note,
+    required this.lines,
+    required this.concurrencyStamp,
+  });
+
+  /// رقم السند، فريد بالشركة.
+  final String voucherNumber;
+  /// تاريخ الصرف، مو بالمستقبل.
+  final DateTime issueDate;
+  /// الفريق المستلم، مفعل.
+  final String teamId;
+  /// الموظف المستلم، اختياري، فعّال.
+  final String? employeeId;
+  /// ملاحظات.
+  final String? note;
+  /// مادة أو أكثر، بلا تكرار لنفس المادة.
+  final List<StoreIssueVoucherLineInputDto> lines;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory StoreIssueVoucherUpdateInputDto.fromJson(Map<String, dynamic> json) => StoreIssueVoucherUpdateInputDto(
+        voucherNumber: (json['voucherNumber']) as String,
+        issueDate: hrDateFromJson((json['issueDate']) as String),
+        teamId: (json['teamId']) as String,
+        employeeId: json['employeeId'] == null ? null : (json['employeeId']) as String,
+        note: json['note'] == null ? null : (json['note']) as String,
+        lines: ((json['lines']) as List).map((e) => StoreIssueVoucherLineInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'voucherNumber': voucherNumber,
+        'issueDate': hrDateToJson(issueDate),
+        'teamId': teamId,
+        if (employeeId != null) 'employeeId': employeeId!,
+        if (note != null) 'note': note!,
+        'lines': lines.map((e) => e.toJson()).toList(),
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// بطاقات لوحة المخزن. العمليات المعتمدة فقط.
+class StoreDashboardDto {
+  const StoreDashboardDto({
+    required this.itemsCount,
+    required this.purchasesCount,
+    required this.issueVouchersCount,
+    required this.lowStockCount,
+    required this.outOfStockCount,
+    required this.totalStockValue,
+    required this.currency,
+  });
+
+  /// المواد المفعلة.
+  final int itemsCount;
+  /// وصولات الشراء المعتمدة.
+  final int purchasesCount;
+  /// سندات الصرف المعتمدة.
+  final int issueVouchersCount;
+  /// المواد المفعلة بحالة lowStock.
+  final int lowStockCount;
+  /// المواد المفعلة بحالة outOfStock.
+  final int outOfStockCount;
+  /// مجموع الرصيد × متوسط التكلفة.
+  final double totalStockValue;
+  /// العملة.
+  final String currency;
+
+  factory StoreDashboardDto.fromJson(Map<String, dynamic> json) => StoreDashboardDto(
+        itemsCount: ((json['itemsCount']) as num).toInt(),
+        purchasesCount: ((json['purchasesCount']) as num).toInt(),
+        issueVouchersCount: ((json['issueVouchersCount']) as num).toInt(),
+        lowStockCount: ((json['lowStockCount']) as num).toInt(),
+        outOfStockCount: ((json['outOfStockCount']) as num).toInt(),
+        totalStockValue: ((json['totalStockValue']) as num).toDouble(),
+        currency: (json['currency']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'itemsCount': itemsCount,
+        'purchasesCount': purchasesCount,
+        'issueVouchersCount': issueVouchersCount,
+        'lowStockCount': lowStockCount,
+        'outOfStockCount': outOfStockCount,
+        'totalStockValue': totalStockValue,
+        'currency': currency,
+      };
+}
+
+/// سطر مادة من وصل معتمد.
+class StorePurchaseReportRowDto {
+  const StorePurchaseReportRowDto({
+    required this.purchaseId,
+    required this.receiptNumber,
+    required this.supplierName,
+    required this.purchaseDate,
+    required this.item,
+    required this.sku,
+    this.unit,
+    required this.quantity,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  /// الوصل.
+  final String purchaseId;
+  /// رقم الوصل.
+  final String receiptNumber;
+  /// المورد.
+  final String supplierName;
+  /// تاريخ الشراء.
+  final DateTime purchaseDate;
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// الوحدة.
+  final StoreLookupRefDto? unit;
+  /// الكمية.
+  final double quantity;
+  /// سعر الوحدة.
+  final double unitPrice;
+  /// المجموع.
+  final double lineTotal;
+
+  factory StorePurchaseReportRowDto.fromJson(Map<String, dynamic> json) => StorePurchaseReportRowDto(
+        purchaseId: (json['purchaseId']) as String,
+        receiptNumber: (json['receiptNumber']) as String,
+        supplierName: (json['supplierName']) as String,
+        purchaseDate: hrDateFromJson((json['purchaseDate']) as String),
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        quantity: ((json['quantity']) as num).toDouble(),
+        unitPrice: ((json['unitPrice']) as num).toDouble(),
+        lineTotal: ((json['lineTotal']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'purchaseId': purchaseId,
+        'receiptNumber': receiptNumber,
+        'supplierName': supplierName,
+        'purchaseDate': hrDateToJson(purchaseDate),
+        'item': item.toJson(),
+        'sku': sku,
+        'unit': unit == null ? null : unit!.toJson(),
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'lineTotal': lineTotal,
+      };
+}
+
+/// تقرير المشتريات المعتمدة غير المعكوسة لفترة حسب تاريخ الشراء. المجاميع للفترة كاملة، مو للصفحة.
+class StorePurchaseReportDto {
+  const StorePurchaseReportDto({
+    required this.from,
+    required this.to,
+    required this.purchasesCount,
+    required this.totalQuantity,
+    required this.totalAmount,
+    required this.currency,
+    required this.totalCount,
+    required this.items,
+  });
+
+  /// من.
+  final DateTime from;
+  /// إلى.
+  final DateTime to;
+  /// عدد الوصولات.
+  final int purchasesCount;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// إجمالي القيمة.
+  final double totalAmount;
+  /// العملة.
+  final String currency;
+  final int totalCount;
+  final List<StorePurchaseReportRowDto> items;
+
+  factory StorePurchaseReportDto.fromJson(Map<String, dynamic> json) => StorePurchaseReportDto(
+        from: hrDateFromJson((json['from']) as String),
+        to: hrDateFromJson((json['to']) as String),
+        purchasesCount: ((json['purchasesCount']) as num).toInt(),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalAmount: ((json['totalAmount']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StorePurchaseReportRowDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'from': hrDateToJson(from),
+        'to': hrDateToJson(to),
+        'purchasesCount': purchasesCount,
+        'totalQuantity': totalQuantity,
+        'totalAmount': totalAmount,
+        'currency': currency,
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// مادة ورصيدها الحالي.
+class StoreStockReportRowDto {
+  const StoreStockReportRowDto({
+    required this.item,
+    required this.sku,
+    this.category,
+    this.unit,
+    required this.quantityOnHand,
+    required this.minQuantity,
+    required this.averageUnitCost,
+    required this.stockValue,
+    required this.stockStatus,
+  });
+
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// التصنيف.
+  final StoreLookupRefDto? category;
+  /// الوحدة.
+  final StoreLookupRefDto? unit;
+  /// الرصيد.
+  final double quantityOnHand;
+  /// الحد الأدنى.
+  final double minQuantity;
+  /// متوسط التكلفة.
+  final double averageUnitCost;
+  /// الرصيد × متوسط التكلفة.
+  final double stockValue;
+  final StockStatus stockStatus;
+
+  factory StoreStockReportRowDto.fromJson(Map<String, dynamic> json) => StoreStockReportRowDto(
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        category: json['category'] == null ? null : StoreLookupRefDto.fromJson((json['category']) as Map<String, dynamic>),
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        quantityOnHand: ((json['quantityOnHand']) as num).toDouble(),
+        minQuantity: ((json['minQuantity']) as num).toDouble(),
+        averageUnitCost: ((json['averageUnitCost']) as num).toDouble(),
+        stockValue: ((json['stockValue']) as num).toDouble(),
+        stockStatus: StockStatus.fromJson(json['stockStatus']),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'item': item.toJson(),
+        'sku': sku,
+        'category': category == null ? null : category!.toJson(),
+        'unit': unit == null ? null : unit!.toJson(),
+        'quantityOnHand': quantityOnHand,
+        'minQuantity': minQuantity,
+        'averageUnitCost': averageUnitCost,
+        'stockValue': stockValue,
+        'stockStatus': stockStatus.toJson(),
+      };
+}
+
+/// المواد المفعلة الآن. يغطي المواد الموجودة والمنخفضة والنافدة وقيمة المخزون بمرشح stockStatus.
+class StoreStockReportDto {
+  const StoreStockReportDto({
+    required this.itemsCount,
+    required this.totalStockValue,
+    required this.currency,
+    required this.totalCount,
+    required this.items,
+  });
+
+  /// عدد المواد المطابقة.
+  final int itemsCount;
+  /// قيمة المواد المطابقة.
+  final double totalStockValue;
+  /// العملة.
+  final String currency;
+  final int totalCount;
+  final List<StoreStockReportRowDto> items;
+
+  factory StoreStockReportDto.fromJson(Map<String, dynamic> json) => StoreStockReportDto(
+        itemsCount: ((json['itemsCount']) as num).toInt(),
+        totalStockValue: ((json['totalStockValue']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StoreStockReportRowDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'itemsCount': itemsCount,
+        'totalStockValue': totalStockValue,
+        'currency': currency,
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// ما استلمه فريق من مادة خلال الفترة، صافي بعد العكس.
+class StoreTeamIssueReportRowDto {
+  const StoreTeamIssueReportRowDto({
+    required this.team,
+    required this.item,
+    required this.sku,
+    this.unit,
+    required this.quantity,
+    required this.value,
+  });
+
+  final StoreLookupRefDto team;
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// الوحدة.
+  final StoreLookupRefDto? unit;
+  /// الكمية الصافية.
+  final double quantity;
+  /// القيمة بتكلفة الاعتماد.
+  final double value;
+
+  factory StoreTeamIssueReportRowDto.fromJson(Map<String, dynamic> json) => StoreTeamIssueReportRowDto(
+        team: StoreLookupRefDto.fromJson((json['team']) as Map<String, dynamic>),
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        quantity: ((json['quantity']) as num).toDouble(),
+        value: ((json['value']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'team': team.toJson(),
+        'item': item.toJson(),
+        'sku': sku,
+        'unit': unit == null ? null : unit!.toJson(),
+        'quantity': quantity,
+        'value': value,
+      };
+}
+
+/// المواد المصروفة لكل فريق بسندات الصرف المعتمدة خلال الفترة حسب تاريخ الصرف.
+class StoreTeamIssueReportDto {
+  const StoreTeamIssueReportDto({
+    required this.from,
+    required this.to,
+    required this.totalQuantity,
+    required this.totalValue,
+    required this.currency,
+    required this.totalCount,
+    required this.items,
+  });
+
+  /// من.
+  final DateTime from;
+  /// إلى.
+  final DateTime to;
+  /// إجمالي الكميات.
+  final double totalQuantity;
+  /// إجمالي القيمة.
+  final double totalValue;
+  /// العملة.
+  final String currency;
+  final int totalCount;
+  final List<StoreTeamIssueReportRowDto> items;
+
+  factory StoreTeamIssueReportDto.fromJson(Map<String, dynamic> json) => StoreTeamIssueReportDto(
+        from: hrDateFromJson((json['from']) as String),
+        to: hrDateFromJson((json['to']) as String),
+        totalQuantity: ((json['totalQuantity']) as num).toDouble(),
+        totalValue: ((json['totalValue']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StoreTeamIssueReportRowDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'from': hrDateToJson(from),
+        'to': hrDateToJson(to),
+        'totalQuantity': totalQuantity,
+        'totalValue': totalValue,
+        'currency': currency,
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// حركة مادة خلال فترة مع رصيد البداية والنهاية.
+class StoreItemMovementReportDto {
+  const StoreItemMovementReportDto({
+    required this.item,
+    required this.sku,
+    this.unit,
+    required this.from,
+    required this.to,
+    required this.openingBalance,
+    required this.totalIn,
+    required this.totalOut,
+    required this.closingBalance,
+    required this.totalCount,
+    required this.items,
+  });
+
+  final ItemRefDto item;
+  /// رمز المادة.
+  final String sku;
+  /// الوحدة.
+  final StoreLookupRefDto? unit;
+  /// من.
+  final DateTime from;
+  /// إلى.
+  final DateTime to;
+  /// الرصيد قبل أول يوم.
+  final double openingBalance;
+  /// مجموع الداخل.
+  final double totalIn;
+  /// مجموع الخارج.
+  final double totalOut;
+  /// الرصيد بنهاية آخر يوم.
+  final double closingBalance;
+  final int totalCount;
+  final List<StockMovementDto> items;
+
+  factory StoreItemMovementReportDto.fromJson(Map<String, dynamic> json) => StoreItemMovementReportDto(
+        item: ItemRefDto.fromJson((json['item']) as Map<String, dynamic>),
+        sku: (json['sku']) as String,
+        unit: json['unit'] == null ? null : StoreLookupRefDto.fromJson((json['unit']) as Map<String, dynamic>),
+        from: hrDateFromJson((json['from']) as String),
+        to: hrDateFromJson((json['to']) as String),
+        openingBalance: ((json['openingBalance']) as num).toDouble(),
+        totalIn: ((json['totalIn']) as num).toDouble(),
+        totalOut: ((json['totalOut']) as num).toDouble(),
+        closingBalance: ((json['closingBalance']) as num).toDouble(),
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => StockMovementDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'item': item.toJson(),
+        'sku': sku,
+        'unit': unit == null ? null : unit!.toJson(),
+        'from': hrDateToJson(from),
+        'to': hrDateToJson(to),
+        'openingBalance': openingBalance,
+        'totalIn': totalIn,
+        'totalOut': totalOut,
+        'closingBalance': closingBalance,
         'totalCount': totalCount,
         'items': items.map((e) => e.toJson()).toList(),
       };
@@ -10353,6 +12146,7 @@ class EvaluationHrDto {
     this.acknowledgedAt,
     required this.objectionStatus,
     required this.responses,
+    required this.availableGrades,
     required this.concurrencyStamp,
   });
 
@@ -10370,6 +12164,8 @@ class EvaluationHrDto {
   final DateTime? acknowledgedAt;
   final EvaluationObjectionStatus objectionStatus;
   final List<EvaluationResponseDto> responses;
+  /// السلم اللفظي لدورة التقييم بترتيب العرض، لاختيار الدرجات عند قبول الاعتراض.
+  final List<EvaluationGradeOptionDto> availableGrades;
   final String concurrencyStamp;
 
   factory EvaluationHrDto.fromJson(Map<String, dynamic> json) => EvaluationHrDto(
@@ -10387,6 +12183,7 @@ class EvaluationHrDto {
         acknowledgedAt: json['acknowledgedAt'] == null ? null : DateTime.parse((json['acknowledgedAt']) as String),
         objectionStatus: EvaluationObjectionStatus.fromJson(json['objectionStatus']),
         responses: ((json['responses']) as List).map((e) => EvaluationResponseDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        availableGrades: ((json['availableGrades']) as List).map((e) => EvaluationGradeOptionDto.fromJson((e) as Map<String, dynamic>)).toList(),
         concurrencyStamp: (json['concurrencyStamp']) as String,
       );
 
@@ -10405,6 +12202,7 @@ class EvaluationHrDto {
         'acknowledgedAt': acknowledgedAt == null ? null : hrDateTimeToJson(acknowledgedAt!),
         'objectionStatus': objectionStatus.toJson(),
         'responses': responses.map((e) => e.toJson()).toList(),
+        'availableGrades': availableGrades.map((e) => e.toJson()).toList(),
         'concurrencyStamp': concurrencyStamp,
       };
 }
@@ -10702,259 +12500,6 @@ class EvaluationAnnualSummaryDto {
         'acknowledgedCount': acknowledgedCount,
         'objectionsCount': objectionsCount,
         'criteria': criteria.map((e) => e.toJson()).toList(),
-      };
-}
-
-class EvaluationCriterionDto {
-  const EvaluationCriterionDto({
-    required this.id,
-    required this.name,
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-    required this.concurrencyStamp,
-  });
-
-  final String id;
-  /// مترجم حسب Accept-Language.
-  final String name;
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-  final String concurrencyStamp;
-
-  factory EvaluationCriterionDto.fromJson(Map<String, dynamic> json) => EvaluationCriterionDto(
-        id: (json['id']) as String,
-        name: (json['name']) as String,
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-        concurrencyStamp: (json['concurrencyStamp']) as String,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-        'concurrencyStamp': concurrencyStamp,
-      };
-}
-
-class EvaluationCriterionPagedResultDto {
-  const EvaluationCriterionPagedResultDto({
-    required this.totalCount,
-    required this.items,
-  });
-
-  final int totalCount;
-  final List<EvaluationCriterionDto> items;
-
-  factory EvaluationCriterionPagedResultDto.fromJson(Map<String, dynamic> json) => EvaluationCriterionPagedResultDto(
-        totalCount: ((json['totalCount']) as num).toInt(),
-        items: ((json['items']) as List).map((e) => EvaluationCriterionDto.fromJson((e) as Map<String, dynamic>)).toList(),
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'totalCount': totalCount,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
-}
-
-class EvaluationCriterionCreateDto {
-  const EvaluationCriterionCreateDto({
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-  });
-
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-
-  factory EvaluationCriterionCreateDto.fromJson(Map<String, dynamic> json) => EvaluationCriterionCreateDto(
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-      };
-}
-
-class EvaluationCriterionUpdateDto {
-  const EvaluationCriterionUpdateDto({
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-    required this.concurrencyStamp,
-  });
-
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-  final String concurrencyStamp;
-
-  factory EvaluationCriterionUpdateDto.fromJson(Map<String, dynamic> json) => EvaluationCriterionUpdateDto(
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-        concurrencyStamp: (json['concurrencyStamp']) as String,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-        'concurrencyStamp': concurrencyStamp,
-      };
-}
-
-/// عنصر في السلم اللفظي. sortOrder للعرض فقط، وليس قيمة أو وزنًا.
-class EvaluationGradeDto {
-  const EvaluationGradeDto({
-    required this.id,
-    required this.code,
-    required this.name,
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-    required this.concurrencyStamp,
-  });
-
-  final String id;
-  /// ثابت بعد الإنشاء.
-  final String code;
-  /// مترجم حسب Accept-Language.
-  final String name;
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-  final String concurrencyStamp;
-
-  factory EvaluationGradeDto.fromJson(Map<String, dynamic> json) => EvaluationGradeDto(
-        id: (json['id']) as String,
-        code: (json['code']) as String,
-        name: (json['name']) as String,
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-        concurrencyStamp: (json['concurrencyStamp']) as String,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'code': code,
-        'name': name,
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-        'concurrencyStamp': concurrencyStamp,
-      };
-}
-
-class EvaluationGradePagedResultDto {
-  const EvaluationGradePagedResultDto({
-    required this.totalCount,
-    required this.items,
-  });
-
-  final int totalCount;
-  final List<EvaluationGradeDto> items;
-
-  factory EvaluationGradePagedResultDto.fromJson(Map<String, dynamic> json) => EvaluationGradePagedResultDto(
-        totalCount: ((json['totalCount']) as num).toInt(),
-        items: ((json['items']) as List).map((e) => EvaluationGradeDto.fromJson((e) as Map<String, dynamic>)).toList(),
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'totalCount': totalCount,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
-}
-
-class EvaluationGradeCreateDto {
-  const EvaluationGradeCreateDto({
-    required this.code,
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-  });
-
-  final String code;
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-
-  factory EvaluationGradeCreateDto.fromJson(Map<String, dynamic> json) => EvaluationGradeCreateDto(
-        code: (json['code']) as String,
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'code': code,
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-      };
-}
-
-/// الرمز لا يتغير.
-class EvaluationGradeUpdateDto {
-  const EvaluationGradeUpdateDto({
-    required this.nameAr,
-    required this.nameEn,
-    required this.sortOrder,
-    required this.isActive,
-    required this.concurrencyStamp,
-  });
-
-  final String nameAr;
-  final String nameEn;
-  final int sortOrder;
-  final bool isActive;
-  final String concurrencyStamp;
-
-  factory EvaluationGradeUpdateDto.fromJson(Map<String, dynamic> json) => EvaluationGradeUpdateDto(
-        nameAr: (json['nameAr']) as String,
-        nameEn: (json['nameEn']) as String,
-        sortOrder: ((json['sortOrder']) as num).toInt(),
-        isActive: (json['isActive']) as bool,
-        concurrencyStamp: (json['concurrencyStamp']) as String,
-      );
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'sortOrder': sortOrder,
-        'isActive': isActive,
-        'concurrencyStamp': concurrencyStamp,
       };
 }
 
@@ -11329,29 +12874,7 @@ class DepartmentReportSubmitDto {
       };
 }
 
-/// فترة تقرير المراجع.
-enum ReviewReportPeriodType {
-  daily('daily'),
-  weekly('weekly'),
-  monthly('monthly'),
-
-  /// A value this client does not know yet (newer server).
-  $unknown('');
-
-  const ReviewReportPeriodType(this.value);
-  final String value;
-
-  static ReviewReportPeriodType fromJson(Object? json) {
-    for (final v in ReviewReportPeriodType.values) {
-      if (v.value == json) return v;
-    }
-    return ReviewReportPeriodType.$unknown;
-  }
-
-  String toJson() => value;
-}
-
-/// حالة تقرير المراجع.
+/// حالة التقرير اليومي.
 enum ReviewReportStatus {
   draft('draft'),
   submitted('submitted'),
@@ -11372,44 +12895,78 @@ enum ReviewReportStatus {
   String toJson() => value;
 }
 
-/// فريق واحد في تقرير المراجع: مدير القسم ومن يرتبط به. الصف لقطة من وقت إنشاء التقرير، ولا يحتوي أي بيانات مالية أو بيانات شكاوى.
-class ReviewReportTeamDto {
-  const ReviewReportTeamDto({
-    required this.manager,
-    this.department,
-    required this.membersCount,
-    this.completionPercent,
-    this.notes,
-    this.projectNotes,
+/// مرجع غرفة في التقرير اليومي، والاسم لقطة من وقت إنشاء التقرير.
+class ReviewRoomRefDto {
+  const ReviewRoomRefDto({
+    required this.id,
+    required this.name,
   });
 
-  final EmployeeRefDto manager;
-  final DepartmentRefDto? department;
-  /// من يرتبط بالمدير وقت إنشاء التقرير، دون المنتهية خدمتهم.
-  final int membersCount;
-  /// نسبة الإنجاز التي يقدّرها المراجع. null ما دام لم يكتبها.
-  final int? completionPercent;
-  /// ملاحظات المراجع على أداء المدير والفريق.
-  final String? notes;
-  /// ملاحظات تخص مشاريع الفريق.
-  final String? projectNotes;
+  final String id;
+  final String name;
 
-  factory ReviewReportTeamDto.fromJson(Map<String, dynamic> json) => ReviewReportTeamDto(
-        manager: EmployeeRefDto.fromJson((json['manager']) as Map<String, dynamic>),
-        department: json['department'] == null ? null : DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
-        membersCount: ((json['membersCount']) as num).toInt(),
-        completionPercent: json['completionPercent'] == null ? null : ((json['completionPercent']) as num).toInt(),
-        notes: json['notes'] == null ? null : (json['notes']) as String,
-        projectNotes: json['projectNotes'] == null ? null : (json['projectNotes']) as String,
+  factory ReviewRoomRefDto.fromJson(Map<String, dynamic> json) => ReviewRoomRefDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
+/// صف غرفة واحدة في التقرير اليومي: مديرها وقسمه وأفرادها، وتقييم عمل الباك وعمل الفرونت وملاحظات. الصف لقطة من وقت إنشاء التقرير، ولا يحتوي أي بيانات مالية أو بيانات شكاوى. (قرار زينب 2026-11-11)
+class ReviewReportTeamDto {
+  const ReviewReportTeamDto({
+    required this.room,
+    required this.manager,
+    this.department,
+    required this.members,
+    this.backendGrade,
+    this.backendNotes,
+    this.frontendGrade,
+    this.frontendNotes,
+    this.notes,
+  });
+
+  final ReviewRoomRefDto room;
+  final EmployeeRefDto manager;
+  final DepartmentRefDto? department;
+  final List<EmployeeRefDto> members;
+  /// تقدير عمل الباك. null ما دام المتابع لم يختره.
+  final ReviewerGrade? backendGrade;
+  /// شرح تقييم عمل الباك.
+  final String? backendNotes;
+  /// تقدير عمل الفرونت. null ما دام المتابع لم يختره.
+  final ReviewerGrade? frontendGrade;
+  /// شرح تقييم عمل الفرونت.
+  final String? frontendNotes;
+  /// ملاحظات المتابع على الغرفة.
+  final String? notes;
+
+  factory ReviewReportTeamDto.fromJson(Map<String, dynamic> json) => ReviewReportTeamDto(
+        room: ReviewRoomRefDto.fromJson((json['room']) as Map<String, dynamic>),
+        manager: EmployeeRefDto.fromJson((json['manager']) as Map<String, dynamic>),
+        department: json['department'] == null ? null : DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
+        members: ((json['members']) as List).map((e) => EmployeeRefDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        backendGrade: json['backendGrade'] == null ? null : ReviewerGrade.fromJson(json['backendGrade']),
+        backendNotes: json['backendNotes'] == null ? null : (json['backendNotes']) as String,
+        frontendGrade: json['frontendGrade'] == null ? null : ReviewerGrade.fromJson(json['frontendGrade']),
+        frontendNotes: json['frontendNotes'] == null ? null : (json['frontendNotes']) as String,
+        notes: json['notes'] == null ? null : (json['notes']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'room': room.toJson(),
         'manager': manager.toJson(),
         'department': department == null ? null : department!.toJson(),
-        'membersCount': membersCount,
-        'completionPercent': completionPercent == null ? null : completionPercent!,
+        'members': members.map((e) => e.toJson()).toList(),
+        'backendGrade': backendGrade == null ? null : backendGrade!.toJson(),
+        'backendNotes': backendNotes == null ? null : backendNotes!,
+        'frontendGrade': frontendGrade == null ? null : frontendGrade!.toJson(),
+        'frontendNotes': frontendNotes == null ? null : frontendNotes!,
         'notes': notes == null ? null : notes!,
-        'projectNotes': projectNotes == null ? null : projectNotes!,
       };
 }
 
@@ -11417,12 +12974,10 @@ class ReviewReportDto {
   const ReviewReportDto({
     required this.id,
     required this.reviewer,
-    required this.periodType,
-    required this.periodFrom,
-    required this.periodTo,
+    required this.preparedBy,
+    required this.reportDate,
     required this.status,
-    this.summary,
-    this.averageCompletion,
+    this.content,
     required this.teams,
     this.submittedAt,
     this.viewedAt,
@@ -11431,14 +12986,14 @@ class ReviewReportDto {
 
   final String id;
   final UserRefDto reviewer;
-  final ReviewReportPeriodType periodType;
-  final DateTime periodFrom;
-  final DateTime periodTo;
+  /// من أنشأ التقرير فعليًا، المراجع أو نائبه بالتفويض. (قرار زينب 2026-11-11)
+  final UserRefDto preparedBy;
+  /// يوم التقرير.
+  final DateTime reportDate;
   final ReviewReportStatus status;
-  /// الملخص العام للتقرير.
-  final String? summary;
-  /// متوسط completionPercent للفرق التي تحمل قيمة، مقربًا لأقرب عدد صحيح. null إذا لم تحمل أي فريق قيمة.
-  final int? averageCompletion;
+  /// النص الكامل للتقرير اليومي.
+  final String? content;
+  /// صف لكل غرفة، مرتبة حسب اسم مسؤول الغرفة.
   final List<ReviewReportTeamDto> teams;
   final DateTime? submittedAt;
   /// أول اطلاع للمدير التنفيذي على التقرير المرفوع.
@@ -11448,12 +13003,10 @@ class ReviewReportDto {
   factory ReviewReportDto.fromJson(Map<String, dynamic> json) => ReviewReportDto(
         id: (json['id']) as String,
         reviewer: UserRefDto.fromJson((json['reviewer']) as Map<String, dynamic>),
-        periodType: ReviewReportPeriodType.fromJson(json['periodType']),
-        periodFrom: hrDateFromJson((json['periodFrom']) as String),
-        periodTo: hrDateFromJson((json['periodTo']) as String),
+        preparedBy: UserRefDto.fromJson((json['preparedBy']) as Map<String, dynamic>),
+        reportDate: hrDateFromJson((json['reportDate']) as String),
         status: ReviewReportStatus.fromJson(json['status']),
-        summary: json['summary'] == null ? null : (json['summary']) as String,
-        averageCompletion: json['averageCompletion'] == null ? null : ((json['averageCompletion']) as num).toInt(),
+        content: json['content'] == null ? null : (json['content']) as String,
         teams: ((json['teams']) as List).map((e) => ReviewReportTeamDto.fromJson((e) as Map<String, dynamic>)).toList(),
         submittedAt: json['submittedAt'] == null ? null : DateTime.parse((json['submittedAt']) as String),
         viewedAt: json['viewedAt'] == null ? null : DateTime.parse((json['viewedAt']) as String),
@@ -11463,12 +13016,10 @@ class ReviewReportDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'reviewer': reviewer.toJson(),
-        'periodType': periodType.toJson(),
-        'periodFrom': hrDateToJson(periodFrom),
-        'periodTo': hrDateToJson(periodTo),
+        'preparedBy': preparedBy.toJson(),
+        'reportDate': hrDateToJson(reportDate),
         'status': status.toJson(),
-        'summary': summary == null ? null : summary!,
-        'averageCompletion': averageCompletion == null ? null : averageCompletion!,
+        'content': content == null ? null : content!,
         'teams': teams.map((e) => e.toJson()).toList(),
         'submittedAt': submittedAt == null ? null : hrDateTimeToJson(submittedAt!),
         'viewedAt': viewedAt == null ? null : hrDateTimeToJson(viewedAt!),
@@ -11480,36 +13031,31 @@ class ReviewReportSummaryDto {
   const ReviewReportSummaryDto({
     required this.id,
     required this.reviewer,
-    required this.periodType,
-    required this.periodFrom,
-    required this.periodTo,
+    required this.preparedBy,
+    required this.reportDate,
     required this.status,
     required this.teamsCount,
-    this.averageCompletion,
     this.submittedAt,
     this.viewedAt,
   });
 
   final String id;
   final UserRefDto reviewer;
-  final ReviewReportPeriodType periodType;
-  final DateTime periodFrom;
-  final DateTime periodTo;
+  /// من أنشأ التقرير فعليًا، المراجع أو نائبه بالتفويض. (قرار زينب 2026-11-11)
+  final UserRefDto preparedBy;
+  final DateTime reportDate;
   final ReviewReportStatus status;
   final int teamsCount;
-  final int? averageCompletion;
   final DateTime? submittedAt;
   final DateTime? viewedAt;
 
   factory ReviewReportSummaryDto.fromJson(Map<String, dynamic> json) => ReviewReportSummaryDto(
         id: (json['id']) as String,
         reviewer: UserRefDto.fromJson((json['reviewer']) as Map<String, dynamic>),
-        periodType: ReviewReportPeriodType.fromJson(json['periodType']),
-        periodFrom: hrDateFromJson((json['periodFrom']) as String),
-        periodTo: hrDateFromJson((json['periodTo']) as String),
+        preparedBy: UserRefDto.fromJson((json['preparedBy']) as Map<String, dynamic>),
+        reportDate: hrDateFromJson((json['reportDate']) as String),
         status: ReviewReportStatus.fromJson(json['status']),
         teamsCount: ((json['teamsCount']) as num).toInt(),
-        averageCompletion: json['averageCompletion'] == null ? null : ((json['averageCompletion']) as num).toInt(),
         submittedAt: json['submittedAt'] == null ? null : DateTime.parse((json['submittedAt']) as String),
         viewedAt: json['viewedAt'] == null ? null : DateTime.parse((json['viewedAt']) as String),
       );
@@ -11517,12 +13063,10 @@ class ReviewReportSummaryDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'reviewer': reviewer.toJson(),
-        'periodType': periodType.toJson(),
-        'periodFrom': hrDateToJson(periodFrom),
-        'periodTo': hrDateToJson(periodTo),
+        'preparedBy': preparedBy.toJson(),
+        'reportDate': hrDateToJson(reportDate),
         'status': status.toJson(),
         'teamsCount': teamsCount,
-        'averageCompletion': averageCompletion == null ? null : averageCompletion!,
         'submittedAt': submittedAt == null ? null : hrDateTimeToJson(submittedAt!),
         'viewedAt': viewedAt == null ? null : hrDateTimeToJson(viewedAt!),
       };
@@ -11550,91 +13094,88 @@ class ReviewReportSummaryPagedResultDto {
 
 class ReviewReportCreateDto {
   const ReviewReportCreateDto({
-    required this.periodType,
-    required this.periodFrom,
-    required this.periodTo,
-    this.summary,
+    this.onBehalfOfUserId,
+    required this.reportDate,
+    this.content,
   });
 
-  final ReviewReportPeriodType periodType;
-  final DateTime periodFrom;
-  final DateTime periodTo;
-  final String? summary;
+  /// المراجع الذي ينوب عنه المستخدم بتفويض reviewReports فعّال. يتركه المراجع فارغًا. (قرار زينب 2026-11-11)
+  final String? onBehalfOfUserId;
+  final DateTime reportDate;
+  final String? content;
 
   factory ReviewReportCreateDto.fromJson(Map<String, dynamic> json) => ReviewReportCreateDto(
-        periodType: ReviewReportPeriodType.fromJson(json['periodType']),
-        periodFrom: hrDateFromJson((json['periodFrom']) as String),
-        periodTo: hrDateFromJson((json['periodTo']) as String),
-        summary: json['summary'] == null ? null : (json['summary']) as String,
+        onBehalfOfUserId: json['onBehalfOfUserId'] == null ? null : (json['onBehalfOfUserId']) as String,
+        reportDate: hrDateFromJson((json['reportDate']) as String),
+        content: json['content'] == null ? null : (json['content']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'periodType': periodType.toJson(),
-        'periodFrom': hrDateToJson(periodFrom),
-        'periodTo': hrDateToJson(periodTo),
-        if (summary != null) 'summary': summary!,
+        if (onBehalfOfUserId != null) 'onBehalfOfUserId': onBehalfOfUserId!,
+        'reportDate': hrDateToJson(reportDate),
+        if (content != null) 'content': content!,
       };
 }
 
 class ReviewReportTeamInputDto {
   const ReviewReportTeamInputDto({
-    required this.managerEmployeeId,
-    this.completionPercent,
+    required this.roomId,
+    this.backendGrade,
+    this.backendNotes,
+    this.frontendGrade,
+    this.frontendNotes,
     this.notes,
-    this.projectNotes,
   });
 
-  final String managerEmployeeId;
-  final int? completionPercent;
+  final String roomId;
+  final ReviewerGrade? backendGrade;
+  final String? backendNotes;
+  final ReviewerGrade? frontendGrade;
+  final String? frontendNotes;
   final String? notes;
-  final String? projectNotes;
 
   factory ReviewReportTeamInputDto.fromJson(Map<String, dynamic> json) => ReviewReportTeamInputDto(
-        managerEmployeeId: (json['managerEmployeeId']) as String,
-        completionPercent: json['completionPercent'] == null ? null : ((json['completionPercent']) as num).toInt(),
+        roomId: (json['roomId']) as String,
+        backendGrade: json['backendGrade'] == null ? null : ReviewerGrade.fromJson(json['backendGrade']),
+        backendNotes: json['backendNotes'] == null ? null : (json['backendNotes']) as String,
+        frontendGrade: json['frontendGrade'] == null ? null : ReviewerGrade.fromJson(json['frontendGrade']),
+        frontendNotes: json['frontendNotes'] == null ? null : (json['frontendNotes']) as String,
         notes: json['notes'] == null ? null : (json['notes']) as String,
-        projectNotes: json['projectNotes'] == null ? null : (json['projectNotes']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'managerEmployeeId': managerEmployeeId,
-        'completionPercent': completionPercent == null ? null : completionPercent!,
+        'roomId': roomId,
+        'backendGrade': backendGrade == null ? null : backendGrade!.toJson(),
+        'backendNotes': backendNotes == null ? null : backendNotes!,
+        'frontendGrade': frontendGrade == null ? null : frontendGrade!.toJson(),
+        'frontendNotes': frontendNotes == null ? null : frontendNotes!,
         'notes': notes == null ? null : notes!,
-        'projectNotes': projectNotes == null ? null : projectNotes!,
       };
 }
 
 class ReviewReportUpdateDto {
   const ReviewReportUpdateDto({
-    required this.periodType,
-    required this.periodFrom,
-    required this.periodTo,
-    this.summary,
+    required this.reportDate,
+    this.content,
     required this.teams,
     required this.concurrencyStamp,
   });
 
-  final ReviewReportPeriodType periodType;
-  final DateTime periodFrom;
-  final DateTime periodTo;
-  final String? summary;
+  final DateTime reportDate;
+  final String? content;
   final List<ReviewReportTeamInputDto> teams;
   final String concurrencyStamp;
 
   factory ReviewReportUpdateDto.fromJson(Map<String, dynamic> json) => ReviewReportUpdateDto(
-        periodType: ReviewReportPeriodType.fromJson(json['periodType']),
-        periodFrom: hrDateFromJson((json['periodFrom']) as String),
-        periodTo: hrDateFromJson((json['periodTo']) as String),
-        summary: json['summary'] == null ? null : (json['summary']) as String,
+        reportDate: hrDateFromJson((json['reportDate']) as String),
+        content: json['content'] == null ? null : (json['content']) as String,
         teams: ((json['teams']) as List).map((e) => ReviewReportTeamInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
         concurrencyStamp: (json['concurrencyStamp']) as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'periodType': periodType.toJson(),
-        'periodFrom': hrDateToJson(periodFrom),
-        'periodTo': hrDateToJson(periodTo),
-        'summary': summary == null ? null : summary!,
+        'reportDate': hrDateToJson(reportDate),
+        'content': content == null ? null : content!,
         'teams': teams.map((e) => e.toJson()).toList(),
         'concurrencyStamp': concurrencyStamp,
       };
@@ -11653,6 +13194,154 @@ class ReviewReportSubmitDto {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// غرفة متابعة: مدير قسم وأفراد يختارهم المتابع من المرتبطين به، تُقيَّم يوميًا في التقرير اليومي. لا تحتوي أي بيانات مالية. (قرار زينب 2026-11-11)
+class ReviewRoomDto {
+  const ReviewRoomDto({
+    required this.id,
+    required this.name,
+    required this.reviewer,
+    required this.manager,
+    this.department,
+    required this.members,
+    required this.creationTime,
+    required this.concurrencyStamp,
+  });
+
+  final String id;
+  final String name;
+  final UserRefDto reviewer;
+  final EmployeeRefDto manager;
+  final DepartmentRefDto? department;
+  /// الأفراد مرتبون حسب الاسم. فرد انتهت خدمته أو انفك ارتباطه بالمدير يبقى ظاهرًا حتى يعدّل المتابع الغرفة.
+  final List<EmployeeRefDto> members;
+  final DateTime creationTime;
+  final String concurrencyStamp;
+
+  factory ReviewRoomDto.fromJson(Map<String, dynamic> json) => ReviewRoomDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+        reviewer: UserRefDto.fromJson((json['reviewer']) as Map<String, dynamic>),
+        manager: EmployeeRefDto.fromJson((json['manager']) as Map<String, dynamic>),
+        department: json['department'] == null ? null : DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
+        members: ((json['members']) as List).map((e) => EmployeeRefDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        creationTime: DateTime.parse((json['creationTime']) as String),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'reviewer': reviewer.toJson(),
+        'manager': manager.toJson(),
+        'department': department == null ? null : department!.toJson(),
+        'members': members.map((e) => e.toJson()).toList(),
+        'creationTime': hrDateTimeToJson(creationTime),
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class ReviewRoomPagedResultDto {
+  const ReviewRoomPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ReviewRoomDto> items;
+
+  factory ReviewRoomPagedResultDto.fromJson(Map<String, dynamic> json) => ReviewRoomPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ReviewRoomDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class ReviewRoomCreateDto {
+  const ReviewRoomCreateDto({
+    this.onBehalfOfUserId,
+    required this.name,
+    required this.managerEmployeeId,
+    required this.memberEmployeeIds,
+  });
+
+  /// المراجع الذي ينوب عنه المستخدم بتفويض reviewReports فعّال. يتركه المراجع فارغًا.
+  final String? onBehalfOfUserId;
+  final String name;
+  final String managerEmployeeId;
+  final List<String> memberEmployeeIds;
+
+  factory ReviewRoomCreateDto.fromJson(Map<String, dynamic> json) => ReviewRoomCreateDto(
+        onBehalfOfUserId: json['onBehalfOfUserId'] == null ? null : (json['onBehalfOfUserId']) as String,
+        name: (json['name']) as String,
+        managerEmployeeId: (json['managerEmployeeId']) as String,
+        memberEmployeeIds: ((json['memberEmployeeIds']) as List).map((e) => (e) as String).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (onBehalfOfUserId != null) 'onBehalfOfUserId': onBehalfOfUserId!,
+        'name': name,
+        'managerEmployeeId': managerEmployeeId,
+        'memberEmployeeIds': memberEmployeeIds,
+      };
+}
+
+class ReviewRoomUpdateDto {
+  const ReviewRoomUpdateDto({
+    required this.name,
+    required this.managerEmployeeId,
+    required this.memberEmployeeIds,
+    required this.concurrencyStamp,
+  });
+
+  final String name;
+  final String managerEmployeeId;
+  final List<String> memberEmployeeIds;
+  final String concurrencyStamp;
+
+  factory ReviewRoomUpdateDto.fromJson(Map<String, dynamic> json) => ReviewRoomUpdateDto(
+        name: (json['name']) as String,
+        managerEmployeeId: (json['managerEmployeeId']) as String,
+        memberEmployeeIds: ((json['memberEmployeeIds']) as List).map((e) => (e) as String).toList(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'managerEmployeeId': managerEmployeeId,
+        'memberEmployeeIds': memberEmployeeIds,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// مدير قسم يصلح مسؤولًا لغرفة، مع الموظفين النشطين المرتبطين به.
+class ReviewRoomCandidateDto {
+  const ReviewRoomCandidateDto({
+    required this.manager,
+    this.department,
+    required this.members,
+  });
+
+  final EmployeeRefDto manager;
+  final DepartmentRefDto? department;
+  final List<EmployeeRefDto> members;
+
+  factory ReviewRoomCandidateDto.fromJson(Map<String, dynamic> json) => ReviewRoomCandidateDto(
+        manager: EmployeeRefDto.fromJson((json['manager']) as Map<String, dynamic>),
+        department: json['department'] == null ? null : DepartmentRefDto.fromJson((json['department']) as Map<String, dynamic>),
+        members: ((json['members']) as List).map((e) => EmployeeRefDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'manager': manager.toJson(),
+        'department': department == null ? null : department!.toJson(),
+        'members': members.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -12249,6 +13938,42 @@ class EvaluationConsistencyRowPagedResultDto {
       };
 }
 
+/// أعداد حضور اليوم لكل الشركة. (قرار زينب 2026-11-11)
+class TodayAttendanceSummaryDto {
+  const TodayAttendanceSummaryDto({
+    required this.date,
+    required this.present,
+    required this.late,
+    required this.absent,
+    required this.onLeave,
+  });
+
+  /// اليوم بتوقيت الشركة.
+  final DateTime date;
+  /// الحاضرون، ومنهم المتأخرون.
+  final int present;
+  final int late;
+  final int absent;
+  /// أيام الإجازة اليوم، وقد تكون كسرًا مع الإجازة الزمنية.
+  final double onLeave;
+
+  factory TodayAttendanceSummaryDto.fromJson(Map<String, dynamic> json) => TodayAttendanceSummaryDto(
+        date: hrDateFromJson((json['date']) as String),
+        present: ((json['present']) as num).toInt(),
+        late: ((json['late']) as num).toInt(),
+        absent: ((json['absent']) as num).toInt(),
+        onLeave: ((json['onLeave']) as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': hrDateToJson(date),
+        'present': present,
+        'late': late,
+        'absent': absent,
+        'onLeave': onLeave,
+      };
+}
+
 /// حضور موظف في الفترة. لا يحتوي بيانات مالية.
 class HrAttendanceReportRowDto {
   const HrAttendanceReportRowDto({
@@ -12321,6 +14046,8 @@ class HrLeaveBalanceReportRowDto {
     required this.heldDays,
     required this.remainingDays,
     required this.usedHours,
+    this.periodUsedDays,
+    this.periodUsedHours,
   });
 
   final EmployeeRefDto employee;
@@ -12331,6 +14058,10 @@ class HrLeaveBalanceReportRowDto {
   final double heldDays;
   final double remainingDays;
   final double usedHours;
+  /// أيام الإجازة السنوية المعتمدة الواقعة داخل from وto. null بدون فترة. (قرار زينب 2026-11-10)
+  final double? periodUsedDays;
+  /// ساعات الإجازة الزمنية المعتمدة بتاريخ داخل from وto. null بدون فترة. (قرار زينب 2026-11-10)
+  final double? periodUsedHours;
 
   factory HrLeaveBalanceReportRowDto.fromJson(Map<String, dynamic> json) => HrLeaveBalanceReportRowDto(
         employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
@@ -12341,6 +14072,8 @@ class HrLeaveBalanceReportRowDto {
         heldDays: ((json['heldDays']) as num).toDouble(),
         remainingDays: ((json['remainingDays']) as num).toDouble(),
         usedHours: ((json['usedHours']) as num).toDouble(),
+        periodUsedDays: json['periodUsedDays'] == null ? null : ((json['periodUsedDays']) as num).toDouble(),
+        periodUsedHours: json['periodUsedHours'] == null ? null : ((json['periodUsedHours']) as num).toDouble(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -12352,6 +14085,8 @@ class HrLeaveBalanceReportRowDto {
         'heldDays': heldDays,
         'remainingDays': remainingDays,
         'usedHours': usedHours,
+        'periodUsedDays': periodUsedDays == null ? null : periodUsedDays!,
+        'periodUsedHours': periodUsedHours == null ? null : periodUsedHours!,
       };
 }
 
@@ -12542,7 +14277,7 @@ class HrWarningReportRowPagedResultDto {
       };
 }
 
-/// team: موظفو المدير المرسل. departmentManagers: مديرو الأقسام. company: كل الشركة.
+/// team: موظفو المدير المرسل. departmentManagers: مديرو الأقسام. company: كل الشركة. مسؤول النظام الذي لا يحمل دور عمل غير employee لا يستلم أي تعميم لأنه ليس موظفًا في الشركة، ويستلمه إذا حمل دور عمل آخر (قرار زينب 2026-11-10). وكذلك المحاسب ومسؤول المخزن اللذان لا يحملان غير accountant وstoreOfficer وemployee لا يستلمان أي تعميم، ويستلمانه إذا حمل أحدهما دورًا آخر (قرار زينب 2026-11-11).
 enum CircularScope {
   team('team'),
   departmentManagers('departmentManagers'),
@@ -12757,6 +14492,1064 @@ class CircularReceiptPagedResultDto {
       };
 }
 
+/// تبليغ إلى موظفين يختارهم المرسل بالاسم. (قرار زينب 2026-11-10)
+class NoticeCreateDto {
+  const NoticeCreateDto({
+    required this.recipientEmployeeIds,
+    required this.title,
+    required this.content,
+  });
+
+  final List<String> recipientEmployeeIds;
+  final String title;
+  final String content;
+
+  factory NoticeCreateDto.fromJson(Map<String, dynamic> json) => NoticeCreateDto(
+        recipientEmployeeIds: ((json['recipientEmployeeIds']) as List).map((e) => (e) as String).toList(),
+        title: (json['title']) as String,
+        content: (json['content']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'recipientEmployeeIds': recipientEmployeeIds,
+        'title': title,
+        'content': content,
+      };
+}
+
+/// تبليغ وصل إلى المستخدم.
+class NoticeReceivedDto {
+  const NoticeReceivedDto({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.sender,
+    required this.sentAt,
+    this.acknowledgedAt,
+  });
+
+  final String id;
+  final String title;
+  final String content;
+  final UserRefDto sender;
+  final DateTime sentAt;
+  final DateTime? acknowledgedAt;
+
+  factory NoticeReceivedDto.fromJson(Map<String, dynamic> json) => NoticeReceivedDto(
+        id: (json['id']) as String,
+        title: (json['title']) as String,
+        content: (json['content']) as String,
+        sender: UserRefDto.fromJson((json['sender']) as Map<String, dynamic>),
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        acknowledgedAt: json['acknowledgedAt'] == null ? null : DateTime.parse((json['acknowledgedAt']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'content': content,
+        'sender': sender.toJson(),
+        'sentAt': hrDateTimeToJson(sentAt),
+        'acknowledgedAt': acknowledgedAt == null ? null : hrDateTimeToJson(acknowledgedAt!),
+      };
+}
+
+class NoticeReceivedPagedResultDto {
+  const NoticeReceivedPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<NoticeReceivedDto> items;
+
+  factory NoticeReceivedPagedResultDto.fromJson(Map<String, dynamic> json) => NoticeReceivedPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => NoticeReceivedDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// تبليغ أرسله المستخدم.
+class NoticeSentDto {
+  const NoticeSentDto({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.sentAt,
+    required this.recipientsCount,
+    required this.acknowledgedCount,
+  });
+
+  final String id;
+  final String title;
+  final String content;
+  final DateTime sentAt;
+  final int recipientsCount;
+  final int acknowledgedCount;
+
+  factory NoticeSentDto.fromJson(Map<String, dynamic> json) => NoticeSentDto(
+        id: (json['id']) as String,
+        title: (json['title']) as String,
+        content: (json['content']) as String,
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        recipientsCount: ((json['recipientsCount']) as num).toInt(),
+        acknowledgedCount: ((json['acknowledgedCount']) as num).toInt(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'content': content,
+        'sentAt': hrDateTimeToJson(sentAt),
+        'recipientsCount': recipientsCount,
+        'acknowledgedCount': acknowledgedCount,
+      };
+}
+
+class NoticeSentPagedResultDto {
+  const NoticeSentPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<NoticeSentDto> items;
+
+  factory NoticeSentPagedResultDto.fromJson(Map<String, dynamic> json) => NoticeSentPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => NoticeSentDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// حالة اطلاع مستلم واحد.
+class NoticeReceiptDto {
+  const NoticeReceiptDto({
+    required this.recipient,
+    this.acknowledgedAt,
+  });
+
+  final EmployeeRefDto recipient;
+  final DateTime? acknowledgedAt;
+
+  factory NoticeReceiptDto.fromJson(Map<String, dynamic> json) => NoticeReceiptDto(
+        recipient: EmployeeRefDto.fromJson((json['recipient']) as Map<String, dynamic>),
+        acknowledgedAt: json['acknowledgedAt'] == null ? null : DateTime.parse((json['acknowledgedAt']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'recipient': recipient.toJson(),
+        'acknowledgedAt': acknowledgedAt == null ? null : hrDateTimeToJson(acknowledgedAt!),
+      };
+}
+
+class NoticeReceiptPagedResultDto {
+  const NoticeReceiptPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<NoticeReceiptDto> items;
+
+  factory NoticeReceiptPagedResultDto.fromJson(Map<String, dynamic> json) => NoticeReceiptPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => NoticeReceiptDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// عنوان تقييم للموارد البشرية. (قرار زينب 2026-11-10)
+class HrEvaluationCriterionDto {
+  const HrEvaluationCriterionDto({
+    required this.id,
+    required this.name,
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  final String id;
+  /// مترجم حسب Accept-Language.
+  final String name;
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+  final bool isActive;
+  final String concurrencyStamp;
+
+  factory HrEvaluationCriterionDto.fromJson(Map<String, dynamic> json) => HrEvaluationCriterionDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class HrEvaluationCriterionPagedResultDto {
+  const HrEvaluationCriterionPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<HrEvaluationCriterionDto> items;
+
+  factory HrEvaluationCriterionPagedResultDto.fromJson(Map<String, dynamic> json) => HrEvaluationCriterionPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => HrEvaluationCriterionDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class HrEvaluationCriterionCreateDto {
+  const HrEvaluationCriterionCreateDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+  });
+
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+
+  factory HrEvaluationCriterionCreateDto.fromJson(Map<String, dynamic> json) => HrEvaluationCriterionCreateDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+      };
+}
+
+class HrEvaluationCriterionUpdateDto {
+  const HrEvaluationCriterionUpdateDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+  final bool isActive;
+  final String concurrencyStamp;
+
+  factory HrEvaluationCriterionUpdateDto.fromJson(Map<String, dynamic> json) => HrEvaluationCriterionUpdateDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class HrEvaluationScoreInputDto {
+  const HrEvaluationScoreInputDto({
+    required this.criterionId,
+    required this.score,
+  });
+
+  final String criterionId;
+  final int score;
+
+  factory HrEvaluationScoreInputDto.fromJson(Map<String, dynamic> json) => HrEvaluationScoreInputDto(
+        criterionId: (json['criterionId']) as String,
+        score: ((json['score']) as num).toInt(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'criterionId': criterionId,
+        'score': score,
+      };
+}
+
+/// درجة لكل عنوان فعّال، وملاحظات اختيارية. (قرار زينب 2026-11-10)
+class HrEvaluationCreateDto {
+  const HrEvaluationCreateDto({
+    required this.employeeId,
+    required this.scores,
+    this.notes,
+  });
+
+  final String employeeId;
+  final List<HrEvaluationScoreInputDto> scores;
+  final String? notes;
+
+  factory HrEvaluationCreateDto.fromJson(Map<String, dynamic> json) => HrEvaluationCreateDto(
+        employeeId: (json['employeeId']) as String,
+        scores: ((json['scores']) as List).map((e) => HrEvaluationScoreInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        notes: json['notes'] == null ? null : (json['notes']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employeeId': employeeId,
+        'scores': scores.map((e) => e.toJson()).toList(),
+        if (notes != null) 'notes': notes!,
+      };
+}
+
+class HrEvaluationScoreDto {
+  const HrEvaluationScoreDto({
+    required this.criterionId,
+    required this.criterionName,
+    required this.score,
+  });
+
+  final String criterionId;
+  /// مترجم حسب Accept-Language، حتى لو عُطّل العنوان بعدها.
+  final String criterionName;
+  final int score;
+
+  factory HrEvaluationScoreDto.fromJson(Map<String, dynamic> json) => HrEvaluationScoreDto(
+        criterionId: (json['criterionId']) as String,
+        criterionName: (json['criterionName']) as String,
+        score: ((json['score']) as num).toInt(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'criterionId': criterionId,
+        'criterionName': criterionName,
+        'score': score,
+      };
+}
+
+/// تقييم من الموارد البشرية. لا يظهر للموظف المُقيَّم. (قرار زينب 2026-11-10)
+class HrEvaluationDto {
+  const HrEvaluationDto({
+    required this.id,
+    required this.employee,
+    required this.evaluatedBy,
+    required this.evaluatedAt,
+    required this.scores,
+    required this.averageScore,
+    this.notes,
+    this.reportId,
+    this.sentAt,
+  });
+
+  final String id;
+  final EmployeeRefDto employee;
+  final UserRefDto evaluatedBy;
+  final DateTime evaluatedAt;
+  /// بترتيب العناوين.
+  final List<HrEvaluationScoreDto> scores;
+  /// متوسط الدرجات مقربًا لمنزلتين.
+  final double averageScore;
+  final String? notes;
+  /// التقرير الذي أُرسل فيه إلى المدير التنفيذي، أو null قبل الإرسال.
+  final String? reportId;
+  final DateTime? sentAt;
+
+  factory HrEvaluationDto.fromJson(Map<String, dynamic> json) => HrEvaluationDto(
+        id: (json['id']) as String,
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        evaluatedBy: UserRefDto.fromJson((json['evaluatedBy']) as Map<String, dynamic>),
+        evaluatedAt: DateTime.parse((json['evaluatedAt']) as String),
+        scores: ((json['scores']) as List).map((e) => HrEvaluationScoreDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        averageScore: ((json['averageScore']) as num).toDouble(),
+        notes: json['notes'] == null ? null : (json['notes']) as String,
+        reportId: json['reportId'] == null ? null : (json['reportId']) as String,
+        sentAt: json['sentAt'] == null ? null : DateTime.parse((json['sentAt']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'employee': employee.toJson(),
+        'evaluatedBy': evaluatedBy.toJson(),
+        'evaluatedAt': hrDateTimeToJson(evaluatedAt),
+        'scores': scores.map((e) => e.toJson()).toList(),
+        'averageScore': averageScore,
+        'notes': notes == null ? null : notes!,
+        'reportId': reportId == null ? null : reportId!,
+        'sentAt': sentAt == null ? null : hrDateTimeToJson(sentAt!),
+      };
+}
+
+class HrEvaluationPagedResultDto {
+  const HrEvaluationPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<HrEvaluationDto> items;
+
+  factory HrEvaluationPagedResultDto.fromJson(Map<String, dynamic> json) => HrEvaluationPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => HrEvaluationDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class HrEvaluationReportCreateDto {
+  const HrEvaluationReportCreateDto({
+    this.note,
+  });
+
+  final String? note;
+
+  factory HrEvaluationReportCreateDto.fromJson(Map<String, dynamic> json) => HrEvaluationReportCreateDto(
+        note: json['note'] == null ? null : (json['note']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (note != null) 'note': note!,
+      };
+}
+
+/// تقرير تقييمات أرسله مدير الموارد إلى المدير التنفيذي. (قرار زينب 2026-11-10)
+class HrEvaluationReportSummaryDto {
+  const HrEvaluationReportSummaryDto({
+    required this.id,
+    required this.sentBy,
+    required this.sentAt,
+    this.note,
+    required this.evaluationsCount,
+    required this.firstEvaluatedAt,
+    required this.lastEvaluatedAt,
+  });
+
+  final String id;
+  final UserRefDto sentBy;
+  final DateTime sentAt;
+  final String? note;
+  final int evaluationsCount;
+  final DateTime firstEvaluatedAt;
+  final DateTime lastEvaluatedAt;
+
+  factory HrEvaluationReportSummaryDto.fromJson(Map<String, dynamic> json) => HrEvaluationReportSummaryDto(
+        id: (json['id']) as String,
+        sentBy: UserRefDto.fromJson((json['sentBy']) as Map<String, dynamic>),
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        evaluationsCount: ((json['evaluationsCount']) as num).toInt(),
+        firstEvaluatedAt: DateTime.parse((json['firstEvaluatedAt']) as String),
+        lastEvaluatedAt: DateTime.parse((json['lastEvaluatedAt']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'sentBy': sentBy.toJson(),
+        'sentAt': hrDateTimeToJson(sentAt),
+        'note': note == null ? null : note!,
+        'evaluationsCount': evaluationsCount,
+        'firstEvaluatedAt': hrDateTimeToJson(firstEvaluatedAt),
+        'lastEvaluatedAt': hrDateTimeToJson(lastEvaluatedAt),
+      };
+}
+
+/// التقرير بكل تقييماته.
+class HrEvaluationReportDto {
+  const HrEvaluationReportDto({
+    required this.id,
+    required this.sentBy,
+    required this.sentAt,
+    this.note,
+    required this.evaluationsCount,
+    required this.firstEvaluatedAt,
+    required this.lastEvaluatedAt,
+    required this.evaluations,
+  });
+
+  final String id;
+  final UserRefDto sentBy;
+  final DateTime sentAt;
+  final String? note;
+  final int evaluationsCount;
+  final DateTime firstEvaluatedAt;
+  final DateTime lastEvaluatedAt;
+  final List<HrEvaluationDto> evaluations;
+
+  factory HrEvaluationReportDto.fromJson(Map<String, dynamic> json) => HrEvaluationReportDto(
+        id: (json['id']) as String,
+        sentBy: UserRefDto.fromJson((json['sentBy']) as Map<String, dynamic>),
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        evaluationsCount: ((json['evaluationsCount']) as num).toInt(),
+        firstEvaluatedAt: DateTime.parse((json['firstEvaluatedAt']) as String),
+        lastEvaluatedAt: DateTime.parse((json['lastEvaluatedAt']) as String),
+        evaluations: ((json['evaluations']) as List).map((e) => HrEvaluationDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'sentBy': sentBy.toJson(),
+        'sentAt': hrDateTimeToJson(sentAt),
+        'note': note == null ? null : note!,
+        'evaluationsCount': evaluationsCount,
+        'firstEvaluatedAt': hrDateTimeToJson(firstEvaluatedAt),
+        'lastEvaluatedAt': hrDateTimeToJson(lastEvaluatedAt),
+        'evaluations': evaluations.map((e) => e.toJson()).toList(),
+      };
+}
+
+class HrEvaluationReportPagedResultDto {
+  const HrEvaluationReportPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<HrEvaluationReportSummaryDto> items;
+
+  factory HrEvaluationReportPagedResultDto.fromJson(Map<String, dynamic> json) => HrEvaluationReportPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => HrEvaluationReportSummaryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// تقدير المراجع لعنوان، بدل الأرقام: weak ضعيف، acceptable مقبول، average متوسط، good جيد، veryGood جيد جدًا، excellent ممتاز. (قرار زينب 2026-11-11)
+enum ReviewerGrade {
+  weak('weak'),
+  acceptable('acceptable'),
+  average('average'),
+  good('good'),
+  veryGood('veryGood'),
+  excellent('excellent'),
+
+  /// A value this client does not know yet (newer server).
+  $unknown('');
+
+  const ReviewerGrade(this.value);
+  final String value;
+
+  static ReviewerGrade fromJson(Object? json) {
+    for (final v in ReviewerGrade.values) {
+      if (v.value == json) return v;
+    }
+    return ReviewerGrade.$unknown;
+  }
+
+  String toJson() => value;
+}
+
+/// عنوان تقييم للمراجع، منفصل عن عناوين الموارد البشرية. (قرار زينب 2026-11-11)
+class ReviewerEvaluationCriterionDto {
+  const ReviewerEvaluationCriterionDto({
+    required this.id,
+    required this.name,
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  final String id;
+  /// مترجم حسب Accept-Language.
+  final String name;
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+  final bool isActive;
+  final String concurrencyStamp;
+
+  factory ReviewerEvaluationCriterionDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationCriterionDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class ReviewerEvaluationCriterionPagedResultDto {
+  const ReviewerEvaluationCriterionPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ReviewerEvaluationCriterionDto> items;
+
+  factory ReviewerEvaluationCriterionPagedResultDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationCriterionPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ReviewerEvaluationCriterionDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class ReviewerEvaluationCriterionCreateDto {
+  const ReviewerEvaluationCriterionCreateDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+  });
+
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+
+  factory ReviewerEvaluationCriterionCreateDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationCriterionCreateDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+      };
+}
+
+class ReviewerEvaluationCriterionUpdateDto {
+  const ReviewerEvaluationCriterionUpdateDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.sortOrder,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  final String nameAr;
+  final String nameEn;
+  final int sortOrder;
+  final bool isActive;
+  final String concurrencyStamp;
+
+  factory ReviewerEvaluationCriterionUpdateDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationCriterionUpdateDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        sortOrder: ((json['sortOrder']) as num).toInt(),
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'sortOrder': sortOrder,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class ReviewerEvaluationItemInputDto {
+  const ReviewerEvaluationItemInputDto({
+    required this.criterionId,
+    required this.grade,
+    this.reason,
+  });
+
+  final String criterionId;
+  final ReviewerGrade grade;
+  /// سبب التقدير، اختياري.
+  final String? reason;
+
+  factory ReviewerEvaluationItemInputDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationItemInputDto(
+        criterionId: (json['criterionId']) as String,
+        grade: ReviewerGrade.fromJson(json['grade']),
+        reason: json['reason'] == null ? null : (json['reason']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'criterionId': criterionId,
+        'grade': grade.toJson(),
+        if (reason != null) 'reason': reason!,
+      };
+}
+
+class ReviewerEvaluationCreateDto {
+  const ReviewerEvaluationCreateDto({
+    required this.employeeId,
+    required this.evaluationDate,
+    required this.items,
+    this.notes,
+  });
+
+  final String employeeId;
+  /// اليوم الذي يخصه التقييم، يختاره المراجع.
+  final DateTime evaluationDate;
+  final List<ReviewerEvaluationItemInputDto> items;
+  final String? notes;
+
+  factory ReviewerEvaluationCreateDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationCreateDto(
+        employeeId: (json['employeeId']) as String,
+        evaluationDate: hrDateFromJson((json['evaluationDate']) as String),
+        items: ((json['items']) as List).map((e) => ReviewerEvaluationItemInputDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        notes: json['notes'] == null ? null : (json['notes']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employeeId': employeeId,
+        'evaluationDate': hrDateToJson(evaluationDate),
+        'items': items.map((e) => e.toJson()).toList(),
+        if (notes != null) 'notes': notes!,
+      };
+}
+
+class ReviewerEvaluationItemDto {
+  const ReviewerEvaluationItemDto({
+    required this.criterionId,
+    required this.criterionName,
+    required this.grade,
+    this.reason,
+  });
+
+  final String criterionId;
+  /// مترجم حسب Accept-Language، حتى لو عُطّل العنوان بعدها.
+  final String criterionName;
+  final ReviewerGrade grade;
+  final String? reason;
+
+  factory ReviewerEvaluationItemDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationItemDto(
+        criterionId: (json['criterionId']) as String,
+        criterionName: (json['criterionName']) as String,
+        grade: ReviewerGrade.fromJson(json['grade']),
+        reason: json['reason'] == null ? null : (json['reason']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'criterionId': criterionId,
+        'criterionName': criterionName,
+        'grade': grade.toJson(),
+        'reason': reason == null ? null : reason!,
+      };
+}
+
+/// تقييم فرد من المراجع، بتقديرات وأسبابها وبدون أرقام ولا معدل. لا يراه الموظف المُقيَّم. (قرار زينب 2026-11-11)
+class ReviewerEvaluationDto {
+  const ReviewerEvaluationDto({
+    required this.id,
+    required this.employee,
+    required this.evaluatedBy,
+    required this.evaluationDate,
+    required this.evaluatedAt,
+    required this.items,
+    this.notes,
+    this.reportId,
+    this.sentAt,
+  });
+
+  final String id;
+  final EmployeeRefDto employee;
+  final UserRefDto evaluatedBy;
+  final DateTime evaluationDate;
+  /// وقت الحفظ.
+  final DateTime evaluatedAt;
+  /// بترتيب العناوين.
+  final List<ReviewerEvaluationItemDto> items;
+  final String? notes;
+  /// التقرير الذي أُرسل فيه إلى المدير التنفيذي، أو null قبل الإرسال.
+  final String? reportId;
+  final DateTime? sentAt;
+
+  factory ReviewerEvaluationDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationDto(
+        id: (json['id']) as String,
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        evaluatedBy: UserRefDto.fromJson((json['evaluatedBy']) as Map<String, dynamic>),
+        evaluationDate: hrDateFromJson((json['evaluationDate']) as String),
+        evaluatedAt: DateTime.parse((json['evaluatedAt']) as String),
+        items: ((json['items']) as List).map((e) => ReviewerEvaluationItemDto.fromJson((e) as Map<String, dynamic>)).toList(),
+        notes: json['notes'] == null ? null : (json['notes']) as String,
+        reportId: json['reportId'] == null ? null : (json['reportId']) as String,
+        sentAt: json['sentAt'] == null ? null : DateTime.parse((json['sentAt']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'employee': employee.toJson(),
+        'evaluatedBy': evaluatedBy.toJson(),
+        'evaluationDate': hrDateToJson(evaluationDate),
+        'evaluatedAt': hrDateTimeToJson(evaluatedAt),
+        'items': items.map((e) => e.toJson()).toList(),
+        'notes': notes == null ? null : notes!,
+        'reportId': reportId == null ? null : reportId!,
+        'sentAt': sentAt == null ? null : hrDateTimeToJson(sentAt!),
+      };
+}
+
+class ReviewerEvaluationPagedResultDto {
+  const ReviewerEvaluationPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ReviewerEvaluationDto> items;
+
+  factory ReviewerEvaluationPagedResultDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ReviewerEvaluationDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class ReviewerEvaluationReportCreateDto {
+  const ReviewerEvaluationReportCreateDto({
+    this.note,
+  });
+
+  final String? note;
+
+  factory ReviewerEvaluationReportCreateDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationReportCreateDto(
+        note: json['note'] == null ? null : (json['note']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (note != null) 'note': note!,
+      };
+}
+
+/// تقرير تقييمات أرسله المراجع إلى المدير التنفيذي. (قرار زينب 2026-11-11)
+class ReviewerEvaluationReportSummaryDto {
+  const ReviewerEvaluationReportSummaryDto({
+    required this.id,
+    required this.sentBy,
+    required this.sentAt,
+    this.note,
+    required this.evaluationsCount,
+    required this.firstEvaluationDate,
+    required this.lastEvaluationDate,
+  });
+
+  final String id;
+  final UserRefDto sentBy;
+  final DateTime sentAt;
+  final String? note;
+  final int evaluationsCount;
+  final DateTime firstEvaluationDate;
+  final DateTime lastEvaluationDate;
+
+  factory ReviewerEvaluationReportSummaryDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationReportSummaryDto(
+        id: (json['id']) as String,
+        sentBy: UserRefDto.fromJson((json['sentBy']) as Map<String, dynamic>),
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        evaluationsCount: ((json['evaluationsCount']) as num).toInt(),
+        firstEvaluationDate: hrDateFromJson((json['firstEvaluationDate']) as String),
+        lastEvaluationDate: hrDateFromJson((json['lastEvaluationDate']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'sentBy': sentBy.toJson(),
+        'sentAt': hrDateTimeToJson(sentAt),
+        'note': note == null ? null : note!,
+        'evaluationsCount': evaluationsCount,
+        'firstEvaluationDate': hrDateToJson(firstEvaluationDate),
+        'lastEvaluationDate': hrDateToJson(lastEvaluationDate),
+      };
+}
+
+/// التقرير بكل تقييماته.
+class ReviewerEvaluationReportDto {
+  const ReviewerEvaluationReportDto({
+    required this.id,
+    required this.sentBy,
+    required this.sentAt,
+    this.note,
+    required this.evaluationsCount,
+    required this.firstEvaluationDate,
+    required this.lastEvaluationDate,
+    required this.evaluations,
+  });
+
+  final String id;
+  final UserRefDto sentBy;
+  final DateTime sentAt;
+  final String? note;
+  final int evaluationsCount;
+  final DateTime firstEvaluationDate;
+  final DateTime lastEvaluationDate;
+  final List<ReviewerEvaluationDto> evaluations;
+
+  factory ReviewerEvaluationReportDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationReportDto(
+        id: (json['id']) as String,
+        sentBy: UserRefDto.fromJson((json['sentBy']) as Map<String, dynamic>),
+        sentAt: DateTime.parse((json['sentAt']) as String),
+        note: json['note'] == null ? null : (json['note']) as String,
+        evaluationsCount: ((json['evaluationsCount']) as num).toInt(),
+        firstEvaluationDate: hrDateFromJson((json['firstEvaluationDate']) as String),
+        lastEvaluationDate: hrDateFromJson((json['lastEvaluationDate']) as String),
+        evaluations: ((json['evaluations']) as List).map((e) => ReviewerEvaluationDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'sentBy': sentBy.toJson(),
+        'sentAt': hrDateTimeToJson(sentAt),
+        'note': note == null ? null : note!,
+        'evaluationsCount': evaluationsCount,
+        'firstEvaluationDate': hrDateToJson(firstEvaluationDate),
+        'lastEvaluationDate': hrDateToJson(lastEvaluationDate),
+        'evaluations': evaluations.map((e) => e.toJson()).toList(),
+      };
+}
+
+class ReviewerEvaluationReportPagedResultDto {
+  const ReviewerEvaluationReportPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<ReviewerEvaluationReportSummaryDto> items;
+
+  factory ReviewerEvaluationReportPagedResultDto.fromJson(Map<String, dynamic> json) => ReviewerEvaluationReportPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => ReviewerEvaluationReportSummaryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// موظف معدله في عنوان خلال دورة كان الحد أو أقل. للقراءة فقط ولا يراه الموظف. (قرار زينب 2026-11-11)
+class HrEvaluationAlertDto {
+  const HrEvaluationAlertDto({
+    required this.id,
+    required this.employee,
+    required this.criterionId,
+    required this.criterionName,
+    required this.averageScore,
+    required this.evaluationsCount,
+    required this.threshold,
+    required this.periodFrom,
+    required this.periodTo,
+    required this.creationTime,
+  });
+
+  final String id;
+  final EmployeeRefDto employee;
+  final String criterionId;
+  /// مترجم حسب Accept-Language.
+  final String criterionName;
+  /// مجموع درجات العنوان في الدورة ÷ عددها، مقربًا لمنزلتين.
+  final double averageScore;
+  final int evaluationsCount;
+  /// الحد الذي طُبق عند الحساب.
+  final double threshold;
+  final DateTime periodFrom;
+  final DateTime periodTo;
+  final DateTime creationTime;
+
+  factory HrEvaluationAlertDto.fromJson(Map<String, dynamic> json) => HrEvaluationAlertDto(
+        id: (json['id']) as String,
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        criterionId: (json['criterionId']) as String,
+        criterionName: (json['criterionName']) as String,
+        averageScore: ((json['averageScore']) as num).toDouble(),
+        evaluationsCount: ((json['evaluationsCount']) as num).toInt(),
+        threshold: ((json['threshold']) as num).toDouble(),
+        periodFrom: hrDateFromJson((json['periodFrom']) as String),
+        periodTo: hrDateFromJson((json['periodTo']) as String),
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'employee': employee.toJson(),
+        'criterionId': criterionId,
+        'criterionName': criterionName,
+        'averageScore': averageScore,
+        'evaluationsCount': evaluationsCount,
+        'threshold': threshold,
+        'periodFrom': hrDateToJson(periodFrom),
+        'periodTo': hrDateToJson(periodTo),
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+class HrEvaluationAlertPagedResultDto {
+  const HrEvaluationAlertPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<HrEvaluationAlertDto> items;
+
+  factory HrEvaluationAlertPagedResultDto.fromJson(Map<String, dynamic> json) => HrEvaluationAlertPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => HrEvaluationAlertDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
 /// active: ساري وخارج فترة التنبيه. pendingRecommendation: داخل فترة التنبيه وبانتظار توصية الموارد البشرية. pendingDecision: رُفعت التوصية وبانتظار القرار. renewed وnotRenewed: حالتان نهائيتان بعد القرار.
 enum ContractStatus {
   active('active'),
@@ -12830,6 +15623,7 @@ class ContractCreateInputDto {
     required this.startDate,
     required this.endDate,
     this.previousContractId,
+    this.attachments,
   });
 
   final String employeeId;
@@ -12840,14 +15634,8 @@ class ContractCreateInputDto {
   final DateTime endDate;
   /// العقد السابق عند إنشاء عقد التجديد. يجب أن تكون حالته renewed ولنفس الموظف.
   final String? previousContractId;
-
-  factory ContractCreateInputDto.fromJson(Map<String, dynamic> json) => ContractCreateInputDto(
-        employeeId: (json['employeeId']) as String,
-        contractType: (json['contractType']) as String,
-        startDate: hrDateFromJson((json['startDate']) as String),
-        endDate: hrDateFromJson((json['endDate']) as String),
-        previousContractId: json['previousContractId'] == null ? null : (json['previousContractId']) as String,
-      );
+  /// نسخة العقد الورقي ومستنداته. (قرار زينب 2026-11-10)
+  final List<MultipartFile>? attachments;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'employeeId': employeeId,
@@ -12856,6 +15644,21 @@ class ContractCreateInputDto {
         'endDate': hrDateToJson(endDate),
         if (previousContractId != null) 'previousContractId': previousContractId!,
       };
+
+  /// multipart/form-data body: null parts omitted, invariant numbers, ISO dates,
+  /// one part per file for arrays (x-server-requirements.multipart).
+  FormData toFormData() {
+    final form = FormData();
+    form.fields.add(MapEntry('employeeId', hrFormValue(employeeId)));
+    form.fields.add(MapEntry('contractType', hrFormValue(contractType)));
+    form.fields.add(MapEntry('startDate', hrFormValue(hrDateToJson(startDate))));
+    form.fields.add(MapEntry('endDate', hrFormValue(hrDateToJson(endDate))));
+    if (previousContractId != null) form.fields.add(MapEntry('previousContractId', hrFormValue(previousContractId!)));
+    if (attachments != null) for (final file in attachments!) {
+      form.files.add(MapEntry('attachments', file));
+    }
+    return form;
+  }
 }
 
 class ContractRecommendationDto {
@@ -12944,6 +15747,7 @@ class ContractDto {
     this.employeeNotifiedAt,
     required this.creationTime,
     this.lastModificationTime,
+    required this.attachments,
   });
 
   final String id;
@@ -12967,6 +15771,8 @@ class ContractDto {
   final DateTime? employeeNotifiedAt;
   final DateTime creationTime;
   final DateTime? lastModificationTime;
+  /// مرفقات العقد غير المحذوفة، الأقدم أولًا. (قرار زينب 2026-11-10)
+  final List<AttachmentDto> attachments;
 
   factory ContractDto.fromJson(Map<String, dynamic> json) => ContractDto(
         id: (json['id']) as String,
@@ -12985,6 +15791,7 @@ class ContractDto {
         employeeNotifiedAt: json['employeeNotifiedAt'] == null ? null : DateTime.parse((json['employeeNotifiedAt']) as String),
         creationTime: DateTime.parse((json['creationTime']) as String),
         lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+        attachments: ((json['attachments']) as List).map((e) => AttachmentDto.fromJson((e) as Map<String, dynamic>)).toList(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -13004,6 +15811,7 @@ class ContractDto {
         'employeeNotifiedAt': employeeNotifiedAt == null ? null : hrDateTimeToJson(employeeNotifiedAt!),
         'creationTime': hrDateTimeToJson(creationTime),
         'lastModificationTime': lastModificationTime == null ? null : hrDateTimeToJson(lastModificationTime!),
+        'attachments': attachments.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -13113,6 +15921,7 @@ class ContractEmployeeDto {
     required this.isExpired,
     this.employeeMessage,
     this.decidedAt,
+    required this.attachments,
   });
 
   final String id;
@@ -13123,6 +15932,8 @@ class ContractEmployeeDto {
   final bool isExpired;
   final String? employeeMessage;
   final DateTime? decidedAt;
+  /// نسخة العقد الورقي ومستنداته، غير المحذوفة، الأقدم أولًا. (قرار زينب 2026-11-10)
+  final List<AttachmentDto> attachments;
 
   factory ContractEmployeeDto.fromJson(Map<String, dynamic> json) => ContractEmployeeDto(
         id: (json['id']) as String,
@@ -13133,6 +15944,7 @@ class ContractEmployeeDto {
         isExpired: (json['isExpired']) as bool,
         employeeMessage: json['employeeMessage'] == null ? null : (json['employeeMessage']) as String,
         decidedAt: json['decidedAt'] == null ? null : DateTime.parse((json['decidedAt']) as String),
+        attachments: ((json['attachments']) as List).map((e) => AttachmentDto.fromJson((e) as Map<String, dynamic>)).toList(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -13144,6 +15956,7 @@ class ContractEmployeeDto {
         'isExpired': isExpired,
         'employeeMessage': employeeMessage == null ? null : employeeMessage!,
         'decidedAt': decidedAt == null ? null : hrDateTimeToJson(decidedAt!),
+        'attachments': attachments.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -14070,6 +16883,110 @@ class SalaryProfileDto {
       };
 }
 
+/// سطر في صفحة رواتب الموظفين للمدير التنفيذي. الراتب الأساسي فقط. (قرار زينب 2026-11-11)
+class EmployeeSalaryOverviewDto {
+  const EmployeeSalaryOverviewDto({
+    required this.employee,
+    this.baseSalary,
+    this.currency,
+    this.effectiveFrom,
+  });
+
+  final EmployeeRefDto employee;
+  /// null عندما لا توجد بيانات مالية سارية اليوم.
+  final double? baseSalary;
+  final String? currency;
+  final DateTime? effectiveFrom;
+
+  factory EmployeeSalaryOverviewDto.fromJson(Map<String, dynamic> json) => EmployeeSalaryOverviewDto(
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        baseSalary: json['baseSalary'] == null ? null : ((json['baseSalary']) as num).toDouble(),
+        currency: json['currency'] == null ? null : (json['currency']) as String,
+        effectiveFrom: json['effectiveFrom'] == null ? null : hrDateFromJson((json['effectiveFrom']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employee': employee.toJson(),
+        'baseSalary': baseSalary == null ? null : baseSalary!,
+        'currency': currency == null ? null : currency!,
+        'effectiveFrom': effectiveFrom == null ? null : hrDateToJson(effectiveFrom!),
+      };
+}
+
+class EmployeeSalaryOverviewPagedResultDto {
+  const EmployeeSalaryOverviewPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<EmployeeSalaryOverviewDto> items;
+
+  factory EmployeeSalaryOverviewPagedResultDto.fromJson(Map<String, dynamic> json) => EmployeeSalaryOverviewPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => EmployeeSalaryOverviewDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// سطر في صفحة عقود الموظفين للمدير التنفيذي. تفاصيل العقد الحالي فقط. (قرار زينب 2026-11-11)
+class EmployeeContractOverviewDto {
+  const EmployeeContractOverviewDto({
+    required this.employee,
+    this.contractType,
+    this.startDate,
+    this.endDate,
+    this.status,
+  });
+
+  final EmployeeRefDto employee;
+  /// null عندما لا يوجد عقد للموظف.
+  final String? contractType;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final ContractStatus? status;
+
+  factory EmployeeContractOverviewDto.fromJson(Map<String, dynamic> json) => EmployeeContractOverviewDto(
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        contractType: json['contractType'] == null ? null : (json['contractType']) as String,
+        startDate: json['startDate'] == null ? null : hrDateFromJson((json['startDate']) as String),
+        endDate: json['endDate'] == null ? null : hrDateFromJson((json['endDate']) as String),
+        status: json['status'] == null ? null : ContractStatus.fromJson(json['status']),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employee': employee.toJson(),
+        'contractType': contractType == null ? null : contractType!,
+        'startDate': startDate == null ? null : hrDateToJson(startDate!),
+        'endDate': endDate == null ? null : hrDateToJson(endDate!),
+        'status': status == null ? null : status!.toJson(),
+      };
+}
+
+class EmployeeContractOverviewPagedResultDto {
+  const EmployeeContractOverviewPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<EmployeeContractOverviewDto> items;
+
+  factory EmployeeContractOverviewPagedResultDto.fromJson(Map<String, dynamic> json) => EmployeeContractOverviewPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => EmployeeContractOverviewDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
 class SalaryProfilePagedResultDto {
   const SalaryProfilePagedResultDto({
     required this.totalCount,
@@ -14659,6 +17576,8 @@ class PayrollLineDto {
 
 class PayrollItemDto {
   const PayrollItemDto({
+    this.deliveredOn,
+    this.deliveredBy,
     required this.id,
     required this.employee,
     required this.currency,
@@ -14669,6 +17588,10 @@ class PayrollItemDto {
     required this.lines,
   });
 
+  /// تاريخ تسليم الراتب، null لم يُسلَّم (قرار زينب 2026-11-11).
+  final DateTime? deliveredOn;
+  /// من سلّم.
+  final UserRefDto? deliveredBy;
   final String id;
   final EmployeeRefDto employee;
   /// ISO 4217.
@@ -14684,6 +17607,8 @@ class PayrollItemDto {
   final List<PayrollLineDto> lines;
 
   factory PayrollItemDto.fromJson(Map<String, dynamic> json) => PayrollItemDto(
+        deliveredOn: json['deliveredOn'] == null ? null : hrDateFromJson((json['deliveredOn']) as String),
+        deliveredBy: json['deliveredBy'] == null ? null : UserRefDto.fromJson((json['deliveredBy']) as Map<String, dynamic>),
         id: (json['id']) as String,
         employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
         currency: (json['currency']) as String,
@@ -14695,6 +17620,8 @@ class PayrollItemDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'deliveredOn': deliveredOn == null ? null : hrDateToJson(deliveredOn!),
+        'deliveredBy': deliveredBy == null ? null : deliveredBy!.toJson(),
         'id': id,
         'employee': employee.toJson(),
         'currency': currency,
@@ -14741,6 +17668,7 @@ class PayrollTotalDto {
 
 class PayrollRunSummaryDto {
   const PayrollRunSummaryDto({
+    required this.deliveredCount,
     required this.id,
     required this.period,
     required this.status,
@@ -14756,6 +17684,8 @@ class PayrollRunSummaryDto {
     required this.concurrencyStamp,
   });
 
+  /// عدد الموظفين المسلَّم لهم راتب هذا الكشف.
+  final int deliveredCount;
   final String id;
   final String period;
   final PayrollRunStatus status;
@@ -14773,6 +17703,7 @@ class PayrollRunSummaryDto {
   final String concurrencyStamp;
 
   factory PayrollRunSummaryDto.fromJson(Map<String, dynamic> json) => PayrollRunSummaryDto(
+        deliveredCount: ((json['deliveredCount']) as num).toInt(),
         id: (json['id']) as String,
         period: (json['period']) as String,
         status: PayrollRunStatus.fromJson(json['status']),
@@ -14789,6 +17720,7 @@ class PayrollRunSummaryDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'deliveredCount': deliveredCount,
         'id': id,
         'period': period,
         'status': status.toJson(),
@@ -14827,6 +17759,7 @@ class PayrollRunSummaryPagedResultDto {
 
 class PayrollRunDto {
   const PayrollRunDto({
+    required this.deliveredCount,
     required this.id,
     required this.period,
     required this.status,
@@ -14845,6 +17778,8 @@ class PayrollRunDto {
     required this.concurrencyStamp,
   });
 
+  /// عدد الموظفين المسلَّم لهم راتب هذا الكشف (قرار زينب 2026-11-11).
+  final int deliveredCount;
   final String id;
   final String period;
   final PayrollRunStatus status;
@@ -14867,6 +17802,7 @@ class PayrollRunDto {
   final String concurrencyStamp;
 
   factory PayrollRunDto.fromJson(Map<String, dynamic> json) => PayrollRunDto(
+        deliveredCount: ((json['deliveredCount']) as num).toInt(),
         id: (json['id']) as String,
         period: (json['period']) as String,
         status: PayrollRunStatus.fromJson(json['status']),
@@ -14886,6 +17822,7 @@ class PayrollRunDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'deliveredCount': deliveredCount,
         'id': id,
         'period': period,
         'status': status.toJson(),
@@ -14944,6 +17881,7 @@ class PayrollRunActionInputDto {
 
 class PayslipSummaryDto {
   const PayslipSummaryDto({
+    this.deliveredOn,
     required this.id,
     required this.period,
     required this.currency,
@@ -14954,6 +17892,8 @@ class PayslipSummaryDto {
     required this.closedAt,
   });
 
+  /// تاريخ تسليم الراتب، null لم يُسلَّم (قرار زينب 2026-11-11).
+  final DateTime? deliveredOn;
   final String id;
   final String period;
   /// ISO 4217.
@@ -14965,6 +17905,7 @@ class PayslipSummaryDto {
   final DateTime closedAt;
 
   factory PayslipSummaryDto.fromJson(Map<String, dynamic> json) => PayslipSummaryDto(
+        deliveredOn: json['deliveredOn'] == null ? null : hrDateFromJson((json['deliveredOn']) as String),
         id: (json['id']) as String,
         period: (json['period']) as String,
         currency: (json['currency']) as String,
@@ -14976,6 +17917,7 @@ class PayslipSummaryDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'deliveredOn': deliveredOn == null ? null : hrDateToJson(deliveredOn!),
         'id': id,
         'period': period,
         'currency': currency,
@@ -15009,6 +17951,7 @@ class PayslipSummaryPagedResultDto {
 
 class PayslipDto {
   const PayslipDto({
+    this.deliveredOn,
     required this.id,
     required this.employee,
     required this.period,
@@ -15021,6 +17964,8 @@ class PayslipDto {
     required this.closedAt,
   });
 
+  /// تاريخ تسليم الراتب، null لم يُسلَّم (قرار زينب 2026-11-11).
+  final DateTime? deliveredOn;
   final String id;
   final EmployeeRefDto employee;
   final String period;
@@ -15034,6 +17979,7 @@ class PayslipDto {
   final DateTime closedAt;
 
   factory PayslipDto.fromJson(Map<String, dynamic> json) => PayslipDto(
+        deliveredOn: json['deliveredOn'] == null ? null : hrDateFromJson((json['deliveredOn']) as String),
         id: (json['id']) as String,
         employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
         period: (json['period']) as String,
@@ -15047,6 +17993,7 @@ class PayslipDto {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        'deliveredOn': deliveredOn == null ? null : hrDateToJson(deliveredOn!),
         'id': id,
         'employee': employee.toJson(),
         'period': period,
@@ -15060,8 +18007,546 @@ class PayslipDto {
       };
 }
 
+/// تأشير تسليم رواتب كشف مغلق.
+class PayrollDeliveryInputDto {
+  const PayrollDeliveryInputDto({
+    this.employeeIds,
+    required this.deliveredOn,
+  });
+
+  /// موظفو الكشف المسلَّم لهم. null أو فارغ = كل من لم يُسلَّم بعد.
+  final List<String>? employeeIds;
+  /// تاريخ التسليم، مو بالمستقبل.
+  final DateTime deliveredOn;
+
+  factory PayrollDeliveryInputDto.fromJson(Map<String, dynamic> json) => PayrollDeliveryInputDto(
+        employeeIds: json['employeeIds'] == null ? null : ((json['employeeIds']) as List).map((e) => (e) as String).toList(),
+        deliveredOn: hrDateFromJson((json['deliveredOn']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (employeeIds != null) 'employeeIds': employeeIds!,
+        'deliveredOn': hrDateToJson(deliveredOn),
+      };
+}
+
+/// إلغاء تأشير التسليم لتصحيح خطأ.
+class PayrollUndoDeliveryInputDto {
+  const PayrollUndoDeliveryInputDto({
+    required this.employeeIds,
+    required this.reason,
+  });
+
+  final List<String> employeeIds;
+  /// السبب.
+  final String reason;
+
+  factory PayrollUndoDeliveryInputDto.fromJson(Map<String, dynamic> json) => PayrollUndoDeliveryInputDto(
+        employeeIds: ((json['employeeIds']) as List).map((e) => (e) as String).toList(),
+        reason: (json['reason']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employeeIds': employeeIds,
+        'reason': reason,
+      };
+}
+
+/// نوع نثرية (طعام، نقل...). لا يُحذف، يُعطَّل.
+class PettyCashTypeDto {
+  const PettyCashTypeDto({
+    required this.id,
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+    required this.creationTime,
+  });
+
+  /// المعرف.
+  final String id;
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  /// غير المفعل لا يُسند لموظف جديد.
+  final bool isActive;
+  /// يُعاد إرساله في التعديل.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory PettyCashTypeDto.fromJson(Map<String, dynamic> json) => PettyCashTypeDto(
+        id: (json['id']) as String,
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من PettyCashTypeDto.
+class PettyCashTypePagedResultDto {
+  const PettyCashTypePagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<PettyCashTypeDto> items;
+
+  factory PettyCashTypePagedResultDto.fromJson(Map<String, dynamic> json) => PettyCashTypePagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => PettyCashTypeDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PettyCashTypeCreateInputDto {
+  const PettyCashTypeCreateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+
+  factory PettyCashTypeCreateInputDto.fromJson(Map<String, dynamic> json) => PettyCashTypeCreateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+      };
+}
+
+class PettyCashTypeUpdateInputDto {
+  const PettyCashTypeUpdateInputDto({
+    required this.nameAr,
+    required this.nameEn,
+    required this.isActive,
+    required this.concurrencyStamp,
+  });
+
+  /// الاسم بالعربية.
+  final String nameAr;
+  /// الاسم بالإنجليزية.
+  final String nameEn;
+  final bool isActive;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory PettyCashTypeUpdateInputDto.fromJson(Map<String, dynamic> json) => PettyCashTypeUpdateInputDto(
+        nameAr: (json['nameAr']) as String,
+        nameEn: (json['nameEn']) as String,
+        isActive: (json['isActive']) as bool,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'isActive': isActive,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class PettyCashTypeRefDto {
+  const PettyCashTypeRefDto({
+    required this.id,
+    required this.name,
+  });
+
+  /// المعرف.
+  final String id;
+  /// الاسم حسب Accept-Language.
+  final String name;
+
+  factory PettyCashTypeRefDto.fromJson(Map<String, dynamic> json) => PettyCashTypeRefDto(
+        id: (json['id']) as String,
+        name: (json['name']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
+/// نثرية شهرية ثابتة لموظف من شهر، تتكرر كل شهر لحد toPeriod.
+class PettyCashAssignmentDto {
+  const PettyCashAssignmentDto({
+    required this.id,
+    required this.employee,
+    required this.type,
+    required this.amount,
+    required this.currency,
+    required this.fromPeriod,
+    this.toPeriod,
+    this.note,
+    required this.concurrencyStamp,
+    required this.creationTime,
+  });
+
+  /// المعرف.
+  final String id;
+  final EmployeeRefDto employee;
+  final PettyCashTypeRefDto type;
+  /// المبلغ الشهري.
+  final double amount;
+  /// عملة الشركة الافتراضية.
+  final String currency;
+  /// أول شهر YYYY-MM.
+  final String fromPeriod;
+  /// آخر شهر YYYY-MM، null = مستمرة.
+  final String? toPeriod;
+  /// ملاحظة.
+  final String? note;
+  /// يُعاد إرساله في التعديل.
+  final String concurrencyStamp;
+  /// وقت الإنشاء UTC.
+  final DateTime creationTime;
+
+  factory PettyCashAssignmentDto.fromJson(Map<String, dynamic> json) => PettyCashAssignmentDto(
+        id: (json['id']) as String,
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        type: PettyCashTypeRefDto.fromJson((json['type']) as Map<String, dynamic>),
+        amount: ((json['amount']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        fromPeriod: (json['fromPeriod']) as String,
+        toPeriod: json['toPeriod'] == null ? null : (json['toPeriod']) as String,
+        note: json['note'] == null ? null : (json['note']) as String,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        creationTime: DateTime.parse((json['creationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'employee': employee.toJson(),
+        'type': type.toJson(),
+        'amount': amount,
+        'currency': currency,
+        'fromPeriod': fromPeriod,
+        'toPeriod': toPeriod == null ? null : toPeriod!,
+        'note': note == null ? null : note!,
+        'concurrencyStamp': concurrencyStamp,
+        'creationTime': hrDateTimeToJson(creationTime),
+      };
+}
+
+/// صفحة من PettyCashAssignmentDto.
+class PettyCashAssignmentPagedResultDto {
+  const PettyCashAssignmentPagedResultDto({
+    required this.totalCount,
+    required this.items,
+  });
+
+  final int totalCount;
+  final List<PettyCashAssignmentDto> items;
+
+  factory PettyCashAssignmentPagedResultDto.fromJson(Map<String, dynamic> json) => PettyCashAssignmentPagedResultDto(
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => PettyCashAssignmentDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PettyCashAssignmentCreateInputDto {
+  const PettyCashAssignmentCreateInputDto({
+    required this.employeeId,
+    required this.typeId,
+    required this.amount,
+    required this.fromPeriod,
+    this.toPeriod,
+    this.note,
+  });
+
+  /// الموظف، غير المحاسب نفسه.
+  final String employeeId;
+  /// نوع مفعل.
+  final String typeId;
+  /// المبلغ الشهري.
+  final double amount;
+  /// أول شهر.
+  final String fromPeriod;
+  /// آخر شهر، اختياري.
+  final String? toPeriod;
+  /// ملاحظة.
+  final String? note;
+
+  factory PettyCashAssignmentCreateInputDto.fromJson(Map<String, dynamic> json) => PettyCashAssignmentCreateInputDto(
+        employeeId: (json['employeeId']) as String,
+        typeId: (json['typeId']) as String,
+        amount: ((json['amount']) as num).toDouble(),
+        fromPeriod: (json['fromPeriod']) as String,
+        toPeriod: json['toPeriod'] == null ? null : (json['toPeriod']) as String,
+        note: json['note'] == null ? null : (json['note']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'employeeId': employeeId,
+        'typeId': typeId,
+        'amount': amount,
+        'fromPeriod': fromPeriod,
+        if (toPeriod != null) 'toPeriod': toPeriod!,
+        if (note != null) 'note': note!,
+      };
+}
+
+/// تعديل المبلغ ينطبق على الأشهر اللي ما انسلّمت بعد. إيقافها بتحديد toPeriod.
+class PettyCashAssignmentUpdateInputDto {
+  const PettyCashAssignmentUpdateInputDto({
+    required this.amount,
+    this.toPeriod,
+    this.note,
+    required this.concurrencyStamp,
+  });
+
+  /// المبلغ الشهري.
+  final double amount;
+  /// آخر شهر، null = مستمرة.
+  final String? toPeriod;
+  /// ملاحظة.
+  final String? note;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory PettyCashAssignmentUpdateInputDto.fromJson(Map<String, dynamic> json) => PettyCashAssignmentUpdateInputDto(
+        amount: ((json['amount']) as num).toDouble(),
+        toPeriod: json['toPeriod'] == null ? null : (json['toPeriod']) as String,
+        note: json['note'] == null ? null : (json['note']) as String,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'amount': amount,
+        if (toPeriod != null) 'toPeriod': toPeriod!,
+        if (note != null) 'note': note!,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// pending: لم تُسلَّم. delivered: سُلّمت ونشأ مصروف بتصنيف نثرية.
+enum PettyCashEntryStatus {
+  pending('pending'),
+  delivered('delivered'),
+
+  /// A value this client does not know yet (newer server).
+  $unknown('');
+
+  const PettyCashEntryStatus(this.value);
+  final String value;
+
+  static PettyCashEntryStatus fromJson(Object? json) {
+    for (final v in PettyCashEntryStatus.values) {
+      if (v.value == json) return v;
+    }
+    return PettyCashEntryStatus.$unknown;
+  }
+
+  String toJson() => value;
+}
+
+/// نثرية موظف لشهر واحد.
+class PettyCashEntryDto {
+  const PettyCashEntryDto({
+    required this.id,
+    required this.assignmentId,
+    required this.employee,
+    required this.type,
+    required this.period,
+    required this.amount,
+    required this.currency,
+    required this.status,
+    this.deliveredOn,
+    this.deliveredBy,
+    this.expenseId,
+    required this.concurrencyStamp,
+  });
+
+  /// المعرف.
+  final String id;
+  /// النثرية الشهرية.
+  final String assignmentId;
+  final EmployeeRefDto employee;
+  final PettyCashTypeRefDto type;
+  /// الشهر.
+  final String period;
+  /// مبلغ هذا الشهر.
+  final double amount;
+  /// العملة.
+  final String currency;
+  final PettyCashEntryStatus status;
+  /// تاريخ التسليم.
+  final DateTime? deliveredOn;
+  /// من سلّم.
+  final UserRefDto? deliveredBy;
+  /// المصروف المنشأ عند التسليم.
+  final String? expenseId;
+  /// يُعاد إرساله في التعديل.
+  final String concurrencyStamp;
+
+  factory PettyCashEntryDto.fromJson(Map<String, dynamic> json) => PettyCashEntryDto(
+        id: (json['id']) as String,
+        assignmentId: (json['assignmentId']) as String,
+        employee: EmployeeRefDto.fromJson((json['employee']) as Map<String, dynamic>),
+        type: PettyCashTypeRefDto.fromJson((json['type']) as Map<String, dynamic>),
+        period: (json['period']) as String,
+        amount: ((json['amount']) as num).toDouble(),
+        currency: (json['currency']) as String,
+        status: PettyCashEntryStatus.fromJson(json['status']),
+        deliveredOn: json['deliveredOn'] == null ? null : hrDateFromJson((json['deliveredOn']) as String),
+        deliveredBy: json['deliveredBy'] == null ? null : UserRefDto.fromJson((json['deliveredBy']) as Map<String, dynamic>),
+        expenseId: json['expenseId'] == null ? null : (json['expenseId']) as String,
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'assignmentId': assignmentId,
+        'employee': employee.toJson(),
+        'type': type.toJson(),
+        'period': period,
+        'amount': amount,
+        'currency': currency,
+        'status': status.toJson(),
+        'deliveredOn': deliveredOn == null ? null : hrDateToJson(deliveredOn!),
+        'deliveredBy': deliveredBy == null ? null : deliveredBy!.toJson(),
+        'expenseId': expenseId == null ? null : expenseId!,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// نثريات شهر: تُنشأ تلقائيًا من النثريات الشهرية السارية عند أول قراءة للشهر. المجاميع للشهر كله.
+class PettyCashMonthDto {
+  const PettyCashMonthDto({
+    required this.period,
+    required this.currency,
+    required this.totalAmount,
+    required this.deliveredAmount,
+    required this.pendingAmount,
+    required this.totalCount,
+    required this.items,
+  });
+
+  /// الشهر.
+  final String period;
+  /// العملة.
+  final String currency;
+  /// المجموع.
+  final double totalAmount;
+  /// المسلَّم.
+  final double deliveredAmount;
+  /// غير المسلَّم.
+  final double pendingAmount;
+  final int totalCount;
+  final List<PettyCashEntryDto> items;
+
+  factory PettyCashMonthDto.fromJson(Map<String, dynamic> json) => PettyCashMonthDto(
+        period: (json['period']) as String,
+        currency: (json['currency']) as String,
+        totalAmount: ((json['totalAmount']) as num).toDouble(),
+        deliveredAmount: ((json['deliveredAmount']) as num).toDouble(),
+        pendingAmount: ((json['pendingAmount']) as num).toDouble(),
+        totalCount: ((json['totalCount']) as num).toInt(),
+        items: ((json['items']) as List).map((e) => PettyCashEntryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'period': period,
+        'currency': currency,
+        'totalAmount': totalAmount,
+        'deliveredAmount': deliveredAmount,
+        'pendingAmount': pendingAmount,
+        'totalCount': totalCount,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PettyCashEntryUpdateInputDto {
+  const PettyCashEntryUpdateInputDto({
+    required this.amount,
+    required this.concurrencyStamp,
+  });
+
+  /// مبلغ هذا الشهر.
+  final double amount;
+  /// آخر قيمة مقروءة.
+  final String concurrencyStamp;
+
+  factory PettyCashEntryUpdateInputDto.fromJson(Map<String, dynamic> json) => PettyCashEntryUpdateInputDto(
+        amount: ((json['amount']) as num).toDouble(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'amount': amount,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+class PettyCashDeliveryInputDto {
+  const PettyCashDeliveryInputDto({
+    required this.entryIds,
+    required this.deliveredOn,
+  });
+
+  final List<String> entryIds;
+  /// تاريخ التسليم، مو بالمستقبل.
+  final DateTime deliveredOn;
+
+  factory PettyCashDeliveryInputDto.fromJson(Map<String, dynamic> json) => PettyCashDeliveryInputDto(
+        entryIds: ((json['entryIds']) as List).map((e) => (e) as String).toList(),
+        deliveredOn: hrDateFromJson((json['deliveredOn']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'entryIds': entryIds,
+        'deliveredOn': hrDateToJson(deliveredOn),
+      };
+}
+
+class PettyCashEntryListDto {
+  const PettyCashEntryListDto({
+    required this.items,
+  });
+
+  final List<PettyCashEntryDto> items;
+
+  factory PettyCashEntryListDto.fromJson(Map<String, dynamic> json) => PettyCashEntryListDto(
+        items: ((json['items']) as List).map((e) => PettyCashEntryDto.fromJson((e) as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
 enum ExpenseSource {
   general('general'),
+  pettyCash('pettyCash'),
   storePurchase('storePurchase'),
 
   /// A value this client does not know yet (newer server).
@@ -15594,6 +19079,10 @@ enum NotificationTemplateCode {
   custodyReturned('custodyReturned'),
   custodyCountDifference('custodyCountDifference'),
   reviewReportSubmitted('reviewReportSubmitted'),
+  noticeReceived('noticeReceived'),
+  hrEvaluationReportSent('hrEvaluationReportSent'),
+  hrEvaluationLowAverage('hrEvaluationLowAverage'),
+  reviewerEvaluationReportSent('reviewerEvaluationReportSent'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -15629,6 +19118,10 @@ enum NotificationResourceType {
   none('none'),
   secureItem('secureItem'),
   reviewReport('reviewReport'),
+  notice('notice'),
+  hrEvaluationReport('hrEvaluationReport'),
+  hrEvaluationAlert('hrEvaluationAlert'),
+  reviewerEvaluationReport('reviewerEvaluationReport'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -15842,11 +19335,12 @@ enum SystemSettingsSectionCode {
   requestTypes('requestTypes'),
   otherLeaveTypes('otherLeaveTypes'),
   attendanceDevices('attendanceDevices'),
-  evaluationCriteria('evaluationCriteria'),
   employeeLeaveBalances('employeeLeaveBalances'),
   workShifts('workShifts'),
   holidays('holidays'),
   departmentsAndManagerLinks('departmentsAndManagerLinks'),
+  annualLeave('annualLeave'),
+  hrEvaluationAlert('hrEvaluationAlert'),
 
   /// A value this client does not know yet (newer server).
   $unknown('');
@@ -16155,6 +19649,116 @@ class SystemSettingsHourlyLeaveUpdateInputDto {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'monthlyAllowedHours': monthlyAllowedHours,
         'hoursPerDay': hoursPerDay,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// العدد الافتراضي لأيام الإجازة السنوية لكل موظف. (قرار زينب 2026-11-10)
+class SystemSettingsAnnualLeaveDto {
+  const SystemSettingsAnnualLeaveDto({
+    required this.defaultEntitlementDays,
+    required this.concurrencyStamp,
+    this.lastModificationTime,
+  });
+
+  /// أيام الإجازة السنوية لكل سنة موظف. القيمة الأولى 24.
+  final double defaultEntitlementDays;
+  final String concurrencyStamp;
+  final DateTime? lastModificationTime;
+
+  factory SystemSettingsAnnualLeaveDto.fromJson(Map<String, dynamic> json) => SystemSettingsAnnualLeaveDto(
+        defaultEntitlementDays: ((json['defaultEntitlementDays']) as num).toDouble(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'defaultEntitlementDays': defaultEntitlementDays,
+        'concurrencyStamp': concurrencyStamp,
+        'lastModificationTime': lastModificationTime == null ? null : hrDateTimeToJson(lastModificationTime!),
+      };
+}
+
+class SystemSettingsAnnualLeaveUpdateInputDto {
+  const SystemSettingsAnnualLeaveUpdateInputDto({
+    required this.defaultEntitlementDays,
+    required this.concurrencyStamp,
+  });
+
+  final double defaultEntitlementDays;
+  final String concurrencyStamp;
+
+  factory SystemSettingsAnnualLeaveUpdateInputDto.fromJson(Map<String, dynamic> json) => SystemSettingsAnnualLeaveUpdateInputDto(
+        defaultEntitlementDays: ((json['defaultEntitlementDays']) as num).toDouble(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'defaultEntitlementDays': defaultEntitlementDays,
+        'concurrencyStamp': concurrencyStamp,
+      };
+}
+
+/// إعداد تنبيه المعدل المنخفض لتقييم الموارد البشرية. (قرار زينب 2026-11-11)
+class SystemSettingsHrEvaluationAlertDto {
+  const SystemSettingsHrEvaluationAlertDto({
+    required this.threshold,
+    required this.windowWeeks,
+    required this.minEvaluations,
+    required this.concurrencyStamp,
+    this.lastModificationTime,
+  });
+
+  /// يُنبَّه إذا كان المعدل هذه القيمة أو أقل. القيمة الأولى 7.
+  final double threshold;
+  /// طول الدورة بالأسابيع. القيمة الأولى 4.
+  final int windowWeeks;
+  /// أقل عدد تقييمات للموظف في الدورة حتى يُحسب معدله. القيمة الأولى 4.
+  final int minEvaluations;
+  final String concurrencyStamp;
+  final DateTime? lastModificationTime;
+
+  factory SystemSettingsHrEvaluationAlertDto.fromJson(Map<String, dynamic> json) => SystemSettingsHrEvaluationAlertDto(
+        threshold: ((json['threshold']) as num).toDouble(),
+        windowWeeks: ((json['windowWeeks']) as num).toInt(),
+        minEvaluations: ((json['minEvaluations']) as num).toInt(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+        lastModificationTime: json['lastModificationTime'] == null ? null : DateTime.parse((json['lastModificationTime']) as String),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'threshold': threshold,
+        'windowWeeks': windowWeeks,
+        'minEvaluations': minEvaluations,
+        'concurrencyStamp': concurrencyStamp,
+        'lastModificationTime': lastModificationTime == null ? null : hrDateTimeToJson(lastModificationTime!),
+      };
+}
+
+class SystemSettingsHrEvaluationAlertUpdateInputDto {
+  const SystemSettingsHrEvaluationAlertUpdateInputDto({
+    required this.threshold,
+    required this.windowWeeks,
+    required this.minEvaluations,
+    required this.concurrencyStamp,
+  });
+
+  final double threshold;
+  final int windowWeeks;
+  final int minEvaluations;
+  final String concurrencyStamp;
+
+  factory SystemSettingsHrEvaluationAlertUpdateInputDto.fromJson(Map<String, dynamic> json) => SystemSettingsHrEvaluationAlertUpdateInputDto(
+        threshold: ((json['threshold']) as num).toDouble(),
+        windowWeeks: ((json['windowWeeks']) as num).toInt(),
+        minEvaluations: ((json['minEvaluations']) as num).toInt(),
+        concurrencyStamp: (json['concurrencyStamp']) as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'threshold': threshold,
+        'windowWeeks': windowWeeks,
+        'minEvaluations': minEvaluations,
         'concurrencyStamp': concurrencyStamp,
       };
 }

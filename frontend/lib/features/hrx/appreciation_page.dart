@@ -29,6 +29,7 @@ class AppreciationTile extends ConsumerWidget {
     final api = ref.read(hrApiProvider).appreciationLetters;
     return OpsTile(
       leading: Icons.workspace_premium_outlined,
+      avatar: mine ? null : PersonAvatar.employee(l.employee),
       title: mine ? l.title : '${l.employee.fullName} · ${l.title}',
       subtitle: [l.issuedBy.displayName, f.date(l.issuedAt), if (l.note != null) l.note!].join(' · '),
       trailing: StatusPill(l.isAcknowledged ? s.t('مستلم', 'Acknowledged') : s.t('بانتظار الاستلام', 'Not acknowledged'),

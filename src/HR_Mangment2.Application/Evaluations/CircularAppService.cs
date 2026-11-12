@@ -188,10 +188,29 @@ public class CircularAppService : HR_Mangment2AppService, ICircularAppService
         }
     }
 
-    /// <summary>Fixed now: someone who joins later never sees this circular. The sender does not receive their own.</summary>
+    /// <summary>
+    /// Fixed now: someone who joins later never sees this circular. The sender does not receive their own. A system
+    /// admin with no business role is not a company employee and receives none; with a business role they do
+    /// (decision 2026-11-10).
+    /// </summary>
     private async Task<List<Employee>> ResolveRecipientsAsync(Guid senderUserId, CircularScope scope)
     {
-        var query = (await _employees.GetQueryableAsync()).Where(x => x.UserId != null && x.UserId != senderUserId && x.Status == EmployeeStatus.Active);
+        // System admins, accountants and store officers with no other business role receive none (decisions of
+        // 2026-11-10 and 2026-11-11).
+        var excluded = new List<Guid>();
+        foreach (var roleName in new[] { HrRoles.SystemAdmin, HrRoles.Accountant, HrRoles.StoreOfficer })
+        {
+            foreach (var user in await _userManager.GetUsersInRoleAsync(roleName))
+            {
+                if (!excluded.Contains(user.Id) && AccountProvisioner.ReceivesNoCirculars((await _userManager.GetRolesAsync(user)).ToList()))
+                {
+                    excluded.Add(user.Id);
+                }
+            }
+        }
+
+        var query = (await _employees.GetQueryableAsync()).Where(x =>
+            x.UserId != null && x.UserId != senderUserId && x.Status == EmployeeStatus.Active && !excluded.Contains(x.UserId!.Value));
 
         switch (scope)
         {

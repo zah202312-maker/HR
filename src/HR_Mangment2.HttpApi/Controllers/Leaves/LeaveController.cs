@@ -27,9 +27,6 @@ public class LeaveBalanceController : HR_Mangment2Controller
     [HttpGet("leave-balance/employee/{id:guid}", Name = "LeaveBalance_GetByEmployee")]
     public Task<LeaveBalanceDto> GetByEmployeeAsync(Guid id) => _service.GetByEmployeeAsync(id);
 
-    [HttpPut("leave-balance/employee/{id:guid}/entitlement", Name = "LeaveBalance_SetEntitlement")]
-    public Task<LeaveBalanceDto> SetEntitlementAsync(Guid id, [FromBody] LeaveEntitlementUpdateDto input) => _service.SetEntitlementAsync(id, input);
-
     [HttpPost("leave-balance/employee/{id:guid}/adjust", Name = "LeaveBalance_Adjust")]
     public Task<LeaveBalanceDto> AdjustAsync(
         Guid id,

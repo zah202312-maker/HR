@@ -58,7 +58,7 @@ public class StoreModuleTests
     {
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var item = await OkAsync(
-            await officer.PostAsJsonAsync("/api/app/item", new { nameAr = "صنف " + suffix, nameEn = "Item " + suffix, kind, minQuantity = min }),
+            await officer.PostAsJsonAsync("/api/app/item", await StoreTestKit.ItemBodyAsync(officer, "صنف " + suffix, "Item " + suffix, kind, min)),
             HttpStatusCode.Created);
 
         if (stock > 0)
@@ -131,10 +131,10 @@ public class StoreModuleTests
         item.GetProperty("isBelowMinimum").GetBoolean().ShouldBeTrue();
 
         await ShouldFailWithAsync(
-            await team.Officer.PostAsJsonAsync("/api/app/item", new { nameAr = Text(item, "nameAr"), nameEn = "Other " + Guid.NewGuid(), kind = "returnable", minQuantity = 0 }),
+            await team.Officer.PostAsJsonAsync("/api/app/item", await StoreTestKit.ItemBodyAsync(team.Officer, Text(item, "nameAr"), "Other " + Guid.NewGuid(), "returnable", 0)),
             HrErrorCodes.Item.NameAlreadyExists);
 
-        (await team.Officer.PutAsJsonAsync(url, new { nameAr = "س " + Guid.NewGuid(), nameEn = "S " + Guid.NewGuid(), kind = "returnable", minQuantity = 0, isActive = true, concurrencyStamp = "stale" }))
+        (await team.Officer.PutAsJsonAsync(url, new { nameAr = "س " + Guid.NewGuid(), nameEn = "S " + Guid.NewGuid(), sku = Text(item, "sku"), categoryId = item.GetProperty("category").GetProperty("id").GetGuid(), unitId = item.GetProperty("unit").GetProperty("id").GetGuid(), kind = "returnable", minQuantity = 0, isActive = true, concurrencyStamp = "stale" }))
             .StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
         // The kind can still change before the first movement.
@@ -142,6 +142,7 @@ public class StoreModuleTests
         {
             nameAr = Text(item, "nameAr"),
             nameEn = Text(item, "nameEn"),
+            sku = Text(item, "sku"), categoryId = item.GetProperty("category").GetProperty("id").GetGuid(), unitId = item.GetProperty("unit").GetProperty("id").GetGuid(), 
             kind = "consumable",
             minQuantity = 1,
             isActive = true,
@@ -156,6 +157,7 @@ public class StoreModuleTests
             {
                 nameAr = Text(item, "nameAr"),
                 nameEn = Text(item, "nameEn"),
+                sku = Text(item, "sku"), categoryId = item.GetProperty("category").GetProperty("id").GetGuid(), unitId = item.GetProperty("unit").GetProperty("id").GetGuid(), 
                 kind = "returnable",
                 minQuantity = 1,
                 isActive = true,
@@ -172,7 +174,7 @@ public class StoreModuleTests
     }
 
     [Fact]
-    public async Task Movements_keep_a_running_balance_and_never_expose_the_cost()
+    public async Task Movements_keep_a_running_balance_and_show_the_cost_to_the_store_officer()
     {
         var team = await TeamAsync();
         var item = await AddItemAsync(team.Officer);
@@ -181,9 +183,10 @@ public class StoreModuleTests
         var receive = await team.Officer.PostAsJsonAsync("/api/app/stock/receive", new { itemId, quantity = 5, totalCost = 123.45m, note = "Bought" });
         var receiveBody = await receive.Content.ReadAsStringAsync();
         receive.StatusCode.ShouldBe(HttpStatusCode.Created, receiveBody);
-        receiveBody.ShouldNotContain("123.45");
-        receiveBody.ShouldNotContain("cost", Case.Insensitive);
+        // Decision 2026-11-11 replaced QUESTIONS.md item 29: the store officer sees the cost.
         var received = JsonDocument.Parse(receiveBody).RootElement;
+        received.GetProperty("totalCost").GetDecimal().ShouldBe(123.45m);
+        received.GetProperty("unitCost").GetDecimal().ShouldBe(24.69m);
         received.GetProperty("balanceAfter").GetDecimal().ShouldBe(5);
 
         await ShouldFailWithAsync(
@@ -211,7 +214,7 @@ public class StoreModuleTests
 
         var history = await team.Officer.GetAsync($"/api/app/stock/movements?itemId={itemId}&sorting=creationTime");
         var historyBody = await history.Content.ReadAsStringAsync();
-        historyBody.ShouldNotContain("123.45");
+        historyBody.ShouldContain("123.45");
         var rows = JsonDocument.Parse(historyBody).RootElement.GetProperty("items").EnumerateArray().ToList();
         rows.Select(x => x.GetProperty("quantity").GetDecimal()).ShouldBe(new[] { 5m, -5m, 5m });
         rows.Select(x => x.GetProperty("balanceAfter").GetDecimal()).ShouldBe(new[] { 5m, 0m, 5m });
@@ -224,6 +227,7 @@ public class StoreModuleTests
         {
             nameAr = Text(inactive, "nameAr"),
             nameEn = Text(inactive, "nameEn"),
+            sku = Text(inactive, "sku"), categoryId = inactive.GetProperty("category").GetProperty("id").GetGuid(), unitId = inactive.GetProperty("unit").GetProperty("id").GetGuid(), 
             kind = "returnable",
             minQuantity = 1,
             isActive = false,

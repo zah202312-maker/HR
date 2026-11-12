@@ -98,6 +98,8 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         ["creationTime"] = nameof(Employee.CreationTime)
     };
 
+    private static readonly string[] UnlistedRoles = { HrRoles.ExecutiveDirector, HrRoles.HrManager, HrRoles.SystemAdmin };
+
     [Authorize(HrPermissions.EmployeePermissions.Read)]
     public virtual async Task<EmployeeListItemPagedResultDto> GetListAsync(EmployeeListInput input)
     {
@@ -124,12 +126,23 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
             query = query.Where(x => x.UserId != null && holders.Contains(x.UserId.Value));
         }
 
+        // Decision 2026-11-10: the executive director, the HR manager and the system admin are not listed on the
+        // employees page. They stay reachable by id and in the lookup, where they are picked as managers.
+        var unlisted = new List<Guid>();
+        foreach (var role in UnlistedRoles)
+        {
+            unlisted.AddRange(await GetRoleHolderIdsAsync(role));
+        }
+
+        query = query.Where(x => x.UserId == null || !unlisted.Contains(x.UserId.Value));
+
         var total = await AsyncExecuter.LongCountAsync(query);
         var items = await AsyncExecuter.ToListAsync(
             query.ApplySorting(input.Sorting, DefaultNameSorting, SortFields).Skip(input.SkipCount).Take(input.MaxResultCount));
 
         var departments = await _references.GetDepartmentsAsync(items.Select(x => x.DepartmentId));
         var managers = await _references.GetRefsAsync(items.Where(x => x.ManagerEmployeeId != null).Select(x => x.ManagerEmployeeId!.Value));
+        var photos = await _references.GetPhotoIdsAsync(items);
 
         var result = new List<EmployeeListItemDto>();
         foreach (var item in items)
@@ -138,6 +151,7 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
             {
                 Id = item.Id,
                 FullName = EmployeeReferenceReader.FullName(item),
+                PhotoId = EmployeeReferenceReader.PhotoOf(item, photos),
                 Department = departments[item.DepartmentId],
                 JobTitle = item.JobTitle,
                 HireDate = item.HireDate,
@@ -159,19 +173,18 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         await EnsureDepartmentExistsAsync(input.DepartmentId!.Value);
 
         var roleNames = await _provisioner.ResolveRolesAsync(input.RoleNames, hasEmployeeFile: true);
-        var isExecutive = roleNames.Contains(HrRoles.ExecutiveDirector);
+        // Decisions of 2026-11-10: the executive director and the system admin have no manager, and they and the
+        // HR manager have no shift.
+        var needsManager = ManagerLinkService.AllowedManagerRoles(roleNames) != null;
+        var needsShift = !ManagerLinkService.IsOutsideSchedule(roleNames);
 
-        if (isExecutive && input.ManagerEmployeeId != null)
+        if (!needsManager && input.ManagerEmployeeId != null)
         {
             throw new BusinessException(HrErrorCodes.Employee.ExecutiveCannotHaveManager);
         }
 
         await _provisioner.EnsureRoleChangeAllowedAsync(null, Array.Empty<string>(), roleNames);
-
-        if (!isExecutive)
-        {
-            await EnsureWorkShiftAndManagerAsync(input, roleNames);
-        }
+        await EnsureWorkShiftAndManagerAsync(input, roleNames, needsShift, needsManager);
 
         await RefuseDuplicateNumberAsync(input.EmployeeNumber, null);
 
@@ -191,13 +204,23 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
             input.Gender,
             input.EmployeeNumber);
 
-        if (!isExecutive)
+        if (needsManager)
         {
             await _managerLinks.StartAsync(employee, input.ManagerEmployeeId!.Value, input.HireDate!.Value);
+        }
+
+        if (needsShift)
+        {
             await _assignments.InsertAsync(new EmployeeShiftAssignment(GuidGenerator.Create(), CurrentTenant.Id, employee.Id, input.WorkShiftId!.Value, input.HireDate!.Value));
         }
 
         await _employees.InsertAsync(employee, autoSave: true);
+
+        if (input.BaseSalary != null)
+        {
+            await LazyServiceProvider.LazyGetRequiredService<IInitialSalaryGateway>()
+                .RecordAsync(employee, input.BaseSalary.Value, input.SalaryCurrency);
+        }
 
         return new EmployeeCreatedDto
         {
@@ -456,11 +479,12 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
 
         var departments = await _references.GetDepartmentsAsync(items.Select(x => x.DepartmentId));
         var shifts = await _references.GetCurrentShiftsAsync(items.Select(x => x.Id));
+        var photos = await _references.GetPhotoIdsAsync(items);
 
         return new EmployeeTeamMemberPagedResultDto
         {
             TotalCount = total,
-            Items = items.Select(x => ToTeamMemberDto(x, departments[x.DepartmentId], shifts.GetValueOrDefault(x.Id))).ToList()
+            Items = items.Select(x => ToTeamMemberDto(x, departments[x.DepartmentId], shifts.GetValueOrDefault(x.Id), photos)).ToList()
         };
     }
 
@@ -476,7 +500,8 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
 
         var departments = await _references.GetDepartmentsAsync(new[] { employee.DepartmentId });
         var shifts = await _references.GetCurrentShiftsAsync(new[] { id });
-        return ToTeamMemberDto(employee, departments[employee.DepartmentId], shifts.GetValueOrDefault(id));
+        var photos = await _references.GetPhotoIdsAsync(new[] { employee });
+        return ToTeamMemberDto(employee, departments[employee.DepartmentId], shifts.GetValueOrDefault(id), photos);
     }
 
     [Authorize(HrPermissions.EmployeePermissions.ReadSelf)]
@@ -490,6 +515,7 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         {
             Id = employee.Id,
             FullName = EmployeeReferenceReader.FullName(employee),
+            PhotoId = EmployeeReferenceReader.PhotoOf(employee, await _references.GetPhotoIdsAsync(new[] { employee })),
             FullNameAr = employee.FullNameAr,
             FullNameEn = employee.FullNameEn,
             Email = employee.Email,
@@ -516,22 +542,16 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         return me == null ? new AdministrativeTaskLogPagedResultDto() : await QueryTaskLogAsync(me.Id, input);
     }
 
-    private async Task EnsureWorkShiftAndManagerAsync(EmployeeCreateDto input, IReadOnlyCollection<string> roleNames)
+    private async Task EnsureWorkShiftAndManagerAsync(EmployeeCreateDto input, IReadOnlyCollection<string> roleNames, bool needsShift, bool needsManager)
     {
-        if (input.WorkShiftId == null)
+        if (needsShift)
         {
-            throw new BusinessException(HrErrorCodes.Employee.WorkShiftRequired);
+            await EnsureWorkShiftAsync(input);
         }
 
-        var shift = await _shifts.FindAsync(input.WorkShiftId!.Value);
-        if (shift == null)
+        if (!needsManager)
         {
-            throw new BusinessException(HrErrorCodes.Employee.WorkShiftNotFound);
-        }
-
-        if (!shift.IsActive)
-        {
-            throw new BusinessException(HrErrorCodes.Shift.ShiftInactive);
+            return;
         }
 
         if (input.ManagerEmployeeId == null)
@@ -543,6 +563,25 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         if (violation != null)
         {
             throw new BusinessException(violation);
+        }
+    }
+
+    private async Task EnsureWorkShiftAsync(EmployeeCreateDto input)
+    {
+        if (input.WorkShiftId == null)
+        {
+            throw new BusinessException(HrErrorCodes.Employee.WorkShiftRequired);
+        }
+
+        var shift = await _shifts.FindAsync(input.WorkShiftId.Value);
+        if (shift == null)
+        {
+            throw new BusinessException(HrErrorCodes.Employee.WorkShiftNotFound);
+        }
+
+        if (!shift.IsActive)
+        {
+            throw new BusinessException(HrErrorCodes.Shift.ShiftInactive);
         }
     }
 
@@ -733,10 +772,11 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
             (x.EmployeeNumber != null && x.EmployeeNumber.ToLower().Contains(value)));
     }
 
-    private static EmployeeTeamMemberDto ToTeamMemberDto(Employee employee, DepartmentRefDto department, EmployeeShiftSummaryDto? shift) => new()
+    private static EmployeeTeamMemberDto ToTeamMemberDto(Employee employee, DepartmentRefDto department, EmployeeShiftSummaryDto? shift, IReadOnlyDictionary<Guid, Guid> photos) => new()
     {
         Id = employee.Id,
         FullName = EmployeeReferenceReader.FullName(employee),
+        PhotoId = EmployeeReferenceReader.PhotoOf(employee, photos),
         Email = employee.Email,
         PhoneNumber = employee.PhoneNumber,
         Department = department,
@@ -755,6 +795,7 @@ public class EmployeeAppService : HR_Mangment2AppService, IEmployeeAppService
         {
             Id = employee.Id,
             FullName = EmployeeReferenceReader.FullName(employee),
+            PhotoId = EmployeeReferenceReader.PhotoOf(employee, await _references.GetPhotoIdsAsync(new[] { employee })),
             FullNameAr = employee.FullNameAr,
             FullNameEn = employee.FullNameEn,
             Email = employee.Email,
@@ -821,6 +862,9 @@ public class EmployeeCreateDtoValidator : AbstractValidator<EmployeeCreateDto>
         RuleFor(x => x.RoleNames).NotEmpty();
         RuleForEach(x => x.RoleNames).NotEmpty().MaximumLength(64);
         RuleFor(x => x.EmployeeNumber).MaximumLength(Employee.MaxEmployeeNumberLength);
+        RuleFor(x => x.BaseSalary).GreaterThanOrEqualTo(0.01m).When(x => x.BaseSalary != null);
+        RuleFor(x => x.SalaryCurrency).Matches("^[A-Z]{3}$").When(x => x.SalaryCurrency != null);
+        RuleFor(x => x.SalaryCurrency).Null().When(x => x.BaseSalary == null);
     }
 }
 

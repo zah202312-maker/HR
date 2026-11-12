@@ -9,6 +9,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import 'org_providers.dart';
@@ -101,10 +102,7 @@ class _EmployeesPageState extends ConsumerState<EmployeesPage> {
             itemBuilder: (context, e) => HrCard(
               onTap: () => context.go('/employees/${e.id}'),
               child: Row(children: [
-                CircleAvatar(
-                  backgroundColor: context.hr.glow,
-                  child: Text(e.fullName.characters.first, style: TextStyle(color: context.hr.accent)),
-                ),
+                PersonAvatar(name: e.fullName, photoId: e.photoId, radius: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

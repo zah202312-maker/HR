@@ -41,7 +41,8 @@ void main() {
   });
 
   test('operation metadata comes from the contract', () {
-    expect(hrOperations.length, 315);
+    // Same count as the operationIds in api-contract/openapi.yaml.
+    expect(hrOperations.length, 404);
     expect(hrOperations[HrOps.Request_Approve]!.path, '/api/app/request/{id}/approve');
   });
 

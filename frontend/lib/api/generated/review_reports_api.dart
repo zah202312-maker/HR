@@ -13,9 +13,10 @@ class ReviewReportsApi {
   ReviewReportsApi(this.client);
   final HrApiClient client;
 
-  /// GET /api/app/review-report  (List reviewer follow-up reports)
+  /// GET /api/app/review-report  (List daily reports)
   Future<ReviewReportSummaryPagedResultDto> ReviewReport_GetList({
-    ReviewReportPeriodType? periodType,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     ReviewReportStatus? status,
     int? skipCount,
     int? maxResultCount,
@@ -27,7 +28,8 @@ class ReviewReportsApi {
       method: 'GET',
       path: '/api/app/review-report',
       query: <String, dynamic>{
-        if (periodType != null) 'periodType': periodType.toJson(),
+        if (dateFrom != null) 'dateFrom': hrDateToJson(dateFrom),
+        if (dateTo != null) 'dateTo': hrDateToJson(dateTo),
         if (status != null) 'status': status.toJson(),
         if (skipCount != null) 'skipCount': skipCount,
         if (maxResultCount != null) 'maxResultCount': maxResultCount,
@@ -38,7 +40,7 @@ class ReviewReportsApi {
     return ReviewReportSummaryPagedResultDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// POST /api/app/review-report  (Start a reviewer follow-up report)
+  /// POST /api/app/review-report  (Start a daily report)
   Future<ReviewReportDto> ReviewReport_Create({
     required ReviewReportCreateDto body,
     CancelToken? cancelToken,
@@ -54,7 +56,7 @@ class ReviewReportsApi {
     return ReviewReportDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// GET /api/app/review-report/{id}  (Get a reviewer follow-up report)
+  /// GET /api/app/review-report/{id}  (Get a daily report)
   Future<ReviewReportDto> ReviewReport_Get({
     required String id,
     CancelToken? cancelToken,
@@ -68,7 +70,7 @@ class ReviewReportsApi {
     return ReviewReportDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// PUT /api/app/review-report/{id}  (Save a reviewer report draft)
+  /// PUT /api/app/review-report/{id}  (Save a daily report draft)
   Future<ReviewReportDto> ReviewReport_Update({
     required String id,
     required ReviewReportUpdateDto body,
@@ -85,7 +87,7 @@ class ReviewReportsApi {
     return ReviewReportDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// DELETE /api/app/review-report/{id}  (Delete a reviewer report draft)
+  /// DELETE /api/app/review-report/{id}  (Delete a daily report draft)
   Future<void> ReviewReport_Delete({
     required String id,
     CancelToken? cancelToken,
@@ -98,7 +100,7 @@ class ReviewReportsApi {
     );
   }
 
-  /// POST /api/app/review-report/{id}/submit  (Submit the reviewer report to the executive director)
+  /// POST /api/app/review-report/{id}/submit  (Submit the daily report to the executive director)
   Future<ReviewReportDto> ReviewReport_Submit({
     required String id,
     required ReviewReportSubmitDto body,

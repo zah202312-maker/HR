@@ -10,6 +10,7 @@ import '../../core/l10n/strings.dart';
 import '../../core/network/api_providers.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/common.dart';
+export '../../core/widgets/person_avatar.dart';
 
 /// Tabs for the visible parts of a screen. One tab shows without a tab bar; none shows "forbidden".
 Widget tabbedBody(BuildContext context, List<(String, Widget)> tabs) {
@@ -58,8 +59,11 @@ Future<List<ItemRefDto>> searchItems(WidgetRef ref, String q, {ItemKind? kind}) 
 
 /// Small two-line list tile used by the release 2/3 lists.
 class OpsTile extends StatelessWidget {
-  const OpsTile({super.key, required this.title, this.subtitle, this.trailing, this.leading, this.onTap, this.actions = const []});
+  const OpsTile({super.key, required this.title, this.subtitle, this.trailing, this.leading, this.avatar, this.onTap, this.actions = const []});
   final String title;
+
+  /// A person's photo (PersonAvatar) shown in place of [leading] when the row is about a person.
+  final Widget? avatar;
   final String? subtitle;
   final Widget? trailing;
   final IconData? leading;
@@ -73,7 +77,10 @@ class OpsTile extends StatelessWidget {
           onTap: onTap,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
-              if (leading != null) ...[Icon(leading, color: context.hr.accent), const SizedBox(width: 12)],
+              if (avatar != null)
+                ...[avatar!, const SizedBox(width: 12)]
+              else if (leading != null)
+                ...[Icon(leading, color: context.hr.accent), const SizedBox(width: 12)],
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),

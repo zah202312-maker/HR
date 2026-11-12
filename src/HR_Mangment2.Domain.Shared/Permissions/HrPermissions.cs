@@ -45,6 +45,24 @@ public static class HrPermissions
         public const string Send = "Hr.Circulars.Send";
     }
 
+    public static class ReviewerEvaluationPermissions
+    {
+        public const string Manage = "Hr.ReviewerEvaluation.Manage";
+        public const string ReadReports = "Hr.ReviewerEvaluation.ReadReports";
+    }
+
+    public static class HrEvaluationPermissions
+    {
+        public const string Manage = "Hr.HrEvaluation.Manage";
+        public const string ReadReports = "Hr.HrEvaluation.ReadReports";
+    }
+
+    public static class NoticesPermissions
+    {
+        public const string Read = "Hr.Notices.Read";
+        public const string Send = "Hr.Notices.Send";
+    }
+
     public static class ComplaintsPermissions
     {
         public const string Attachment = "Hr.Complaints.Attachment";
@@ -65,6 +83,7 @@ public static class HrPermissions
         public const string Create = "Hr.Contract.Create";
         public const string Decide = "Hr.Contract.Decide";
         public const string Read = "Hr.Contract.Read";
+        public const string ReadOverview = "Hr.Contract.ReadOverview";
         public const string ReadOwn = "Hr.Contract.ReadOwn";
         public const string Recommend = "Hr.Contract.Recommend";
     }
@@ -128,10 +147,8 @@ public static class HrPermissions
     public static class EvaluationsPermissions
     {
         public const string AnnualSummaryRead = "Hr.Evaluations.AnnualSummary.Read";
-        public const string CriteriaManage = "Hr.Evaluations.Criteria.Manage";
         public const string CycleRead = "Hr.Evaluations.Cycle.Read";
         public const string DecideObjection = "Hr.Evaluations.DecideObjection";
-        public const string GradesManage = "Hr.Evaluations.Grades.Manage";
         public const string HrRead = "Hr.Evaluations.HrRead";
         public const string InternalNoteRead = "Hr.Evaluations.InternalNote.Read";
         public const string InternalNoteWrite = "Hr.Evaluations.InternalNote.Write";
@@ -149,12 +166,16 @@ public static class HrPermissions
         public const string ExpenseRead = "Hr.Finance.Expense.Read";
         public const string PayrollRunApprove = "Hr.Finance.PayrollRun.Approve";
         public const string PayrollRunClose = "Hr.Finance.PayrollRun.Close";
+        public const string PayrollRunDeliver = "Hr.Finance.PayrollRun.Deliver";
+        public const string PettyCashManage = "Hr.Finance.PettyCash.Manage";
+        public const string PettyCashRead = "Hr.Finance.PettyCash.Read";
         public const string PayrollRunExport = "Hr.Finance.PayrollRun.Export";
         public const string PayrollRunPrepare = "Hr.Finance.PayrollRun.Prepare";
         public const string PayrollRunRead = "Hr.Finance.PayrollRun.Read";
         public const string PayslipReadOwn = "Hr.Finance.Payslip.ReadOwn";
         public const string ReportRead = "Hr.Finance.Report.Read";
         public const string SalaryProfileRead = "Hr.Finance.SalaryProfile.Read";
+        public const string SalaryProfileReadOverview = "Hr.Finance.SalaryProfile.ReadOverview";
         public const string SalaryProfileUpdate = "Hr.Finance.SalaryProfile.Update";
     }
 
@@ -192,7 +213,6 @@ public static class HrPermissions
     {
         public const string BalanceAdjust = "Hr.Leave.Balance.Adjust";
         public const string RequestReverse = "Hr.Leave.Request.Reverse";
-        public const string BalanceSetEntitlement = "Hr.Leave.Balance.SetEntitlement";
         public const string BalanceView = "Hr.Leave.Balance.View";
         public const string BalanceViewOwn = "Hr.Leave.Balance.ViewOwn";
         public const string CalendarViewTeam = "Hr.Leave.Calendar.ViewTeam";
@@ -225,6 +245,7 @@ public static class HrPermissions
     {
         public const string Export = "Hr.Reports.Export";
         public const string Hr = "Hr.Reports.Hr";
+        public const string TodaySummary = "Hr.Reports.TodaySummary";
         public const string Review = "Hr.Reports.Review";
         public const string Team = "Hr.Reports.Team";
     }
@@ -251,6 +272,8 @@ public static class HrPermissions
 
     public static class SettingsPermissions
     {
+        public const string AnnualLeave = "Hr.Settings.AnnualLeave";
+        public const string HrEvaluationAlert = "Hr.Settings.HrEvaluationAlert";
         public const string Complaints = "Hr.Settings.Complaints";
         public const string Contracts = "Hr.Settings.Contracts";
         public const string Finance = "Hr.Settings.Finance";
@@ -270,6 +293,18 @@ public static class HrPermissions
         public const string StockAdjust = "Hr.Store.Stock.Adjust";
         public const string StockReceive = "Hr.Store.Stock.Receive";
         public const string StockView = "Hr.Store.Stock.View";
+        public const string PurchaseView = "Hr.Store.Purchase.View";
+        public const string PurchaseManage = "Hr.Store.Purchase.Manage";
+        public const string PurchaseApprove = "Hr.Store.Purchase.Approve";
+        public const string PurchaseReverse = "Hr.Store.Purchase.Reverse";
+        public const string TeamView = "Hr.Store.Team.View";
+        public const string TeamManage = "Hr.Store.Team.Manage";
+        public const string IssueVoucherView = "Hr.Store.IssueVoucher.View";
+        public const string IssueVoucherManage = "Hr.Store.IssueVoucher.Manage";
+        public const string IssueVoucherApprove = "Hr.Store.IssueVoucher.Approve";
+        public const string IssueVoucherReverse = "Hr.Store.IssueVoucher.Reverse";
+        public const string ReportView = "Hr.Store.Report.View";
+        public const string ReportExport = "Hr.Store.Report.Export";
     }
 
     public static class WarningPermissions
@@ -319,6 +354,12 @@ public static class HrPermissions
         ["Hr.AuditLog.Read"] = new[] { "systemAdmin", "executiveDirector" },
         ["Hr.Circulars.Read"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Circulars.Send"] = new[] { "departmentManager", "hrManager", "executiveDirector" },
+        ["Hr.HrEvaluation.Manage"] = new[] { "hrManager" },
+        ["Hr.HrEvaluation.ReadReports"] = new[] { "hrManager", "executiveDirector" },
+        ["Hr.ReviewerEvaluation.Manage"] = new[] { "reviewer" },
+        ["Hr.ReviewerEvaluation.ReadReports"] = new[] { "reviewer", "executiveDirector" },
+        ["Hr.Notices.Read"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
+        ["Hr.Notices.Send"] = new[] { "hrManager", "executiveDirector", "reviewer" },
         ["Hr.Complaints.Attachment"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector" },
         ["Hr.Complaints.Close"] = new[] { "hrManager", "executiveDirector" },
         ["Hr.Complaints.Handle"] = new[] { "departmentManager", "hrManager", "executiveDirector" },
@@ -333,6 +374,7 @@ public static class HrPermissions
         ["Hr.Contract.Create"] = new[] { "hrManager" },
         ["Hr.Contract.Decide"] = new[] { "hrManager" },
         ["Hr.Contract.Read"] = new[] { "hrManager" },
+        ["Hr.Contract.ReadOverview"] = new[] { "executiveDirector" },
         ["Hr.Contract.ReadOwn"] = new[] { "employee" },
         ["Hr.Contract.Recommend"] = new[] { "hrManager" },
         ["Hr.Custody.Acknowledge"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
@@ -344,7 +386,7 @@ public static class HrPermissions
         ["Hr.Custody.ViewCount"] = new[] { "departmentManager", "storeOfficer", "hrManager" },
         ["Hr.Custody.ViewOwn"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Custody.ViewTeam"] = new[] { "departmentManager" },
-        ["Hr.Delegation.Manage"] = new[] { "departmentManager", "hrManager", "executiveDirector", "systemAdmin", "accountant" },
+        ["Hr.Delegation.Manage"] = new[] { "departmentManager", "hrManager", "executiveDirector", "systemAdmin", "accountant", "reviewer" },
         ["Hr.Delegation.ReadAll"] = new[] { "hrManager" },
         ["Hr.Department.Lookup"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Department.Manage"] = new[] { "hrManager" },
@@ -362,16 +404,14 @@ public static class HrPermissions
         ["Hr.Employee.ReadOwnTaskLog"] = new[] { "departmentManager" },
         ["Hr.Employee.ReadSelf"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Employee.ReadTaskLog"] = new[] { "hrManager" },
-        ["Hr.Employee.ReadTeam"] = new[] { "departmentManager", "systemAdmin" },
+        ["Hr.Employee.ReadTeam"] = new[] { "departmentManager", "hrManager" },
         ["Hr.Employee.Update"] = new[] { "hrManager" },
         ["Hr.Employee.CorrectHireDate"] = new[] { "hrManager" },
         ["Hr.EmployeeShift.Assign"] = new[] { "hrManager" },
         ["Hr.EmployeeShift.View"] = new[] { "hrManager" },
         ["Hr.Evaluations.AnnualSummary.Read"] = new[] { "departmentManager", "hrManager" },
-        ["Hr.Evaluations.Criteria.Manage"] = new[] { "systemAdmin" },
         ["Hr.Evaluations.Cycle.Read"] = new[] { "departmentManager", "hrManager", "reviewer" },
         ["Hr.Evaluations.DecideObjection"] = new[] { "hrManager", "executiveDirector" },
-        ["Hr.Evaluations.Grades.Manage"] = new[] { "systemAdmin" },
         ["Hr.Evaluations.HrRead"] = new[] { "hrManager" },
         ["Hr.Evaluations.InternalNote.Read"] = new[] { "departmentManager", "hrManager" },
         ["Hr.Evaluations.InternalNote.Write"] = new[] { "departmentManager" },
@@ -385,12 +425,16 @@ public static class HrPermissions
         ["Hr.Finance.Expense.Read"] = new[] { "accountant" },
         ["Hr.Finance.PayrollRun.Approve"] = new[] { "hrManager", "executiveDirector" },
         ["Hr.Finance.PayrollRun.Close"] = new[] { "accountant" },
+        ["Hr.Finance.PayrollRun.Deliver"] = new[] { "accountant" },
+        ["Hr.Finance.PettyCash.Manage"] = new[] { "accountant" },
+        ["Hr.Finance.PettyCash.Read"] = new[] { "accountant" },
         ["Hr.Finance.PayrollRun.Export"] = new[] { "accountant", "hrManager", "executiveDirector" },
         ["Hr.Finance.PayrollRun.Prepare"] = new[] { "accountant" },
         ["Hr.Finance.PayrollRun.Read"] = new[] { "accountant", "hrManager", "executiveDirector" },
         ["Hr.Finance.Payslip.ReadOwn"] = new[] { "employee" },
         ["Hr.Finance.Report.Read"] = new[] { "accountant" },
         ["Hr.Finance.SalaryProfile.Read"] = new[] { "accountant" },
+        ["Hr.Finance.SalaryProfile.ReadOverview"] = new[] { "executiveDirector" },
         ["Hr.Finance.SalaryProfile.Update"] = new[] { "accountant" },
         ["Hr.Holiday.Manage"] = new[] { "hrManager" },
         ["Hr.Holiday.View"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
@@ -412,7 +456,6 @@ public static class HrPermissions
         ["Hr.Incident.ViewOwn"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Leave.Balance.Adjust"] = new[] { "hrManager", "executiveDirector" },
         ["Hr.Leave.Request.Reverse"] = new[] { "hrManager" },
-        ["Hr.Leave.Balance.SetEntitlement"] = new[] { "hrManager", "executiveDirector" },
         ["Hr.Leave.Balance.View"] = new[] { "departmentManager", "hrManager", "systemAdmin", "executiveDirector" },
         ["Hr.Leave.Balance.ViewOwn"] = new[] { "employee", "departmentManager", "hrManager", "systemAdmin" },
         ["Hr.Leave.Calendar.ViewTeam"] = new[] { "departmentManager" },
@@ -433,6 +476,7 @@ public static class HrPermissions
         ["Hr.Notification.Read"] = new[] { "employee", "departmentManager", "hrManager", "executiveDirector", "reviewer", "accountant", "storeOfficer", "systemAdmin" },
         ["Hr.Reports.Export"] = new[] { "departmentManager", "reviewer", "hrManager" },
         ["Hr.Reports.Hr"] = new[] { "hrManager" },
+        ["Hr.Reports.TodaySummary"] = new[] { "executiveDirector" },
         ["Hr.Reports.Review"] = new[] { "reviewer" },
         ["Hr.Reports.Team"] = new[] { "departmentManager" },
         ["Hr.ReviewReports.Manage"] = new[] { "reviewer" },
@@ -451,6 +495,8 @@ public static class HrPermissions
         ["Hr.Settings.Contracts"] = new[] { "systemAdmin" },
         ["Hr.Settings.Finance"] = new[] { "systemAdmin" },
         ["Hr.Settings.HourlyLeave"] = new[] { "systemAdmin" },
+        ["Hr.Settings.AnnualLeave"] = new[] { "hrManager" },
+        ["Hr.Settings.HrEvaluationAlert"] = new[] { "hrManager" },
         ["Hr.Settings.Read"] = new[] { "systemAdmin", "hrManager" },
         ["Hr.Settings.Reminders"] = new[] { "systemAdmin" },
         ["Hr.Store.Issue.Deliver"] = new[] { "storeOfficer" },
@@ -462,6 +508,18 @@ public static class HrPermissions
         ["Hr.Store.Stock.Adjust"] = new[] { "storeOfficer" },
         ["Hr.Store.Stock.Receive"] = new[] { "storeOfficer" },
         ["Hr.Store.Stock.View"] = new[] { "storeOfficer" },
+        ["Hr.Store.Purchase.View"] = new[] { "storeOfficer" },
+        ["Hr.Store.Purchase.Manage"] = new[] { "storeOfficer" },
+        ["Hr.Store.Purchase.Approve"] = new[] { "storeOfficer" },
+        ["Hr.Store.Purchase.Reverse"] = new[] { "storeOfficer" },
+        ["Hr.Store.Team.View"] = new[] { "storeOfficer" },
+        ["Hr.Store.Team.Manage"] = new[] { "storeOfficer" },
+        ["Hr.Store.IssueVoucher.View"] = new[] { "storeOfficer" },
+        ["Hr.Store.IssueVoucher.Manage"] = new[] { "storeOfficer" },
+        ["Hr.Store.IssueVoucher.Approve"] = new[] { "storeOfficer" },
+        ["Hr.Store.IssueVoucher.Reverse"] = new[] { "storeOfficer" },
+        ["Hr.Store.Report.View"] = new[] { "storeOfficer" },
+        ["Hr.Store.Report.Export"] = new[] { "storeOfficer" },
         ["Hr.Warning.Decide"] = new[] { "hrManager" },
         ["Hr.Warning.Notify"] = new[] { "hrManager" },
         ["Hr.Warning.Object"] = new[] { "employee" },

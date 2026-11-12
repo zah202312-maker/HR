@@ -43,6 +43,19 @@ flutter run -d chrome --web-port 5000 `
 Android emulator: `--dart-define=HR_API_BASE_URL=https://10.0.2.2:44382` (the dev certificate must be trusted
 by the emulator).
 
+### Physical Android phone (USB)
+Chrome on the phone will not hand the OAuth code back to the app from a page with a certificate
+warning, and the ASP.NET dev certificate cannot be installed on Android (it is not a CA). So:
+1. A local dev CA and a `localhost` certificate signed by it live in `%USERPROFILE%\.hr-dev-certs`
+   (never in the repo). The backend serves that certificate on a second endpoint,
+   `https://localhost:44383`, configured in `appsettings.secrets.json` (`Kestrel:Endpoints:PhoneHttps`);
+   `44382` keeps the normal dev certificate for the computer's browser.
+2. Install `hr-dev-ca.crt` on the phone once: Settings → Security → Encryption & credentials →
+   Install a certificate → CA certificate.
+3. `powershell -ExecutionPolicy Bypass -File frontend/tool/run_android.ps1` maps the phone's
+   `localhost:44382` to the computer's `44383`, so the OAuth issuer stays `https://localhost:44382`.
+   Re-run `adb reverse tcp:44382 tcp:44383` after reconnecting the cable.
+
 ### Android: OAuth callback
 After `flutter create`, add inside `<application>` in `android/app/src/main/AndroidManifest.xml`:
 ```xml

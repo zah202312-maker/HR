@@ -142,6 +142,64 @@ class SystemSettingsApi {
     return SystemSettingsHourlyLeaveDto.fromJson(data as Map<String, dynamic>);
   }
 
+  /// GET /api/app/system-settings/annual-leave  (Get the default annual leave entitlement)
+  Future<SystemSettingsAnnualLeaveDto> SystemSettings_GetAnnualLeave({
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'SystemSettings_GetAnnualLeave',
+      method: 'GET',
+      path: '/api/app/system-settings/annual-leave',
+      cancelToken: cancelToken,
+    );
+    return SystemSettingsAnnualLeaveDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/app/system-settings/annual-leave  (Update the default annual leave entitlement)
+  Future<SystemSettingsAnnualLeaveDto> SystemSettings_UpdateAnnualLeave({
+    required SystemSettingsAnnualLeaveUpdateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'SystemSettings_UpdateAnnualLeave',
+      method: 'PUT',
+      path: '/api/app/system-settings/annual-leave',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return SystemSettingsAnnualLeaveDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// GET /api/app/system-settings/hr-evaluation-alert  (Get the low average alert setting of HR evaluations)
+  Future<SystemSettingsHrEvaluationAlertDto> SystemSettings_GetHrEvaluationAlert({
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'SystemSettings_GetHrEvaluationAlert',
+      method: 'GET',
+      path: '/api/app/system-settings/hr-evaluation-alert',
+      cancelToken: cancelToken,
+    );
+    return SystemSettingsHrEvaluationAlertDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/app/system-settings/hr-evaluation-alert  (Update the low average alert setting of HR evaluations)
+  Future<SystemSettingsHrEvaluationAlertDto> SystemSettings_UpdateHrEvaluationAlert({
+    required SystemSettingsHrEvaluationAlertUpdateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'SystemSettings_UpdateHrEvaluationAlert',
+      method: 'PUT',
+      path: '/api/app/system-settings/hr-evaluation-alert',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return SystemSettingsHrEvaluationAlertDto.fromJson(data as Map<String, dynamic>);
+  }
+
   /// GET /api/app/system-settings/finance  (Get payroll approver setting)
   Future<SystemSettingsFinanceDto> SystemSettings_GetFinance({
     CancelToken? cancelToken,

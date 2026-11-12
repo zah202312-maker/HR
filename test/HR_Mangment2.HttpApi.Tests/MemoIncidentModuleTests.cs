@@ -96,13 +96,7 @@ public class MemoIncidentModuleTests
         return (day.ToString("yyyy-MM-dd"), day.AddDays(1).ToString("yyyy-MM-dd"));
     }
 
-    private static async Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days)
-    {
-        var balance = await hr.GetFromJsonAsync<JsonElement>($"/api/app/leave-balance/employee/{employeeId}");
-        await OkAsync(await hr.PutAsJsonAsync(
-            $"/api/app/leave-balance/employee/{employeeId}/entitlement",
-            new { entitlementDays = days, concurrencyStamp = Text(balance, "concurrencyStamp") }));
-    }
+    private static Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days) => AnnualLeaveDefault.OpenWithAsync(hr, employeeId, days);
 
     private static Task<HttpResponseMessage> ToLeaveAsync(HttpClient client, Guid id)
     {
@@ -193,10 +187,10 @@ public class MemoIncidentModuleTests
         (await ToIncidentAsync(otherManager, id)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await team.ManagerClient.GetAsync($"/api/app/memo/{Guid.NewGuid()}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
-        // The manager's own memo goes to the system administrator, and the manager cannot act on it.
+        // The manager's own memo goes straight to HR (decision 2026-11-10), and the manager cannot act on it.
         var own = await WriteMemoAsync(team.ManagerClient);
-        Text(own, "currentHandlerRole").ShouldBe("systemAdmin");
-        Text(own, "statusLabel").ShouldBe("Waiting for the system administrator");
+        Text(own, "status").ShouldBe("pendingHr");
+        Text(own, "currentHandlerRole").ShouldBe("hrManager");
         await ShouldFailWithAsync(await ForwardAsync(team.ManagerClient, IdOf(own)), HrErrorCodes.Memo.SelfActionNotAllowed);
         await ShouldFailWithAsync(await ToIncidentAsync(team.ManagerClient, IdOf(own)), HrErrorCodes.Memo.SelfActionNotAllowed);
     }
@@ -225,7 +219,7 @@ public class MemoIncidentModuleTests
         var kit = await EmployeeTestKit.CreateAsync(_host);
         var (executive, _, _) = await OwnerAsync(kit, null, HrRoles.ExecutiveDirector);
         var (hrWriter, _, _) = await OwnerAsync(kit, kit.ExecutiveEmployeeId, HrRoles.Employee, HrRoles.HrManager);
-        var (adminWriter, _, _) = await OwnerAsync(kit, kit.ExecutiveEmployeeId, HrRoles.Employee, HrRoles.SystemAdmin);
+        var (adminWriter, _, _) = await OwnerAsync(kit, null, HrRoles.Employee, HrRoles.SystemAdmin);
 
         var fromHr = await WriteMemoAsync(hrWriter);
         Text(fromHr, "status").ShouldBe("pendingExecutive");

@@ -18,6 +18,7 @@ import '../../core/widgets/pickers.dart';
 import '../ops/ops_shared.dart';
 import '../org/org_providers.dart' show searchEmployees;
 import 'finance_shared.dart';
+import 'petty_cash_page.dart';
 
 /// S-FIN: finance (accountant). Payroll approvers (HR manager / executive director per settings)
 /// see the payroll runs only. Every read is audited by the server.
@@ -276,7 +277,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
     final tabs = <(String, Widget)>[
       if (session.can(HrOps.PayrollRun_List))
         (
-          s.t('كشوف الرواتب', 'Payroll'),
+          s.t('كشوف الرواتب والتسليم', 'Payroll & delivery'),
           PagedList<PayrollRunSummaryDto>(
             key: ValueKey('runs|$_version'),
             header: session.can(HrOps.PayrollRun_Create)
@@ -333,6 +334,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
             },
             itemBuilder: (context, r) => OpsTile(
               leading: Icons.request_page_outlined,
+              avatar: PersonAvatar.employee(r.employee),
               title: '${r.employee.fullName} · ${r.requestTypeName}',
               subtitle: '${s.t('وصل', 'Arrived')} ${f.dateTime(r.arrivedAt)}${r.decidedAt == null ? '' : ' · ${f.dateTime(r.decidedAt)}'}',
               trailing: StatusPill(
@@ -346,7 +348,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
         ),
       if (session.can(HrOps.SalaryProfile_List))
         (
-          s.t('البيانات المالية', 'Salary profiles'),
+          s.t('رواتب الموظفين', 'Employee salaries'),
           PagedList<SalaryProfileListItemDto>(
             key: ValueKey('sal|$_version|$_filter|$_hasProfile'),
             pageSize: 50,
@@ -372,6 +374,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
             },
             itemBuilder: (context, p) => OpsTile(
               leading: Icons.badge_outlined,
+              avatar: PersonAvatar.employee(p.employee),
               title: p.employee.fullName,
               subtitle: [if (p.employee.departmentName != null) p.employee.departmentName!, if (p.effectiveFrom != null) '${s.t('ساري من', 'From')} ${f.date(p.effectiveFrom)}'].join(' · '),
               trailing: p.hasProfile ? Text(money(p.baseSalary, p.currency)) : StatusPill(s.t('غير محددة', 'Not set'), tone: Tone.warning),
@@ -407,6 +410,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
             },
             itemBuilder: (context, x) => OpsTile(
               leading: Icons.lightbulb_outline,
+              avatar: PersonAvatar.employee(x.employee),
               title: '${x.employee.fullName} · ${suggestionBasisLabel(s, x.basis)}',
               subtitle: [
                 x.period,
@@ -447,6 +451,7 @@ class _FinancePageState extends ConsumerState<FinancePage> {
             },
             itemBuilder: (context, a) => OpsTile(
               leading: a.type == AdjustmentType.addition ? Icons.add_circle_outline : Icons.remove_circle_outline,
+              avatar: PersonAvatar.employee(a.employee),
               title: '${a.employee.fullName} · ${adjustmentTypeLabel(s, a.type)} ${money(a.amount, a.currency)}',
               subtitle: [a.period, adjustmentSourceLabel(s, a.source), a.reason, a.createdBy.displayName].join(' · '),
               trailing: StatusPill(adjustmentStatusLabel(s, a.status), tone: a.status == AdjustmentStatus.reversed ? Tone.neutral : Tone.info),
@@ -515,7 +520,21 @@ class _FinancePageState extends ConsumerState<FinancePage> {
           )
         ),
       if (session.can(HrOps.FinanceReport_GetMonthlyStatement)) (s.t('التقارير المالية', 'Finance reports'), const _FinanceReports()),
+      if (session.can(HrOps.PettyCashEntry_GetMonth)) (s.t('النثريات', 'Petty cash'), const PettyCashTab()),
     ];
+    // The accountant's order (decision 2026-11-11): salaries, payroll and delivery, adjustments, petty cash, then the rest.
+    final order = [
+      s.t('رواتب الموظفين', 'Employee salaries'),
+      s.t('كشوف الرواتب والتسليم', 'Payroll & delivery'),
+      s.t('الإضافات والاستقطاعات', 'Adjustments'),
+      s.t('النثريات', 'Petty cash'),
+      s.t('اقتراحات الحضور', 'Attendance suggestions'),
+      s.t('المصروفات', 'Expenses'),
+      s.t('طلبات المحاسب', 'Requests'),
+      s.t('التقارير المالية', 'Finance reports'),
+    ];
+    int rank((String, Widget) tab) => order.contains(tab.$1) ? order.indexOf(tab.$1) : order.length;
+    tabs.sort((a, b) => rank(a).compareTo(rank(b)));
     return HrPage(title: s.t('المالية', 'Finance'), child: tabbedBody(context, tabs));
   }
 
@@ -620,7 +639,7 @@ class _FinanceReportsState extends ConsumerState<_FinanceReports> {
               totalsWrap(context, d.totals),
               const SizedBox(height: 12),
               for (final i in d.items)
-                OpsTile(title: i.employee.fullName, subtitle: i.employee.departmentName, trailing: Text(money(i.net, i.currency), style: const TextStyle(fontWeight: FontWeight.w700))),
+                OpsTile(avatar: PersonAvatar.employee(i.employee), title: i.employee.fullName, subtitle: i.employee.departmentName, trailing: Text(money(i.net, i.currency), style: const TextStyle(fontWeight: FontWeight.w700))),
             ]);
           },
         );
@@ -642,6 +661,7 @@ class _FinanceReportsState extends ConsumerState<_FinanceReports> {
               const SizedBox(height: 12),
               for (final a in d.items)
                 OpsTile(
+                  avatar: PersonAvatar.employee(a.employee),
                   title: '${a.employee.fullName} · ${adjustmentTypeLabel(s, a.type)}',
                   subtitle: '${adjustmentSourceLabel(s, a.source)} · ${a.reason}',
                   trailing: Text(money(a.amount, a.currency)),

@@ -166,6 +166,7 @@ class _CircularsPageState extends ConsumerState<CircularsPage> {
                 },
                 itemBuilder: (context, r) => ListTile(
                   dense: true,
+                  leading: PersonAvatar.employee(r.recipient),
                   title: Text(r.recipient.fullName),
                   subtitle: Text(r.recipient.departmentName ?? ''),
                   trailing: r.acknowledgedAt == null

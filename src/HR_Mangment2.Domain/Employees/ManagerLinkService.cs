@@ -20,6 +20,7 @@ public class ManagerLinkService : ITransientDependency
 {
     private readonly IRepository<Employee, Guid> _employees;
     private readonly IRepository<EmployeeManagerLink, Guid> _links;
+    private readonly IRepository<EmployeeShiftAssignment, Guid> _shiftAssignments;
     private readonly IIdentityUserRepository _users;
     private readonly IEnumerable<IManagerChangeEffects> _effects;
     private readonly HrNotificationPublisher _notifications;
@@ -30,6 +31,7 @@ public class ManagerLinkService : ITransientDependency
     public ManagerLinkService(
         IRepository<Employee, Guid> employees,
         IRepository<EmployeeManagerLink, Guid> links,
+        IRepository<EmployeeShiftAssignment, Guid> shiftAssignments,
         IIdentityUserRepository users,
         IEnumerable<IManagerChangeEffects> effects,
         HrNotificationPublisher notifications,
@@ -39,6 +41,7 @@ public class ManagerLinkService : ITransientDependency
     {
         _employees = employees;
         _links = links;
+        _shiftAssignments = shiftAssignments;
         _users = users;
         _effects = effects;
         _notifications = notifications;
@@ -48,7 +51,7 @@ public class ManagerLinkService : ITransientDependency
     }
 
     private static readonly string[] ExecutiveOnly = { HrRoles.ExecutiveDirector };
-    private static readonly string[] SystemAdminOnly = { HrRoles.SystemAdmin };
+    private static readonly string[] HrManagerOnly = { HrRoles.HrManager };
     private static readonly string[] DepartmentManagerOnly = { HrRoles.DepartmentManager };
 
     /// <summary>The reviewer may report to either one (decision 2026-11-07).</summary>
@@ -56,7 +59,8 @@ public class ManagerLinkService : ITransientDependency
 
     /// <summary>
     /// The roles a manager may hold: holding any one of them is enough. The first rule that matches the employee's
-    /// roles applies. Null means no manager at all.
+    /// roles applies. Null means no manager at all: the executive director, and the system admin who is responsible
+    /// for the system (decision 2026-11-10).
     /// </summary>
     public static IReadOnlyCollection<string>? AllowedManagerRoles(IReadOnlyCollection<string> employeeRoles)
     {
@@ -65,17 +69,71 @@ public class ManagerLinkService : ITransientDependency
             return null;
         }
 
-        if (employeeRoles.Contains(HrRoles.HrManager) || employeeRoles.Contains(HrRoles.SystemAdmin))
+        if (employeeRoles.Contains(HrRoles.HrManager))
         {
             return ExecutiveOnly;
         }
 
-        if (employeeRoles.Contains(HrRoles.DepartmentManager))
+        if (employeeRoles.Contains(HrRoles.SystemAdmin))
         {
-            return SystemAdminOnly;
+            return null;
         }
 
-        return employeeRoles.Contains(HrRoles.Reviewer) ? ReviewerManagers : DepartmentManagerOnly;
+        if (employeeRoles.Contains(HrRoles.DepartmentManager))
+        {
+            // Decision 2026-11-10: department managers report to the HR manager, no longer to the system admin.
+            return HrManagerOnly;
+        }
+
+        if (employeeRoles.Contains(HrRoles.Reviewer))
+        {
+            return ReviewerManagers;
+        }
+
+        // Decision 2026-11-11: the accountant and the store officer report to the executive director.
+        if (employeeRoles.Contains(HrRoles.Accountant) || employeeRoles.Contains(HrRoles.StoreOfficer))
+        {
+            return ExecutiveOnly;
+        }
+
+        return DepartmentManagerOnly;
+    }
+
+    /// <summary>
+    /// No shift, and outside attendance and leave: the executive director, the HR manager and the system admin
+    /// (decisions of 2026-11-10), and the accountant and the store officer (decision 2026-11-11). Whether they have a
+    /// manager is a separate rule: the HR manager, the accountant and the store officer keep the executive.
+    /// </summary>
+    public static bool IsOutsideSchedule(IReadOnlyCollection<string> roles) =>
+        roles.Contains(HrRoles.ExecutiveDirector) || roles.Contains(HrRoles.HrManager) || roles.Contains(HrRoles.SystemAdmin) ||
+        roles.Contains(HrRoles.Accountant) || roles.Contains(HrRoles.StoreOfficer);
+
+    /// <summary>
+    /// Closes what these roles may not have: the current manager link when the roles have no manager, and the
+    /// current shift assignment when they are outside the schedule. Returns whether anything changed; the caller
+    /// saves the employee.
+    /// </summary>
+    public virtual async Task<bool> DetachFromScheduleAsync(Employee employee, IReadOnlyCollection<string> roles, DateOnly today)
+    {
+        var changed = false;
+        if (AllowedManagerRoles(roles) == null && employee.ManagerEmployeeId != null)
+        {
+            await CloseCurrentLinkAsync(employee.Id, today);
+            employee.SetManager(null);
+            changed = true;
+        }
+
+        var shift = IsOutsideSchedule(roles)
+            ? await _shiftAssignments.FirstOrDefaultAsync(x => x.EmployeeId == employee.Id && x.EndDate == null)
+            : null;
+        if (shift != null)
+        {
+            shift.Close(today < shift.StartDate ? shift.StartDate : today);
+            await _shiftAssignments.UpdateAsync(shift, autoSave: true);
+            changed = true;
+        }
+
+        return changed;
     }
 
     public virtual async Task<IReadOnlyCollection<string>> GetRolesAsync(Employee employee) =>

@@ -305,6 +305,12 @@ public class ComplaintAppService : HR_Mangment2AppService, IComplaintAppService
         var query = ApplyFilters(context.ApplyHandlerScope(await _complaints.GetQueryableAsync()), input);
         var now = Clock.Now;
 
+        // The employee file lists what this employee filed, inside the same scope: nothing outside it is revealed.
+        if (input.ComplainantEmployeeId != null)
+        {
+            query = query.Where(x => x.ComplainantEmployeeId == input.ComplainantEmployeeId.Value);
+        }
+
         if (input.IsLate != null)
         {
             query = input.IsLate.Value

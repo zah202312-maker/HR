@@ -27,9 +27,18 @@ public record StockMovementDraft(
     Guid? CustodyId = null,
     Guid? ReversesMovementId = null,
     Guid? EmployeeId = null,
-    decimal? TotalCost = null);
+    decimal? TotalCost = null,
+    decimal? UnitCost = null,
+    Guid? PurchaseId = null,
+    Guid? IssueVoucherId = null,
+    Guid? TeamId = null,
+    string? DocumentNumber = null);
 
-/// <summary>The only writer of an item's balance. The balance and its movement change together, and it never goes negative.</summary>
+/// <summary>
+/// The only writer of an item's balance and average cost. The balance and its movement change together, and it never
+/// goes negative. A movement is valued at <see cref="StockMovementDraft.UnitCost"/>, or at TotalCost / quantity, or else
+/// at the item's average cost, so an outflow leaves the average where it was.
+/// </summary>
 public class StockLedger : ITransientDependency
 {
     private readonly IRepository<Item, Guid> _items;
@@ -52,7 +61,14 @@ public class StockLedger : ITransientDependency
             throw new BusinessException(HrErrorCodes.Stock.InsufficientStock);
         }
 
-        item.ApplyMovement(draft.SignedQuantity);
+        var unitCost = draft.UnitCost
+            ?? (draft.TotalCost != null && draft.SignedQuantity != 0 ? Math.Round(draft.TotalCost.Value / Math.Abs(draft.SignedQuantity), StoreConsts.CostScale) : item.AverageUnitCost);
+        // An entered total stays exact, so the accountant's expense matches the paper receipt to the last unit.
+        var totalCost = draft.TotalCost != null
+            ? Math.Sign(draft.SignedQuantity) * Math.Abs(draft.TotalCost.Value)
+            : Math.Round(draft.SignedQuantity * unitCost, StoreConsts.CostScale);
+
+        item.ApplyMovement(draft.SignedQuantity, unitCost);
         await _items.UpdateAsync(item, autoSave: true);
 
         return await _movements.InsertAsync(
@@ -70,7 +86,12 @@ public class StockLedger : ITransientDependency
                 draft.CustodyId,
                 draft.ReversesMovementId,
                 draft.EmployeeId,
-                draft.TotalCost),
+                totalCost,
+                unitCost,
+                draft.PurchaseId,
+                draft.IssueVoucherId,
+                draft.TeamId,
+                draft.DocumentNumber),
             autoSave: true);
     }
 }
@@ -78,14 +99,15 @@ public class StockLedger : ITransientDependency
 /// <summary>Where a purchase cost goes. The finance module implements this in release 3 by creating the accountant's expense.</summary>
 public interface IStockExpenseGateway
 {
-    Task OnPurchaseRecordedAsync(StockMovement movement);
+    /// <summary>One expense for this movement's cost. <paramref name="description"/> names the receipt, if any.</summary>
+    Task OnPurchaseRecordedAsync(StockMovement movement, string? description = null);
 
     Task OnPurchaseReversedAsync(StockMovement original, StockMovement reversal);
 }
 
 public class NullStockExpenseGateway : IStockExpenseGateway, ITransientDependency
 {
-    public Task OnPurchaseRecordedAsync(StockMovement movement) => Task.CompletedTask;
+    public Task OnPurchaseRecordedAsync(StockMovement movement, string? description = null) => Task.CompletedTask;
 
     public Task OnPurchaseReversedAsync(StockMovement original, StockMovement reversal) => Task.CompletedTask;
 }

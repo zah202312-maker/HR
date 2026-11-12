@@ -32,8 +32,15 @@ public class SettingsAndNotificationTests
         var sections = await admin.GetFromJsonAsync<JsonElement>("/api/app/system-settings");
         var items = sections.GetProperty("items").EnumerateArray().ToList();
 
-        items.Count.ShouldBe(15);
+        items.Count.ShouldBe(17);
+        items.Single(x => x.GetProperty("code").GetString() == "hrEvaluationAlert").GetProperty("ownerRole").GetString().ShouldBe("hrManager");
         var holidays = items.Single(x => x.GetProperty("code").GetString() == "holidays");
+
+        // Decision 2026-11-10: the default annual leave is the HR manager's section, not the system admin's.
+        var annual = items.Single(x => x.GetProperty("code").GetString() == "annualLeave");
+        annual.GetProperty("ownerRole").GetString().ShouldBe("hrManager");
+        annual.GetProperty("isEditableByCaller").GetBoolean().ShouldBeFalse();
+        (await admin.GetAsync("/api/app/system-settings/annual-leave")).StatusCode.ShouldBe(System.Net.HttpStatusCode.Forbidden);
         holidays.GetProperty("ownerRole").GetString().ShouldBe("hrManager");
         holidays.GetProperty("isEditableByCaller").GetBoolean().ShouldBeFalse();
         items.Single(x => x.GetProperty("code").GetString() == "finance").GetProperty("isEditableByCaller").GetBoolean().ShouldBeTrue();

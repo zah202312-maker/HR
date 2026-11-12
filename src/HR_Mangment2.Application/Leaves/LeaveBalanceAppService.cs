@@ -27,7 +27,7 @@ public class LeaveBalanceAppService : HR_Mangment2AppService, ILeaveBalanceAppSe
 {
     private const string AdjustOperation = "LeaveBalance_Adjust";
 
-    /// <summary>The stamp of an employee with no account row yet, so the first entitlement can still be checked like any other.</summary>
+    /// <summary>The stamp shown for an employee with no account row yet (no leave year opened).</summary>
     private const string NoAccountStamp = "00000000000000000000000000000000";
 
     private static readonly Dictionary<string, string> LedgerSortFields = new()
@@ -95,34 +95,6 @@ public class LeaveBalanceAppService : HR_Mangment2AppService, ILeaveBalanceAppSe
     public virtual async Task<LeaveBalanceDto> GetByEmployeeAsync(Guid employeeId) =>
         await ToDtoAsync(await GetInScopeAsync(employeeId));
 
-    [Authorize(HrPermissions.LeavePermissions.BalanceSetEntitlement)]
-    public virtual async Task<LeaveBalanceDto> SetEntitlementAsync(Guid employeeId, LeaveEntitlementUpdateDto input)
-    {
-        var employee = await GetTargetForChangeAsync(employeeId);
-        var snapshot = await _balances.GetSnapshotAsync(employee);
-
-        if ((snapshot.Account?.ConcurrencyStamp ?? NoAccountStamp) != input.ConcurrencyStamp)
-        {
-            throw new HrConflictException("The balance changed since it was read.");
-        }
-
-        var account = await _balances.GetOrCreateAccountAsync(employeeId);
-        var days = input.EntitlementDays!.Value;
-
-        if (snapshot.CurrentYear == null)
-        {
-            await _balances.OpenFirstYearAsync(employee, account, days, input.Reason);
-        }
-        else
-        {
-            account.SetNextYearEntitlement(days);
-            await _balances.TouchAsync(account);
-        }
-
-        await CurrentUnitOfWork!.SaveChangesAsync();
-        return await ToDtoAsync(employee);
-    }
-
     [Authorize(HrPermissions.LeavePermissions.BalanceAdjust)]
     public virtual async Task<LeaveBalanceDto> AdjustAsync(Guid employeeId, LeaveBalanceAdjustDto input, Guid? idempotencyKey)
     {
@@ -177,7 +149,7 @@ public class LeaveBalanceAppService : HR_Mangment2AppService, ILeaveBalanceAppSe
     {
         var employee = await _employees.FindAsync(employeeId) ?? throw new EntityNotFoundException(typeof(Employee), employeeId);
 
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             throw new BusinessException(HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
         }
@@ -213,14 +185,15 @@ public class LeaveBalanceAppService : HR_Mangment2AppService, ILeaveBalanceAppSe
     {
         var employee = await _employees.FindAsync(employeeId) ?? throw new EntityNotFoundException(typeof(Employee), employeeId);
 
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
-        {
-            throw new BusinessException(HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
-        }
-
+        // Checked first: the HR manager, who changes balances, has no balance of their own (decision 2026-11-10).
         if (employee.UserId == CurrentUser.GetId())
         {
             throw new BusinessException(HrErrorCodes.Leave.SelfAdjustmentNotAllowed);
+        }
+
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
+        {
+            throw new BusinessException(HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
         }
 
         // D15: the executive director acts on the HR manager's balance only.
@@ -367,16 +340,6 @@ public class LeaveBalanceAppService : HR_Mangment2AppService, ILeaveBalanceAppSe
                 CreationTime = x.CreationTime
             }).ToList()
         };
-    }
-}
-
-public class LeaveEntitlementUpdateDtoValidator : AbstractValidator<LeaveEntitlementUpdateDto>
-{
-    public LeaveEntitlementUpdateDtoValidator()
-    {
-        RuleFor(x => x.EntitlementDays).NotNull().GreaterThanOrEqualTo(0);
-        RuleFor(x => x.Reason).MaximumLength(LeaveLedgerEntry.MaxReasonLength);
-        RuleFor(x => x.ConcurrencyStamp).NotEmpty();
     }
 }
 

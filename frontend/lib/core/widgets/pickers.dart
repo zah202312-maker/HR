@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../api/generated/hr_api.dart';
 import '../l10n/strings.dart';
 import '../theme/tokens.dart';
 import 'common.dart';
 import 'motion_widgets.dart';
+import 'person_avatar.dart';
 
 /// Searchable picker dialog over a contract lookup operation (server-side search).
 Future<T?> showSearchPicker<T>(
@@ -97,6 +99,12 @@ class _SearchPickerDialogState<T> extends State<_SearchPickerDialog<T>> {
                         itemBuilder: (context, i) {
                           final item = _items[i];
                           return ListTile(
+                            // A person shows with their photo next to the name (decision 2026-11-11).
+                            leading: switch (item) {
+                              EmployeeRefDto e => PersonAvatar.employee(e),
+                              UserRefDto u => PersonAvatar.user(u),
+                              _ => null,
+                            },
                             title: Text(widget.label(item)),
                             subtitle: widget.subtitle == null ? null : Text(widget.subtitle!(item)),
                             onTap: () => Navigator.pop(context, item),

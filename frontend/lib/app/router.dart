@@ -10,14 +10,18 @@ import '../features/admin/request_types_page.dart';
 import '../features/admin/settings_page.dart';
 import '../features/attendance/attendance_page.dart';
 import '../features/eval/circulars_page.dart';
+import '../features/notices/notices_page.dart';
+import '../features/hr_evaluations/hr_evaluations_page.dart';
+import '../features/reviewer_evaluations/reviewer_evaluations_page.dart';
 import '../features/eval/department_reports_page.dart';
 import '../features/eval/review_reports_page.dart';
-import '../features/eval/evaluation_admin_page.dart';
+import '../features/eval/review_rooms_page.dart';
 import '../features/eval/evaluations_page.dart';
 import '../features/finance/finance_page.dart';
 import '../features/finance/payroll_pages.dart';
 import '../features/hrx/appreciation_page.dart';
 import '../features/hrx/contracts_page.dart';
+import '../features/hrx/executive_overview_pages.dart';
 import '../features/hrx/warnings_page.dart';
 import '../features/ops/custody_page.dart';
 import '../features/ops/store_page.dart';
@@ -87,7 +91,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             target = '/gate/mfa';
           } else if (loc == '/splash' || loc == '/sign-in' || loc.startsWith('/gate')) {
             return '/';
-          } else if (session.isSystemAdminOnly && isHiddenForSystemAdmin(loc)) {
+          } else if ((session.isSystemAdminOnly && isHiddenForSystemAdmin(loc)) ||
+              (session.isOutsideSchedule && isHiddenOutsideSchedule(loc)) ||
+              (session.isHrWithoutSystemAdmin && isHiddenForHrManager(loc)) ||
+              (session.isBackOfficeOnly && isHiddenForBackOffice(loc)) ||
+              (session.isExecutive && isHiddenForExecutive(loc))) {
             return '/';
           } else {
             return null;
@@ -184,17 +192,36 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(path: 'hr', builder: (_, st) => EvaluationHrPage(id: st.pathParameters['id']!)),
             ]),
           ]),
-          GoRoute(path: '/evaluation-admin', builder: (_, __) => const EvaluationAdminPage()),
           GoRoute(path: '/review-reports', builder: (_, __) => const ReviewReportsPage(), routes: [
             GoRoute(path: ':id', builder: (_, st) => ReviewReportPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
           ]),
+          GoRoute(path: '/review-rooms', builder: (_, __) => const ReviewRoomsPage()),
           GoRoute(path: '/department-reports', builder: (_, __) => const DepartmentReportsPage(), routes: [
             GoRoute(path: ':id', builder: (_, st) => DepartmentReportPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
           ]),
           GoRoute(path: '/circulars', builder: (_, __) => const CircularsPage(), routes: [
             GoRoute(path: ':id', builder: (_, st) => CircularDetailPage(id: st.pathParameters['id']!)),
           ]),
+          GoRoute(path: '/notices', builder: (_, __) => const MyNoticesPage(), routes: [
+            GoRoute(path: ':id', builder: (_, st) => NoticeDetailPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
+          ]),
+          GoRoute(path: '/send-notice', builder: (_, __) => const SendNoticePage()),
+          GoRoute(path: '/reviewer-evaluations', builder: (_, __) => const ReviewerEvaluationsPage()),
+          GoRoute(path: '/reviewer-evaluation-criteria', builder: (_, __) => const ReviewerEvaluationCriteriaPage()),
+          GoRoute(path: '/reviewer-evaluation-reports', builder: (_, __) => const ReviewerEvaluationReportsPage(), routes: [
+            GoRoute(path: ':id', builder: (_, st) => ReviewerEvaluationReportDetailPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
+          ]),
+          GoRoute(path: '/hr-evaluations', builder: (_, __) => const HrEvaluationsPage()),
+          GoRoute(path: '/hr-evaluation-criteria', builder: (_, __) => const HrEvaluationCriteriaPage()),
+          GoRoute(path: '/hr-evaluation-alerts', builder: (_, __) => const HrEvaluationAlertsPage(), routes: [
+            GoRoute(path: ':id', builder: (_, st) => HrEvaluationAlertDetailPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
+          ]),
+          GoRoute(path: '/hr-evaluation-reports', builder: (_, __) => const HrEvaluationReportsPage(), routes: [
+            GoRoute(path: ':id', builder: (_, st) => HrEvaluationReportDetailPage(key: ValueKey(st.pathParameters['id']), id: st.pathParameters['id']!)),
+          ]),
           // release 3
+          GoRoute(path: '/employee-salaries', builder: (_, __) => const EmployeeSalariesPage()),
+          GoRoute(path: '/employee-contracts', builder: (_, __) => const EmployeeContractsPage()),
           GoRoute(path: '/contracts', builder: (_, __) => const ContractsPage(), routes: [
             GoRoute(path: ':id', builder: (_, st) => ContractDetailPage(id: st.pathParameters['id']!)),
           ]),

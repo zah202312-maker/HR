@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart' show PlatformFile;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +40,7 @@ Future<bool> showContractDialog(BuildContext context, WidgetRef ref, {EmployeeRe
   final type = TextEditingController(text: previous?.contractType);
   DateTime? start = previous?.endDate.add(const Duration(days: 1));
   DateTime? end;
+  final files = <PlatformFile>[];
   final key = const Uuid().v4();
   return showFormDialog(
     context,
@@ -64,6 +66,20 @@ Future<bool> showContractDialog(BuildContext context, WidgetRef ref, {EmployeeRe
         final x = await pickDate(context, initial: end ?? start);
         if (x != null) setState(() => end = x);
       }),
+      // The paper contract and its documents, up to 10 files (decision 2026-11-10).
+      Text(s.t('مرفقات العقد (اختياري)', 'Contract attachments (optional)'), style: Theme.of(context).textTheme.labelLarge),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final x in files) InputChip(label: Text(x.name), onDeleted: () => setState(() => files.remove(x))),
+        if (files.length < 10)
+          ActionChip(
+            avatar: const Icon(Icons.attach_file, size: 18),
+            label: Text(s.t('إرفاق العقد الورقي', 'Attach paper contract')),
+            onPressed: () async {
+              final picked = await pickFiles(multiple: true);
+              setState(() => files.addAll(picked.take(10 - files.length)));
+            },
+          ),
+      ]),
     ],
     onSubmit: () async {
       if (emp == null || start == null || end == null) {
@@ -74,7 +90,14 @@ Future<bool> showContractDialog(BuildContext context, WidgetRef ref, {EmployeeRe
         context,
         () => ref.read(hrApiProvider).contracts.Contract_Create(
               idempotencyKey: key,
-              body: ContractCreateInputDto(employeeId: emp!.id, contractType: type.text.trim(), startDate: start!, endDate: end!, previousContractId: previous?.id),
+              body: ContractCreateInputDto(
+                employeeId: emp!.id,
+                contractType: type.text.trim(),
+                startDate: start!,
+                endDate: end!,
+                previousContractId: previous?.id,
+                attachments: files.isEmpty ? null : [for (final x in files) multipartOf(x)],
+              ),
             ),
         done: s.saved,
       );
@@ -99,6 +122,7 @@ class _ContractsPageState extends ConsumerState<ContractsPage> {
     final f = Fmt(context);
     return OpsTile(
       leading: Icons.description_outlined,
+      avatar: PersonAvatar.employee(c.employee),
       title: '${c.employee.fullName} · ${c.contractType}',
       subtitle: [
         '${f.date(c.startDate)} → ${f.date(c.endDate)}',
@@ -176,6 +200,17 @@ class _ContractsPageState extends ConsumerState<ContractsPage> {
                 },
                 tone: c.status == ContractEmployeeStatus.notRenewed ? Tone.neutral : Tone.success,
               ),
+              // A copy of my paper contract (decision 2026-11-10).
+              actions: [
+                for (final a in c.attachments)
+                  ActionChip(
+                    avatar: const Icon(Icons.download, size: 18),
+                    label: Text(a.fileName),
+                    onPressed: () => runAction(context, () async {
+                      await openDownload(await ref.read(hrApiProvider).contracts.Contract_GetMyAttachmentDownloadUrl(id: c.id, attachmentId: a.id));
+                    }),
+                  ),
+              ],
             ),
           )
         ),
@@ -293,6 +328,47 @@ class ContractDetailPage extends ConsumerWidget {
               if (c.decisionDueDate != null)
                 InfoRow(s.t('موعد القرار', 'Decision due'), '${f.date(c.decisionDueDate)}${c.isDecisionOverdue ? ' · ${s.t('متأخر', 'overdue')}' : ''}'),
               if (c.employeeNotifiedAt != null) InfoRow(s.t('أُبلغ الموظف', 'Employee notified'), f.dateTime(c.employeeNotifiedAt)),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          // The paper contract and its documents: download, and soft delete of a mistaken file (decision 2026-11-10).
+          HrCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SectionTitle(s.t('مرفقات العقد', 'Contract attachments')),
+              if (c.attachments.isEmpty)
+                Text(s.t('لا توجد مرفقات.', 'No attachments.'), style: Theme.of(context).textTheme.bodySmall)
+              else
+                for (final a in c.attachments)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.attach_file),
+                    title: Text(a.fileName),
+                    subtitle: Text(f.dateTime(a.creationTime)),
+                    trailing: Wrap(spacing: 4, children: [
+                      IconButton(
+                        tooltip: s.t('تنزيل', 'Download'),
+                        icon: const Icon(Icons.download),
+                        onPressed: () => runAction(context, () async {
+                          await openDownload(await ref.read(hrApiProvider).contracts.Contract_GetAttachmentDownloadUrl(id: c.id, attachmentId: a.id));
+                        }),
+                      ),
+                      if (session.can(HrOps.Contract_DeleteAttachment))
+                        IconButton(
+                          tooltip: s.t('حذف', 'Delete'),
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            final ok = await confirmAction(context,
+                                title: s.t('حذف المرفق', 'Delete attachment'),
+                                message: s.t('يختفي «${a.fileName}» من العقد، ويبقى مسجلاً في سجل التدقيق.', '"${a.fileName}" will be removed from the contract and kept in the audit log.'),
+                                destructive: true);
+                            if (!ok || !context.mounted) return;
+                            if (await runAction(context, () => ref.read(hrApiProvider).contracts.Contract_DeleteAttachment(id: c.id, attachmentId: a.id), done: s.done)) {
+                              ref.invalidate(contractProvider(id));
+                            }
+                          },
+                        ),
+                    ]),
+                  ),
             ]),
           ),
           if (c.recommendation != null) ...[

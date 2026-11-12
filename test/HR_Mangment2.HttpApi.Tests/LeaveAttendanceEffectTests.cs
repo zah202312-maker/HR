@@ -51,13 +51,7 @@ public class LeaveAttendanceEffectTests
         JsonDocument.Parse(body).RootElement.GetProperty("error").GetProperty("code").GetString().ShouldBe(code);
     }
 
-    private static async Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days)
-    {
-        var balance = await hr.GetFromJsonAsync<JsonElement>($"/api/app/leave-balance/employee/{employeeId}");
-        await OkAsync(await hr.PutAsJsonAsync(
-            $"/api/app/leave-balance/employee/{employeeId}/entitlement",
-            new { entitlementDays = days, concurrencyStamp = balance.GetProperty("concurrencyStamp").GetString() }));
-    }
+    private static Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days) => AnnualLeaveDefault.OpenWithAsync(hr, employeeId, days);
 
     private static async Task ApproveThroughAsync(Team team, Guid requestId)
     {

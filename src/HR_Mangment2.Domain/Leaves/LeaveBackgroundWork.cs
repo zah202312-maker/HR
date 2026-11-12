@@ -58,6 +58,13 @@ public class LeaveMaintenanceService : ITransientDependency
         using (var read = _unitOfWorkManager.Begin(requiresNew: true))
         {
             due = (await _years.GetListAsync(x => x.IsGranted && !x.IsClosed && x.YearEnd < date)).Select(x => x.EmployeeId).Distinct().ToList();
+
+            // Active employees with no year yet get their first one with the company default (decision 2026-11-10).
+            // RollOverAsync skips whoever has no leave (executive director, HR manager, system admin).
+            var opened = (await _years.GetQueryableAsync()).Where(x => x.IsGranted).Select(x => x.EmployeeId);
+            var unopened = await _employees.GetListAsync(x => x.Status == EmployeeStatus.Active && x.HireDate <= date && !opened.Contains(x.Id));
+            due.AddRange(unopened.Select(x => x.Id).Where(x => !due.Contains(x)));
+
             await read.CompleteAsync();
         }
 

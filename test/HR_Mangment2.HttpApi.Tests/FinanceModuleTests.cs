@@ -253,8 +253,31 @@ public class FinanceModuleTests
         var fixedRows = await team.Accountant.GetFromJsonAsync<JsonElement>($"/api/app/finance/adjustment?period={period}&employeeId={team.Staff.Id}&status=includedInRun");
         fixedRows.GetProperty("totalCount").GetInt64().ShouldBe(3);
 
+        // Salary delivery is marked only on a closed run (decision 2026-11-11).
+        await ShouldFailWithAsync(
+            await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/deliver", new { deliveredOn = DateTime.UtcNow.ToString("yyyy-MM-dd") }),
+            HrErrorCodes.Finance.InvalidPayrollRunStatus);
+
         run = await OkAsync(await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/close", Action(run)));
         Text(run, "status").ShouldBe("closed");
+        run.GetProperty("deliveredCount").GetInt32().ShouldBe(0);
+
+        await ShouldFailWithAsync(
+            await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/deliver", new { employeeIds = new[] { team.Staff.Id }, deliveredOn = DateTime.UtcNow.AddDays(3).ToString("yyyy-MM-dd") }),
+            HrErrorCodes.Finance.DeliveryDateInFuture);
+        await ShouldFailWithAsync(
+            await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/deliver", new { employeeIds = new[] { Guid.NewGuid() }, deliveredOn = DateTime.UtcNow.ToString("yyyy-MM-dd") }),
+            HrErrorCodes.Finance.EmployeeNotInPayroll);
+        var delivered = await OkAsync(await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/deliver", new { employeeIds = new[] { team.Staff.Id }, deliveredOn = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd") }));
+        ItemFor(delivered, team.Staff.Id).GetProperty("deliveredOn").GetString().ShouldBe(DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd"));
+        ItemFor(delivered, team.Staff.Id).GetProperty("deliveredBy").ValueKind.ShouldBe(JsonValueKind.Object);
+        delivered.GetProperty("deliveredCount").GetInt32().ShouldBe(1);
+        var mySlips = await team.StaffClient.GetFromJsonAsync<JsonElement>("/api/app/finance/payslip/my");
+        mySlips.GetProperty("items").EnumerateArray().Single(x => Text(x, "period") == period).GetProperty("deliveredOn").ValueKind.ShouldBe(JsonValueKind.String);
+        var undone = await OkAsync(await team.Accountant.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/undo-delivery", new { employeeIds = new[] { team.Staff.Id }, reason = "Wrong person" }));
+        ItemFor(undone, team.Staff.Id).GetProperty("deliveredOn").ValueKind.ShouldBe(JsonValueKind.Null);
+        (await team.StaffClient.PostAsJsonAsync($"/api/app/finance/payroll-run/{id}/deliver", new { deliveredOn = DateTime.UtcNow.ToString("yyyy-MM-dd") })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        run = undone;
 
         var slipId = IdOf(ItemFor(run, team.Staff.Id));
         var slips = await team.StaffClient.GetFromJsonAsync<JsonElement>("/api/app/finance/payslip/my");
@@ -431,7 +454,7 @@ public class FinanceModuleTests
         (await team.Accountant.GetAsync("/api/app/finance/expense/export?format=excel&category=Fuel")).StatusCode.ShouldBe(HttpStatusCode.OK);
 
         var suffix = Guid.NewGuid().ToString("N")[..10];
-        var item = await OkAsync(await officer.PostAsJsonAsync("/api/app/item", new { nameAr = "صنف " + suffix, nameEn = "Item " + suffix, kind = "consumable", minQuantity = 1 }), HttpStatusCode.Created);
+        var item = await OkAsync(await officer.PostAsJsonAsync("/api/app/item", await StoreTestKit.ItemBodyAsync(officer, "صنف " + suffix, "Item " + suffix, "consumable", 1)), HttpStatusCode.Created);
         var movement = await OkAsync(await officer.PostAsJsonAsync("/api/app/stock/receive", new { itemId = IdOf(item), quantity = 5, totalCost = 300m }), HttpStatusCode.Created);
 
         var list = await team.Accountant.GetFromJsonAsync<JsonElement>("/api/app/finance/expense?source=storePurchase&maxResultCount=200&sorting=date desc");

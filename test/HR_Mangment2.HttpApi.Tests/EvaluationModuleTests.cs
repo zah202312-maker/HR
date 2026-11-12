@@ -124,67 +124,14 @@ public class EvaluationModuleTests
     }
 
     [Fact]
-    public async Task The_scale_starts_with_five_of_each_and_keeps_its_minimums()
+    public async Task The_scale_is_fixed_and_has_no_management_routes()
     {
-        var admin = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee, HrRoles.SystemAdmin);
-
-        var criteria = await admin.GetFromJsonAsync<JsonElement>("/api/app/evaluation-criterion?maxResultCount=200&isActive=true&sorting=sortOrder");
-        criteria.GetProperty("items").EnumerateArray().Select(x => Text(x, "nameEn")).ShouldContain("Quality of work");
-        var grades = await admin.GetFromJsonAsync<JsonElement>("/api/app/evaluation-grade?maxResultCount=200&isActive=true&sorting=sortOrder");
-        grades.GetProperty("items").EnumerateArray().Select(x => Text(x, "code")).ShouldBe(new[] { "weak", "acceptable", "good", "veryGood", "excellent" });
-
-        // The verbal scale has no number anywhere.
-        grades.GetProperty("items")[0].EnumerateObject().Select(x => x.Name).ShouldNotContain("value");
-        grades.GetProperty("items")[0].EnumerateObject().Select(x => x.Name).ShouldNotContain("percentage");
-
-        var first = criteria.GetProperty("items")[0];
-        (await admin.PostAsJsonAsync("/api/app/evaluation-criterion", new { nameAr = Text(first, "nameAr"), nameEn = "Other " + Guid.NewGuid(), sortOrder = 9, isActive = false }))
-            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await admin.PostAsJsonAsync("/api/app/evaluation-grade", new { code = "good", nameAr = "س", nameEn = "S", sortOrder = 9, isActive = false }))
-            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await admin.PostAsJsonAsync("/api/app/evaluation-grade", new { code = "Not Valid", nameAr = "س", nameEn = "S", sortOrder = 9, isActive = false }))
-            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-
-        // Stopping everything but one leaves the last ones protected, and the scale is put back for the other tests.
-        var stoppedCriteria = new System.Collections.Generic.List<(string Url, JsonElement Row)>();
-        var stoppedGrades = new System.Collections.Generic.List<(string Url, JsonElement Row)>();
-        try
-        {
-            var active = criteria.GetProperty("items").EnumerateArray().ToList();
-            foreach (var row in active.Skip(1))
-            {
-                var url = $"/api/app/evaluation-criterion/{IdOf(row)}";
-                var stopped = await OkAsync(await admin.PutAsJsonAsync(url, new { nameAr = Text(row, "nameAr"), nameEn = Text(row, "nameEn"), sortOrder = row.GetProperty("sortOrder").GetInt32(), isActive = false, concurrencyStamp = Text(row, "concurrencyStamp") }));
-                stoppedCriteria.Add((url, stopped));
-            }
-
-            await ShouldFailWithAsync(
-                await admin.PutAsJsonAsync($"/api/app/evaluation-criterion/{IdOf(first)}", new { nameAr = Text(first, "nameAr"), nameEn = Text(first, "nameEn"), sortOrder = 1, isActive = false, concurrencyStamp = Text(first, "concurrencyStamp") }),
-                HrErrorCodes.Evaluations.LastActiveCriterion);
-
-            var activeGrades = grades.GetProperty("items").EnumerateArray().ToList();
-            foreach (var row in activeGrades.Skip(2))
-            {
-                var url = $"/api/app/evaluation-grade/{IdOf(row)}";
-                var stopped = await OkAsync(await admin.PutAsJsonAsync(url, new { nameAr = Text(row, "nameAr"), nameEn = Text(row, "nameEn"), sortOrder = row.GetProperty("sortOrder").GetInt32(), isActive = false, concurrencyStamp = Text(row, "concurrencyStamp") }));
-                stoppedGrades.Add((url, stopped));
-            }
-
-            var firstGrade = activeGrades[0];
-            await ShouldFailWithAsync(
-                await admin.PutAsJsonAsync($"/api/app/evaluation-grade/{IdOf(firstGrade)}", new { nameAr = Text(firstGrade, "nameAr"), nameEn = Text(firstGrade, "nameEn"), sortOrder = 1, isActive = false, concurrencyStamp = Text(firstGrade, "concurrencyStamp") }),
-                HrErrorCodes.Evaluations.MinimumActiveGrades);
-        }
-        finally
-        {
-            foreach (var (url, row) in stoppedCriteria.Concat(stoppedGrades))
-            {
-                await OkAsync(await admin.PutAsJsonAsync(url, new { nameAr = Text(row, "nameAr"), nameEn = Text(row, "nameEn"), sortOrder = row.GetProperty("sortOrder").GetInt32(), isActive = true, concurrencyStamp = Text(row, "concurrencyStamp") }));
-            }
-        }
-
-        var staff = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee);
-        (await staff.GetAsync("/api/app/evaluation-criterion")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // Criteria and grade management was removed (Zainab, 2026-11-11); the seeded scale stays.
+        var hr = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee, HrRoles.HrManager);
+        (await hr.GetAsync("/api/app/evaluation-criterion")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await hr.GetAsync("/api/app/evaluation-grade")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await hr.PostAsJsonAsync("/api/app/evaluation-criterion", new { nameAr = "س", nameEn = "S", sortOrder = 9, isActive = true })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await hr.PutAsJsonAsync($"/api/app/evaluation-grade/{Guid.NewGuid()}", new { nameAr = "س", nameEn = "S", sortOrder = 9, isActive = true, concurrencyStamp = "x" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -397,6 +344,8 @@ public class EvaluationModuleTests
 
         var view = await hr.GetFromJsonAsync<JsonElement>($"/api/app/evaluation/{id}/hr-view");
         Text(view, "objectionStatus").ShouldBe("pending");
+        // HR picks new grades from the cycle's own scale, not from a separate scale endpoint (2026-11-11)
+        view.GetProperty("availableGrades").EnumerateArray().Select(x => Text(x, "code")).ShouldBe(new[] { "weak", "acceptable", "good", "veryGood", "excellent" });
         view.GetProperty("responses").GetArrayLength().ShouldBe(2);
         var stamp = Text(view, "concurrencyStamp");
 

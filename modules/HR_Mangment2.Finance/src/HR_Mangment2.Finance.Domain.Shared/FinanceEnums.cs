@@ -67,7 +67,10 @@ public enum PayrollLineKind
 public enum ExpenseSource
 {
     General,
-    StorePurchase
+    StorePurchase,
+
+    /// <summary>A petty cash delivery (decision 2026-11-11).</summary>
+    PettyCash
 }
 
 public enum ExpenseStatus
@@ -105,4 +108,10 @@ public static class FinanceConsts
     public const int MaxTextLength = 2000;
     public const string PeriodPattern = "^[0-9]{4}-(0[1-9]|1[0-2])$";
     public const string CurrencyPattern = "^[A-Z]{3}$";
+}
+
+public enum PettyCashEntryStatus
+{
+    Pending,
+    Delivered
 }

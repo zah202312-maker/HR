@@ -7,6 +7,7 @@ public class UserRefDto
 {
     public Guid Id { get; set; }
     public string DisplayName { get; set; } = null!;
+    public Guid? PhotoId { get; set; }
 }
 
 public class UserRefPagedResultDto

@@ -213,6 +213,19 @@ class ReportsApi {
     return EvaluationConsistencyRowPagedResultDto.fromJson(data as Map<String, dynamic>);
   }
 
+  /// GET /api/app/report/today-attendance-summary  (Today's attendance counts for the whole company (executive director))
+  Future<TodayAttendanceSummaryDto> Report_GetTodayAttendanceSummary({
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'Report_GetTodayAttendanceSummary',
+      method: 'GET',
+      path: '/api/app/report/today-attendance-summary',
+      cancelToken: cancelToken,
+    );
+    return TodayAttendanceSummaryDto.fromJson(data as Map<String, dynamic>);
+  }
+
   /// GET /api/app/report/hr-attendance  (HR attendance report)
   Future<HrAttendanceReportRowPagedResultDto> Report_GetHrAttendance({
     required DateTime from,
@@ -244,6 +257,8 @@ class ReportsApi {
 
   /// GET /api/app/report/hr-leave-balances  (HR leave balances report)
   Future<HrLeaveBalanceReportRowPagedResultDto> Report_GetHrLeaveBalances({
+    DateTime? from,
+    DateTime? to,
     String? departmentId,
     String? employeeId,
     int? skipCount,
@@ -256,6 +271,8 @@ class ReportsApi {
       method: 'GET',
       path: '/api/app/report/hr-leave-balances',
       query: <String, dynamic>{
+        if (from != null) 'from': hrDateToJson(from),
+        if (to != null) 'to': hrDateToJson(to),
         if (departmentId != null) 'departmentId': departmentId,
         if (employeeId != null) 'employeeId': employeeId,
         if (skipCount != null) 'skipCount': skipCount,

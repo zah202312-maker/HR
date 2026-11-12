@@ -31,6 +31,29 @@ public static class HrErrorCodes
         public const string ScopeNotAllowed = "Hr:Circulars:ScopeNotAllowed";
     }
 
+    public static class ReviewerEvaluation
+    {
+        public const string CriterionNotFound = "Hr:ReviewerEvaluation:CriterionNotFound";
+        public const string EmployeeNotAllowed = "Hr:ReviewerEvaluation:EmployeeNotAllowed";
+        public const string NothingToSend = "Hr:ReviewerEvaluation:NothingToSend";
+        public const string AlreadySent = "Hr:ReviewerEvaluation:AlreadySent";
+        public const string ItemsIncomplete = "Hr:ReviewerEvaluation:ItemsIncomplete";
+    }
+
+    public static class HrEvaluation
+    {
+        public const string CriterionNotFound = "Hr:HrEvaluation:CriterionNotFound";
+        public const string EmployeeNotAllowed = "Hr:HrEvaluation:EmployeeNotAllowed";
+        public const string NothingToSend = "Hr:HrEvaluation:NothingToSend";
+        public const string AlreadySent = "Hr:HrEvaluation:AlreadySent";
+        public const string ScoresIncomplete = "Hr:HrEvaluation:ScoresIncomplete";
+    }
+
+    public static class Notices
+    {
+        public const string RecipientNotAllowed = "Hr:Notices:RecipientNotAllowed";
+    }
+
     public static class Common
     {
         public const string IdempotencyKeyReused = "Hr:Common:IdempotencyKeyReused";
@@ -56,6 +79,7 @@ public static class HrErrorCodes
 
     public static class Contract
     {
+        public const string AttachmentRejected = "Hr:Contract:AttachmentRejected";
         public const string EmployeeNotFound = "Hr:Contract:EmployeeNotFound";
         public const string InvalidDateRange = "Hr:Contract:InvalidDateRange";
         public const string InvalidPreviousContract = "Hr:Contract:InvalidPreviousContract";
@@ -134,8 +158,6 @@ public static class HrErrorCodes
         public const string IncompleteScores = "Hr:Evaluations:IncompleteScores";
         public const string InvalidCriterion = "Hr:Evaluations:InvalidCriterion";
         public const string InvalidGrade = "Hr:Evaluations:InvalidGrade";
-        public const string LastActiveCriterion = "Hr:Evaluations:LastActiveCriterion";
-        public const string MinimumActiveGrades = "Hr:Evaluations:MinimumActiveGrades";
         public const string NotAnObjection = "Hr:Evaluations:NotAnObjection";
         public const string NotEditable = "Hr:Evaluations:NotEditable";
         public const string ObjectionAlreadyDecided = "Hr:Evaluations:ObjectionAlreadyDecided";
@@ -166,6 +188,15 @@ public static class HrErrorCodes
         public const string SelfChangeNotAllowed = "Hr:Finance:SelfChangeNotAllowed";
         public const string SuggestionAlreadyReviewed = "Hr:Finance:SuggestionAlreadyReviewed";
         public const string SuggestionAmountRequired = "Hr:Finance:SuggestionAmountRequired";
+        public const string DeliveryDateInFuture = "Hr:Finance:DeliveryDateInFuture";
+        public const string EmployeeNotInPayroll = "Hr:Finance:EmployeeNotInPayroll";
+        public const string FuturePeriod = "Hr:Finance:FuturePeriod";
+        public const string InvalidPeriodRange = "Hr:Finance:InvalidPeriodRange";
+        public const string PettyCashAssignmentOverlap = "Hr:Finance:PettyCashAssignmentOverlap";
+        public const string PettyCashEntryNotDelivered = "Hr:Finance:PettyCashEntryNotDelivered";
+        public const string PettyCashEntryNotPending = "Hr:Finance:PettyCashEntryNotPending";
+        public const string PettyCashTypeInactive = "Hr:Finance:PettyCashTypeInactive";
+        public const string PettyCashTypeNameAlreadyExists = "Hr:Finance:PettyCashTypeNameAlreadyExists";
     }
 
     public static class Identity
@@ -210,8 +241,22 @@ public static class HrErrorCodes
 
     public static class Item
     {
+        public const string CategoryInactive = "Hr:Item:CategoryInactive";
+        public const string HasMovements = "Hr:Item:HasMovements";
         public const string KindLocked = "Hr:Item:KindLocked";
         public const string NameAlreadyExists = "Hr:Item:NameAlreadyExists";
+        public const string SkuAlreadyExists = "Hr:Item:SkuAlreadyExists";
+        public const string UnitInactive = "Hr:Item:UnitInactive";
+    }
+
+    public static class ItemCategory
+    {
+        public const string NameAlreadyExists = "Hr:ItemCategory:NameAlreadyExists";
+    }
+
+    public static class ItemUnit
+    {
+        public const string NameAlreadyExists = "Hr:ItemUnit:NameAlreadyExists";
     }
 
     public static class Leave
@@ -288,10 +333,53 @@ public static class HrErrorCodes
     public static class ReviewReports
     {
         public const string AlreadySubmitted = "Hr:ReviewReports:AlreadySubmitted";
+        public const string ContentRequired = "Hr:ReviewReports:ContentRequired";
+        public const string DateAlreadyReported = "Hr:ReviewReports:DateAlreadyReported";
         public const string IncompleteTeams = "Hr:ReviewReports:IncompleteTeams";
-        public const string InvalidPeriod = "Hr:ReviewReports:InvalidPeriod";
-        public const string NoTeams = "Hr:ReviewReports:NoTeams";
+        public const string InvalidDate = "Hr:ReviewReports:InvalidDate";
+        public const string NoRooms = "Hr:ReviewReports:NoRooms";
         public const string UnknownTeam = "Hr:ReviewReports:UnknownTeam";
+    }
+
+    /// <summary>The reviewer's rooms for the daily report (decision 2026-11-11).</summary>
+    public static class ReviewRooms
+    {
+        public const string ManagerAlreadyHasRoom = "Hr:ReviewRooms:ManagerAlreadyHasRoom";
+        public const string MemberNotLinked = "Hr:ReviewRooms:MemberNotLinked";
+        public const string NotADepartmentManager = "Hr:ReviewRooms:NotADepartmentManager";
+    }
+
+    public static class StoreDocument
+    {
+        public const string AttachmentRejected = "Hr:StoreDocument:AttachmentRejected";
+    }
+
+    public static class StoreIssueVoucher
+    {
+        public const string CustodyAlreadyReturned = "Hr:StoreIssueVoucher:CustodyAlreadyReturned";
+        public const string DuplicateItem = "Hr:StoreIssueVoucher:DuplicateItem";
+        public const string EmployeeNotActive = "Hr:StoreIssueVoucher:EmployeeNotActive";
+        public const string InvalidDate = "Hr:StoreIssueVoucher:InvalidDate";
+        public const string NotApproved = "Hr:StoreIssueVoucher:NotApproved";
+        public const string NotDraft = "Hr:StoreIssueVoucher:NotDraft";
+        public const string TeamHasNoDepartment = "Hr:StoreIssueVoucher:TeamHasNoDepartment";
+        public const string TeamInactive = "Hr:StoreIssueVoucher:TeamInactive";
+        public const string VoucherNumberAlreadyExists = "Hr:StoreIssueVoucher:VoucherNumberAlreadyExists";
+    }
+
+    public static class StorePurchase
+    {
+        public const string DuplicateItem = "Hr:StorePurchase:DuplicateItem";
+        public const string InvalidDates = "Hr:StorePurchase:InvalidDates";
+        public const string NotApproved = "Hr:StorePurchase:NotApproved";
+        public const string NotDraft = "Hr:StorePurchase:NotDraft";
+        public const string ReceiptNumberAlreadyExists = "Hr:StorePurchase:ReceiptNumberAlreadyExists";
+    }
+
+    public static class StoreTeam
+    {
+        public const string DepartmentInvalid = "Hr:StoreTeam:DepartmentInvalid";
+        public const string NameAlreadyExists = "Hr:StoreTeam:NameAlreadyExists";
     }
 
     public static class Stock

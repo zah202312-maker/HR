@@ -9,6 +9,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../hrx/employee_records_tab.dart';
 import 'employee_file_page.dart' show EmployeeDocumentsTab, TaskLogTile;
@@ -51,7 +52,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
           itemBuilder: (context, m) => HrCard(
             onTap: () => context.go('/team/${m.id}'),
             child: Row(children: [
-              CircleAvatar(backgroundColor: context.hr.glow, child: Text(m.fullName.characters.first, style: TextStyle(color: context.hr.accent))),
+              PersonAvatar(name: m.fullName, photoId: m.photoId, radius: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -122,13 +123,15 @@ class TeamMemberPage extends ConsumerWidget {
       child: AsyncBody<EmployeeTeamMemberDto>(
         value: value,
         onRetry: () => ref.invalidate(teamMemberProvider(id)),
-        builder: (m) => DefaultTabController(
-          length: 3,
+        builder: (m) {
+          final records = employeeRecordTabs(s, ref.watch(sessionProvider), m.id, withComplaints: false);
+          return DefaultTabController(
+          length: 2 + records.length,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
               Tab(text: s.t('البيانات', 'Data')),
               Tab(text: s.t('الوثائق', 'Documents')),
-              Tab(text: s.t('السجل الوظيفي', 'Records')),
+              for (final r in records) Tab(text: r.label),
             ]),
             const SizedBox(height: 12),
             Expanded(
@@ -166,11 +169,12 @@ class TeamMemberPage extends ConsumerWidget {
                   ),
                 ]),
                 EmployeeDocumentsTab(employeeId: m.id, canManage: false),
-                EmployeeRecordsTab(employeeId: m.id),
+                for (final r in records) r.body,
               ]),
             ),
           ]),
-        ),
+        );
+        },
       ),
     );
   }

@@ -40,23 +40,6 @@ class LeaveBalanceApi {
     return LeaveBalanceDto.fromJson(data as Map<String, dynamic>);
   }
 
-  /// PUT /api/app/leave-balance/employee/{id}/entitlement  (Set an employee annual entitlement)
-  Future<LeaveBalanceDto> LeaveBalance_SetEntitlement({
-    required String id,
-    required LeaveEntitlementUpdateDto body,
-    CancelToken? cancelToken,
-  }) async {
-    final data = await client.send(
-      operationId: 'LeaveBalance_SetEntitlement',
-      method: 'PUT',
-      path: '/api/app/leave-balance/employee/${Uri.encodeComponent(id)}/entitlement',
-      body: body.toJson(),
-      contentType: 'application/json',
-      cancelToken: cancelToken,
-    );
-    return LeaveBalanceDto.fromJson(data as Map<String, dynamic>);
-  }
-
   /// POST /api/app/leave-balance/employee/{id}/adjust  (Adjust an employee balance with a reason)
   Future<LeaveBalanceDto> LeaveBalance_Adjust({
     required String id,

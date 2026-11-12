@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
-using HR_Mangment2.Errors;
-using Volo.Abp;
+using HR_Mangment2.ReviewerEvaluations;
 using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Entities.Auditing;
 using Volo.Abp.MultiTenancy;
@@ -9,17 +8,16 @@ using Volo.Abp.MultiTenancy;
 namespace HR_Mangment2.ReviewReports;
 
 /// <summary>
-/// The reviewer's follow-up report on each team, sent to the executive director (owner's decision 2026-11-07).
-/// A draft changes freely; once submitted it is neither edited nor deleted.
+/// The reviewer's daily report to the executive director (decision 2026-11-11, replacing the period follow-up
+/// reports): one per reviewer per day, a full text, and one row per room. A draft changes freely; once submitted it
+/// is neither edited nor deleted.
 /// </summary>
 public class ReviewReport : FullAuditedAggregateRoot<Guid>, IMultiTenant
 {
     public Guid? TenantId { get; private set; }
     public Guid ReviewerUserId { get; private set; }
-    public ReviewReportPeriodType PeriodType { get; private set; }
-    public DateOnly PeriodFrom { get; private set; }
-    public DateOnly PeriodTo { get; private set; }
-    public string? Summary { get; private set; }
+    public DateOnly ReportDate { get; private set; }
+    public string? Content { get; private set; }
     public ReviewReportStatus Status { get; private set; }
     public DateTime? SubmittedAt { get; private set; }
 
@@ -32,30 +30,21 @@ public class ReviewReport : FullAuditedAggregateRoot<Guid>, IMultiTenant
     {
     }
 
-    public ReviewReport(Guid id, Guid? tenantId, Guid reviewerUserId, ReviewReportPeriodType periodType, DateOnly periodFrom, DateOnly periodTo)
+    public ReviewReport(Guid id, Guid? tenantId, Guid reviewerUserId, DateOnly reportDate)
         : base(id)
     {
         TenantId = tenantId;
         ReviewerUserId = reviewerUserId;
+        ReportDate = reportDate;
         Status = ReviewReportStatus.Draft;
-        SetPeriod(periodType, periodFrom, periodTo);
     }
 
     public bool IsSubmitted => Status == ReviewReportStatus.Submitted;
 
-    public void SetPeriod(ReviewReportPeriodType periodType, DateOnly periodFrom, DateOnly periodTo)
-    {
-        if (!ReviewReportPeriod.IsValid(periodType, periodFrom, periodTo))
-        {
-            throw new BusinessException(HrErrorCodes.ReviewReports.InvalidPeriod);
-        }
+    /// <summary>The date rules (not in the future, one per day) are checked by the application service.</summary>
+    public void SetReportDate(DateOnly reportDate) => ReportDate = reportDate;
 
-        PeriodType = periodType;
-        PeriodFrom = periodFrom;
-        PeriodTo = periodTo;
-    }
-
-    public void SetSummary(string? summary) => Summary = string.IsNullOrWhiteSpace(summary) ? null : summary.Trim();
+    public void SetContent(string? content) => Content = string.IsNullOrWhiteSpace(content) ? null : content.Trim();
 
     public void Submit(DateTime now)
     {
@@ -67,50 +56,59 @@ public class ReviewReport : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public void MarkViewed(DateTime now) => ViewedAt ??= now;
 }
 
-/// <summary>One team in the report: a department manager and the people linked to them, frozen when the report starts.</summary>
+/// <summary>One room in the daily report, frozen when the report starts: its name, lead, department and members.</summary>
 public class ReviewReportTeam : Entity<Guid>, IMultiTenant
 {
     public Guid? TenantId { get; private set; }
     public Guid ReviewReportId { get; private set; }
+    public Guid RoomId { get; private set; }
+    public string RoomName { get; private set; } = null!;
     public Guid ManagerEmployeeId { get; private set; }
     public Guid? DepartmentId { get; private set; }
-    public int MembersCount { get; private set; }
+    public List<Guid> MemberEmployeeIds { get; private set; } = new();
     public int SortOrder { get; private set; }
-    public int? CompletionPercent { get; private set; }
+    public ReviewerGrade? BackendGrade { get; private set; }
+    public string? BackendNotes { get; private set; }
+    public ReviewerGrade? FrontendGrade { get; private set; }
+    public string? FrontendNotes { get; private set; }
     public string? Notes { get; private set; }
-    public string? ProjectNotes { get; private set; }
 
     protected ReviewReportTeam()
     {
     }
 
-    public ReviewReportTeam(Guid id, Guid? tenantId, Guid reviewReportId, Guid managerEmployeeId, Guid? departmentId, int membersCount, int sortOrder)
+    public ReviewReportTeam(
+        Guid id,
+        Guid? tenantId,
+        Guid reviewReportId,
+        Guid roomId,
+        string roomName,
+        Guid managerEmployeeId,
+        Guid? departmentId,
+        List<Guid> memberEmployeeIds,
+        int sortOrder)
         : base(id)
     {
         TenantId = tenantId;
         ReviewReportId = reviewReportId;
+        RoomId = roomId;
+        RoomName = roomName;
         ManagerEmployeeId = managerEmployeeId;
         DepartmentId = departmentId;
-        MembersCount = membersCount;
+        MemberEmployeeIds = memberEmployeeIds;
         SortOrder = sortOrder;
     }
 
-    public void Assess(int? completionPercent, string? notes, string? projectNotes)
-    {
-        CompletionPercent = completionPercent;
-        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        ProjectNotes = string.IsNullOrWhiteSpace(projectNotes) ? null : projectNotes.Trim();
-    }
-}
+    public bool IsGraded => BackendGrade != null && FrontendGrade != null;
 
-/// <summary>The period rules of ReviewReport_Create in the contract.</summary>
-public static class ReviewReportPeriod
-{
-    public static bool IsValid(ReviewReportPeriodType periodType, DateOnly periodFrom, DateOnly periodTo) => periodType switch
+    public void Assess(ReviewerGrade? backendGrade, string? backendNotes, ReviewerGrade? frontendGrade, string? frontendNotes, string? notes)
     {
-        ReviewReportPeriodType.Daily => periodFrom == periodTo,
-        ReviewReportPeriodType.Weekly => periodTo == periodFrom.AddDays(6),
-        ReviewReportPeriodType.Monthly => periodFrom.Day == 1 && periodTo == periodFrom.AddMonths(1).AddDays(-1),
-        _ => false
-    };
+        BackendGrade = backendGrade;
+        BackendNotes = Clean(backendNotes);
+        FrontendGrade = frontendGrade;
+        FrontendNotes = Clean(frontendNotes);
+        Notes = Clean(notes);
+    }
+
+    private static string? Clean(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 }

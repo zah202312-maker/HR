@@ -22,6 +22,9 @@ class ReportFilters {
   DateTime to;
   EmployeeRefDto? employee;
   DepartmentRefDto? department;
+
+  /// For a report whose period is optional: whether the user chose one.
+  bool periodOn = false;
 }
 
 /// A tabular report: its contract operation, columns and filters.
@@ -36,6 +39,7 @@ class ReportDef {
     this.teamScope = false,
     this.departmentFilter = false,
     this.endPeriod = false,
+    this.optionalPeriod = false,
   });
   final ReportCode code;
   final String operation;
@@ -48,6 +52,9 @@ class ReportDef {
 
   /// The period filters the contract end date (endFrom/endTo) instead of from/to.
   final bool endPeriod;
+
+  /// from/to are offered but may be left empty (hrLeaveBalances, decision 2026-11-10).
+  final bool optionalPeriod;
 }
 
 String s0(String ar, String en, Fmt f) => f.isArabic ? ar : en;
@@ -178,14 +185,27 @@ final reportDefs = <ReportDef>[
     operation: HrOps.Report_GetHrLeaveBalances,
     departmentFilter: true,
     needsPeriod: false,
+    optionalPeriod: true,
     title: (s) => s.t('أرصدة الإجازات', 'Leave balances'),
-    columns: (s) => [s.employee, s.t('بداية السنة', 'Year start'), s.entitlement, s.carried, s.used, s.held, s.remaining, s.t('ساعات زمنية', 'Hourly used')],
+    columns: (s) => [
+      s.employee, s.t('بداية السنة', 'Year start'), s.entitlement, s.carried, s.used, s.held, s.remaining, s.t('ساعات زمنية', 'Hourly used'),
+      s.t('المستخدم بالفترة (أيام)', 'Used in period (days)'), s.t('المستخدم بالفترة (ساعات)', 'Used in period (hours)'),
+    ],
     fetch: (api, f, r, skip, max) async {
-      final x = await api.reports.Report_GetHrLeaveBalances(departmentId: r.department?.id, employeeId: r.employee?.id, skipCount: skip, maxResultCount: max);
+      final x = await api.reports.Report_GetHrLeaveBalances(
+          from: r.periodOn ? r.from : null,
+          to: r.periodOn ? r.to : null,
+          departmentId: r.department?.id,
+          employeeId: r.employee?.id,
+          skipCount: skip,
+          maxResultCount: max);
       return (
         rows: [
           for (final i in x.items)
-            [i.employee.fullName, f.date(i.leaveYearStart), _n(i.entitlementDays), _n(i.carriedInDays), _n(i.usedDays), _n(i.heldDays), _n(i.remainingDays), _n(i.usedHours)]
+            [
+              i.employee.fullName, f.date(i.leaveYearStart), _n(i.entitlementDays), _n(i.carriedInDays), _n(i.usedDays), _n(i.heldDays), _n(i.remainingDays), _n(i.usedHours),
+              _n(i.periodUsedDays), _n(i.periodUsedHours),
+            ]
         ],
         total: x.totalCount
       );
@@ -313,8 +333,8 @@ class _ReportViewPageState extends ConsumerState<ReportViewPage> {
       final file = await ref.read(hrApiProvider).reports.Report_Export(
             code: d.code,
             format: format,
-            from: d.needsPeriod && !d.endPeriod ? _filters.from : null,
-            to: d.needsPeriod && !d.endPeriod ? _filters.to : null,
+            from: (d.needsPeriod && !d.endPeriod) || (d.optionalPeriod && _filters.periodOn) ? _filters.from : null,
+            to: (d.needsPeriod && !d.endPeriod) || (d.optionalPeriod && _filters.periodOn) ? _filters.to : null,
             endFrom: d.endPeriod ? _filters.from : null,
             endTo: d.endPeriod ? _filters.to : null,
             employeeId: _filters.employee?.id,
@@ -356,6 +376,35 @@ class _ReportViewPageState extends ConsumerState<ReportViewPage> {
                 final x = await pickDate(context, initial: _filters.to);
                 if (x != null) setState(() => _filters.to = x);
               }),
+            ),
+          ],
+          // Optional period: empty until a date is picked; clearing either empties both.
+          if (d.optionalPeriod) ...[
+            SizedBox(
+              width: 180,
+              child: PickerField(
+                label: s.from,
+                value: _filters.periodOn ? f.date(_filters.from) : null,
+                icon: Icons.event,
+                onClear: _filters.periodOn ? () => setState(() => _filters.periodOn = false) : null,
+                onTap: () async {
+                  final x = await pickDate(context, initial: _filters.from);
+                  if (x != null) setState(() => (_filters..from = x).periodOn = true);
+                },
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: PickerField(
+                label: s.to,
+                value: _filters.periodOn ? f.date(_filters.to) : null,
+                icon: Icons.event,
+                onClear: _filters.periodOn ? () => setState(() => _filters.periodOn = false) : null,
+                onTap: () async {
+                  final x = await pickDate(context, initial: _filters.to);
+                  if (x != null) setState(() => (_filters..to = x).periodOn = true);
+                },
+              ),
             ),
           ],
           SizedBox(

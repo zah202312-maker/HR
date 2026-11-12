@@ -200,6 +200,9 @@ public class ComplaintMyListInput : PagedAndSortedResultRequestDto
 public class ComplaintAssignedListInput : ComplaintMyListInput
 {
     public bool? IsLate { get; set; }
+
+    /// <summary>Only complaints filed by this employee, still within the handler's own scope (decision 2026-11-10).</summary>
+    public Guid? ComplainantEmployeeId { get; set; }
 }
 
 public class ComplaintAttachmentUploadInput

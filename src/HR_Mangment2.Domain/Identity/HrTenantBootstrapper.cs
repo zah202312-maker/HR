@@ -34,6 +34,21 @@ public class HrTenantBootstrapper : ITransientDependency
     private const string DefaultDepartmentNameEn = "General Administration";
     private const string DefaultShiftNameEn = "Default Shift";
 
+    /// <summary>
+    /// Permissions taken away from a role after it was first seeded. The data seeder only adds grants,
+    /// so these are removed explicitly. Evaluation criteria and grades moved from the system admin to
+    /// the HR manager (Zainab, 2026-11-10), then their management was dropped entirely (Zainab, 2026-11-11),
+    /// so the old names are kept here as literals to clear grants left in existing databases.
+    /// </summary>
+    private static readonly (string Permission, string Role)[] RevokedDefaults =
+    {
+        ("Hr.Evaluations.Criteria.Manage", HrRoles.SystemAdmin),
+        ("Hr.Evaluations.Grades.Manage", HrRoles.SystemAdmin),
+        ("Hr.Evaluations.Criteria.Manage", HrRoles.HrManager),
+        ("Hr.Evaluations.Grades.Manage", HrRoles.HrManager),
+        (HrPermissions.EmployeePermissions.ReadTeam, HrRoles.SystemAdmin)
+    };
+
     private static readonly (string UserName, string Role, string EmailSetting)[] FirstAccounts =
     {
         ("executive", HrRoles.ExecutiveDirector, "Seed:ExecutiveEmail"),
@@ -45,6 +60,7 @@ public class HrTenantBootstrapper : ITransientDependency
     private readonly IdentityUserManager _userManager;
     private readonly IIdentityRoleRepository _roleRepository;
     private readonly IPermissionDataSeeder _permissionDataSeeder;
+    private readonly IPermissionGrantRepository _permissionGrants;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ICurrentTenant _currentTenant;
     private readonly IConfiguration _configuration;
@@ -73,6 +89,7 @@ public class HrTenantBootstrapper : ITransientDependency
         IdentityUserManager userManager,
         IIdentityRoleRepository roleRepository,
         IPermissionDataSeeder permissionDataSeeder,
+        IPermissionGrantRepository permissionGrants,
         IGuidGenerator guidGenerator,
         ICurrentTenant currentTenant,
         IConfiguration configuration,
@@ -91,6 +108,7 @@ public class HrTenantBootstrapper : ITransientDependency
         _userManager = userManager;
         _roleRepository = roleRepository;
         _permissionDataSeeder = permissionDataSeeder;
+        _permissionGrants = permissionGrants;
         _guidGenerator = guidGenerator;
         _currentTenant = currentTenant;
         _configuration = configuration;
@@ -108,7 +126,7 @@ public class HrTenantBootstrapper : ITransientDependency
         await DisableFrameworkAdminAsync();
     }
 
-    /// <summary>Only into an empty table, so a criterion or grade the system admin renamed or stopped is never brought back.</summary>
+    /// <summary>Only into an empty table, so a criterion or grade the HR manager renamed or stopped is never brought back.</summary>
     private async Task SeedEvaluationScaleAsync()
     {
         if (!await _criteria.AnyAsync())
@@ -167,22 +185,141 @@ public class HrTenantBootstrapper : ITransientDependency
 
     /// <summary>
     /// Gives the first accounts their files, so the manager chain has a top: new department managers link to the
-    /// system admin, who links to the executive. Names and titles are placeholders that HR corrects (decision Q15).
+    /// system admin, and the HR manager to the executive. The executive and the system admin have no manager, and
+    /// none of the three has a shift (decisions of 2026-11-10). The default shift is still created for the employees
+    /// HR adds. Names and titles are placeholders that HR corrects (decision Q15).
     /// </summary>
     private async Task SeedFirstEmployeeFilesAsync()
     {
-        var executive = await EnsureFileAsync("executive", "المدير التنفيذي", "Executive Director", null);
-        foreach (var (userName, nameAr, nameEn) in new[]
-                 {
-                     ("hrmanager", "مدير الموارد البشرية", "HR Manager"),
-                     ("sysadmin", "مسؤول النظام", "System Administrator")
-                 })
+        await GetDefaultShiftAsync();
+        var executive = await EnsureFileAsync("executive", "المدير التنفيذي", "Executive Director", null, withShift: false);
+        await EnsureFileAsync("hrmanager", "مدير الموارد البشرية", "HR Manager", executive, withShift: false);
+        await EnsureFileAsync("sysadmin", "مسؤول النظام", "System Administrator", null, withShift: false);
+        await DetachRolesOutsideScheduleAsync();
+        await RemoveEmployeeRoleFromSystemAdminsAsync();
+        await MoveSystemAdminReportsToHrManagerAsync();
+        await MoveAccountantsAndStoreOfficersToExecutiveAsync(executive);
+    }
+
+    /// <summary>
+    /// Decision 2026-11-11: the accountant and the store officer report to the executive director and have no shift.
+    /// Whoever holds either role (and not a role with its own manager row first) moves to the executive's file, with
+    /// the usual effects of a manager change, and their current shift closes.
+    /// </summary>
+    private async Task MoveAccountantsAndStoreOfficersToExecutiveAsync(Employee? executive)
+    {
+        if (executive == null)
         {
-            await EnsureFileAsync(userName, nameAr, nameEn, executive);
+            return;
+        }
+
+        var seen = new System.Collections.Generic.HashSet<Guid>();
+        foreach (var roleName in new[] { HrRoles.Accountant, HrRoles.StoreOfficer })
+        {
+            foreach (var user in await _userManager.GetUsersInRoleAsync(roleName))
+            {
+                if (!seen.Add(user.Id))
+                {
+                    continue;
+                }
+
+                var employee = await _employees.FirstOrDefaultAsync(x => x.UserId == user.Id && x.Status != EmployeeStatus.Ended);
+                if (employee == null || employee.Id == executive.Id)
+                {
+                    continue;
+                }
+
+                var roles = (await _userManager.GetRolesAsync(user)).ToList();
+                var allowed = ManagerLinkService.AllowedManagerRoles(roles);
+                if (allowed != null && allowed.Count == 1 && allowed.Contains(HrRoles.ExecutiveDirector) && employee.ManagerEmployeeId != executive.Id)
+                {
+                    await _managerLinks.ChangeAsync(employee, executive, "The accountant and the store officer report to the executive director");
+                }
+
+                await _managerLinks.DetachFromScheduleAsync(employee, roles, await _companyClock.GetTodayAsync());
+                await _employees.UpdateAsync(employee, autoSave: true);
+            }
         }
     }
 
-    private async Task<Employee?> EnsureFileAsync(string userName, string nameAr, string nameEn, Employee? manager)
+    /// <summary>
+    /// Decision 2026-11-10: department managers report to the HR manager. Anyone still linked to a system admin moves
+    /// to the active HR manager's file, with the usual effects of a manager change.
+    /// </summary>
+    private async Task MoveSystemAdminReportsToHrManagerAsync()
+    {
+        var hrUser = (await _userManager.GetUsersInRoleAsync(HrRoles.HrManager)).FirstOrDefault(x => x.IsActive);
+        var hrFile = hrUser == null ? null : await _employees.FirstOrDefaultAsync(x => x.UserId == hrUser.Id && x.Status == EmployeeStatus.Active);
+        if (hrFile == null)
+        {
+            return;
+        }
+
+        foreach (var admin in await _userManager.GetUsersInRoleAsync(HrRoles.SystemAdmin))
+        {
+            var adminFile = await _employees.FirstOrDefaultAsync(x => x.UserId == admin.Id);
+            if (adminFile == null)
+            {
+                continue;
+            }
+
+            foreach (var report in await _employees.GetListAsync(x => x.ManagerEmployeeId == adminFile.Id && x.Status != EmployeeStatus.Ended))
+            {
+                if (report.Id == hrFile.Id)
+                {
+                    continue;
+                }
+
+                await _managerLinks.ChangeAsync(report, hrFile, "Department managers report to the HR manager");
+                await _employees.UpdateAsync(report, autoSave: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Databases seeded before 2026-11-10 gave the system admin the employee role. A system admin with no other
+    /// role loses it, as account changes now do.
+    /// </summary>
+    private async Task RemoveEmployeeRoleFromSystemAdminsAsync()
+    {
+        foreach (var user in await _userManager.GetUsersInRoleAsync(HrRoles.SystemAdmin))
+        {
+            var roles = await _userManager.GetRolesAsync(user);
+            if (roles.Contains(HrRoles.Employee) && roles.All(x => x == HrRoles.SystemAdmin || x == HrRoles.Employee))
+            {
+                CheckResult(await _userManager.RemoveFromRoleAsync(user, HrRoles.Employee));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Databases seeded before 2026-11-10 linked the system admin to the executive, and gave the system admin and the
+    /// HR manager a shift. What these roles may no longer have is closed today.
+    /// </summary>
+    private async Task DetachRolesOutsideScheduleAsync()
+    {
+        var today = await _companyClock.GetTodayAsync();
+        var seen = new System.Collections.Generic.HashSet<Guid>();
+        foreach (var roleName in new[] { HrRoles.SystemAdmin, HrRoles.HrManager })
+        {
+            foreach (var user in await _userManager.GetUsersInRoleAsync(roleName))
+            {
+                if (!seen.Add(user.Id))
+                {
+                    continue;
+                }
+
+                var employee = await _employees.FirstOrDefaultAsync(x => x.UserId == user.Id);
+                if (employee != null &&
+                    await _managerLinks.DetachFromScheduleAsync(employee, (await _userManager.GetRolesAsync(user)).ToList(), today))
+                {
+                    await _employees.UpdateAsync(employee, autoSave: true);
+                }
+            }
+        }
+    }
+
+    private async Task<Employee?> EnsureFileAsync(string userName, string nameAr, string nameEn, Employee? manager, bool withShift)
     {
         var user = await _userManager.FindByNameAsync(userName);
         if (user == null)
@@ -203,8 +340,12 @@ public class HrTenantBootstrapper : ITransientDependency
 
         if (manager != null)
         {
-            var shift = await GetDefaultShiftAsync();
             await _managerLinks.StartAsync(employee, manager.Id, today);
+        }
+
+        if (withShift)
+        {
+            var shift = await GetDefaultShiftAsync();
             await _shiftAssignments.InsertAsync(new EmployeeShiftAssignment(_guidGenerator.Create(), _currentTenant.Id, employee.Id, shift.Id, today));
         }
 
@@ -255,6 +396,15 @@ public class HrTenantBootstrapper : ITransientDependency
 
             await _permissionDataSeeder.SeedAsync(RolePermissionValueProvider.ProviderName, roleName, permissions, _currentTenant.Id);
         }
+
+        foreach (var (permission, roleName) in RevokedDefaults)
+        {
+            var grant = await _permissionGrants.FindAsync(permission, RolePermissionValueProvider.ProviderName, roleName);
+            if (grant != null)
+            {
+                await _permissionGrants.DeleteAsync(grant, autoSave: true);
+            }
+        }
     }
 
     private async Task SeedFirstAccountsAsync()
@@ -281,7 +431,8 @@ public class HrTenantBootstrapper : ITransientDependency
             user.SetMustChangePassword(true);
 
             CheckResult(await _userManager.CreateAsync(user, password, validatePassword: false));
-            CheckResult(await _userManager.AddToRolesAsync(user, new[] { HrRoles.Employee, role }));
+            // The system admin is not a company employee (decision 2026-11-10).
+            CheckResult(await _userManager.AddToRolesAsync(user, role == HrRoles.SystemAdmin ? new[] { role } : new[] { HrRoles.Employee, role }));
             _logger.LogInformation("Created first account {UserName}.", userName);
         }
     }

@@ -15,6 +15,11 @@ public static class StoreConsts
     public const int QuantityScale = 4;
     public const int CostPrecision = 18;
     public const int CostScale = 4;
+    public const int MaxSkuLength = 32;
+    public const int MaxDocumentNumberLength = 64;
+    public const int MaxSupplierNameLength = 200;
+    public const int MaxDocumentLines = 200;
+    public const int MaxCurrencyLength = 3;
 }
 
 [Audited]
@@ -23,11 +28,22 @@ public class Item : AuditedAggregateRoot<Guid>, IMultiTenant
     public Guid? TenantId { get; private set; }
     public string NameAr { get; private set; } = null!;
     public string NameEn { get; private set; } = null!;
+
+    /// <summary>Unique in the company. Items older than 2026-11-11 got ITM-0001 and on from the migration.</summary>
+    public string Sku { get; private set; } = null!;
+
+    /// <summary>Null only for items older than 2026-11-11 until someone edits them.</summary>
+    public Guid? CategoryId { get; private set; }
+
+    public Guid? UnitId { get; private set; }
     public ItemKind Kind { get; private set; }
     public decimal MinQuantity { get; private set; }
 
     /// <summary>Changes only together with a movement row, through <see cref="StockLedger"/>. Its concurrency stamp stops two movements racing past the balance.</summary>
     public decimal QuantityOnHand { get; private set; }
+
+    /// <summary>Weighted average cost of the stock on hand. Changes only through <see cref="StockLedger"/>.</summary>
+    public decimal AverageUnitCost { get; private set; }
 
     public bool IsActive { get; private set; }
 
@@ -35,27 +51,137 @@ public class Item : AuditedAggregateRoot<Guid>, IMultiTenant
     {
     }
 
-    public Item(Guid id, Guid? tenantId, string nameAr, string nameEn, ItemKind kind, decimal minQuantity)
+    public Item(Guid id, Guid? tenantId, string nameAr, string nameEn, string sku, Guid categoryId, Guid unitId, ItemKind kind, decimal minQuantity)
         : base(id)
     {
         TenantId = tenantId;
         Kind = kind;
         IsActive = true;
-        Set(nameAr, nameEn, kind, minQuantity, true);
+        Set(nameAr, nameEn, sku, categoryId, unitId, kind, minQuantity, true);
     }
 
     public bool IsBelowMinimum => QuantityOnHand < MinQuantity;
 
-    public void Set(string nameAr, string nameEn, ItemKind kind, decimal minQuantity, bool isActive)
+    public decimal StockValue => Math.Round(QuantityOnHand * AverageUnitCost, StoreConsts.CostScale);
+
+    public StockStatus StockStatus => StatusOf(QuantityOnHand, MinQuantity);
+
+    public static StockStatus StatusOf(decimal quantityOnHand, decimal minQuantity) =>
+        quantityOnHand <= 0 ? StockStatus.OutOfStock : quantityOnHand < minQuantity ? StockStatus.LowStock : StockStatus.InStock;
+
+    public void Set(string nameAr, string nameEn, string sku, Guid categoryId, Guid unitId, ItemKind kind, decimal minQuantity, bool isActive)
     {
         NameAr = nameAr;
         NameEn = nameEn;
+        Sku = sku;
+        CategoryId = categoryId;
+        UnitId = unitId;
         Kind = kind;
         MinQuantity = minQuantity;
         IsActive = isActive;
     }
 
-    internal void ApplyMovement(decimal signedQuantity) => QuantityOnHand += signedQuantity;
+    /// <summary>
+    /// The weighted average absorbs a movement at its unit cost: (Q × avg + q × u) / (Q + q). An outflow at the average
+    /// leaves it unchanged, and reversing a purchase at its price takes that purchase back out. An empty stock keeps the
+    /// last average, so the screens still show a price.
+    /// </summary>
+    internal void ApplyMovement(decimal signedQuantity, decimal unitCost)
+    {
+        var after = QuantityOnHand + signedQuantity;
+        if (after != 0)
+        {
+            var average = (QuantityOnHand * AverageUnitCost + signedQuantity * unitCost) / after;
+            AverageUnitCost = Math.Max(0, Math.Round(average, StoreConsts.CostScale));
+        }
+        else if (signedQuantity > 0)
+        {
+            AverageUnitCost = unitCost;
+        }
+
+        QuantityOnHand = after;
+    }
+}
+
+/// <summary>A category or a unit of measure the store officer keeps. Never deleted, deactivated instead.</summary>
+[Audited]
+public abstract class StoreCatalogEntry : AuditedAggregateRoot<Guid>, IMultiTenant
+{
+    public Guid? TenantId { get; private set; }
+    public string NameAr { get; private set; } = null!;
+    public string NameEn { get; private set; } = null!;
+    public bool IsActive { get; private set; }
+
+    protected StoreCatalogEntry()
+    {
+    }
+
+    protected StoreCatalogEntry(Guid id, Guid? tenantId, string nameAr, string nameEn)
+        : base(id)
+    {
+        TenantId = tenantId;
+        IsActive = true;
+        Set(nameAr, nameEn, true);
+    }
+
+    public void Set(string nameAr, string nameEn, bool isActive)
+    {
+        NameAr = nameAr;
+        NameEn = nameEn;
+        IsActive = isActive;
+    }
+}
+
+public class ItemCategory : StoreCatalogEntry
+{
+    protected ItemCategory()
+    {
+    }
+
+    public ItemCategory(Guid id, Guid? tenantId, string nameAr, string nameEn)
+        : base(id, tenantId, nameAr, nameEn)
+    {
+    }
+}
+
+public class ItemUnit : StoreCatalogEntry
+{
+    protected ItemUnit()
+    {
+    }
+
+    public ItemUnit(Guid id, Guid? tenantId, string nameAr, string nameEn)
+        : base(id, tenantId, nameAr, nameEn)
+    {
+    }
+}
+
+/// <summary>A team or body that receives stock on an issue voucher. Its department, if any, holds shared custody.</summary>
+[Audited]
+public class StoreTeam : AuditedAggregateRoot<Guid>, IMultiTenant
+{
+    public Guid? TenantId { get; private set; }
+    public string Name { get; private set; } = null!;
+    public Guid? DepartmentId { get; private set; }
+    public bool IsActive { get; private set; }
+
+    protected StoreTeam()
+    {
+    }
+
+    public StoreTeam(Guid id, Guid? tenantId, string name, Guid? departmentId)
+        : base(id)
+    {
+        TenantId = tenantId;
+        Set(name, departmentId, true);
+    }
+
+    public void Set(string name, Guid? departmentId, bool isActive)
+    {
+        Name = name;
+        DepartmentId = departmentId;
+        IsActive = isActive;
+    }
 }
 
 /// <summary>Never updated or deleted. A correction is another movement. <see cref="TotalCost"/> never leaves in a store DTO: only the accountant sees it, through finance.</summary>
@@ -77,7 +203,19 @@ public class StockMovement : CreationAuditedAggregateRoot<Guid>, IMultiTenant
     public Guid? EmployeeId { get; private set; }
     public Guid PerformedByUserId { get; private set; }
     public string? Note { get; private set; }
+
+    /// <summary>The value of the movement with its sign: quantity × <see cref="UnitCost"/>. Null on movements older than 2026-11-11 that had no cost.</summary>
     public decimal? TotalCost { get; private set; }
+
+    /// <summary>The purchase price for stock in, the average cost at the time for stock out. Null on movements older than 2026-11-11.</summary>
+    public decimal? UnitCost { get; private set; }
+
+    public Guid? PurchaseId { get; private set; }
+    public Guid? IssueVoucherId { get; private set; }
+    public Guid? TeamId { get; private set; }
+
+    /// <summary>The receipt or voucher number, copied so the log can be searched without a join.</summary>
+    public string? DocumentNumber { get; private set; }
 
     protected StockMovement()
     {
@@ -97,9 +235,19 @@ public class StockMovement : CreationAuditedAggregateRoot<Guid>, IMultiTenant
         Guid? custodyId,
         Guid? reversesMovementId,
         Guid? employeeId,
-        decimal? totalCost)
+        decimal? totalCost,
+        decimal? unitCost = null,
+        Guid? purchaseId = null,
+        Guid? issueVoucherId = null,
+        Guid? teamId = null,
+        string? documentNumber = null)
         : base(id)
     {
+        UnitCost = unitCost;
+        PurchaseId = purchaseId;
+        IssueVoucherId = issueVoucherId;
+        TeamId = teamId;
+        DocumentNumber = documentNumber;
         TenantId = tenantId;
         ItemId = itemId;
         Type = type;

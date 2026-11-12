@@ -397,7 +397,7 @@ public class AttendanceModuleTests
 
         (await admin.GetFromJsonAsync<JsonElement>($"/api/app/attendance-device/{device.Id}/unmapped-user")).GetProperty("totalCount").GetInt64().ShouldBe(0);
 
-        (await admin.PostAsJsonAsync($"/api/app/attendance-device/{device.Id}/user-map", new { deviceUserId = "77", employeeId = kit.SystemAdminEmployeeId })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await admin.PostAsJsonAsync($"/api/app/attendance-device/{device.Id}/user-map", new { deviceUserId = "77", employeeId = manager.Id })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await admin.PostAsJsonAsync($"/api/app/attendance-device/{device.Id}/user-map", new { deviceUserId = "78", employeeId = staff.Id })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
         var mapId = map.GetProperty("id").GetGuid();
@@ -429,6 +429,15 @@ public class AttendanceModuleTests
 
         var executive = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee, HrRoles.ExecutiveDirector);
         await ShouldFailWithAsync(await executive.GetAsync("/api/app/attendance/my"), HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
+
+        // The system admin is outside attendance too (decision 2026-11-10).
+        await ShouldFailWithAsync(
+            await admin.PostAsJsonAsync($"/api/app/attendance-device/{device.Id}/user-map", new { deviceUserId = "2", employeeId = kit.SystemAdminEmployeeId }),
+            HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
+        await ShouldFailWithAsync(
+            await kit.Hr.GetAsync($"/api/app/attendance/employee/{kit.SystemAdminEmployeeId}"),
+            HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
+        await ShouldFailWithAsync(await admin.GetAsync("/api/app/attendance/my"), HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
     }
 
     [Fact]

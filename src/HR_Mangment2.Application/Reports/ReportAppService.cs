@@ -93,6 +93,11 @@ public class ReportAppService : HR_Mangment2AppService, IReportAppService
     public virtual Task<EvaluationConsistencyRowPagedResultDto> GetEvaluationConsistencyAsync(EvaluationConsistencyReportInput input) =>
         _queries.GetEvaluationConsistencyAsync(input.CycleId, input.DepartmentId, PageOf(input));
 
+    /// <summary>Counts only, for the executive director's dashboard (decision 2026-11-11).</summary>
+    [Authorize(HrPermissions.ReportsPermissions.TodaySummary)]
+    public virtual async Task<TodayAttendanceSummaryDto> GetTodayAttendanceSummaryAsync() =>
+        await _queries.GetTodaySummaryAsync(await _companyClock.GetTodayAsync());
+
     [Authorize(HrPermissions.ReportsPermissions.Hr)]
     public virtual Task<HrAttendanceReportRowPagedResultDto> GetHrAttendanceAsync(HrPeriodReportInput input)
     {
@@ -101,8 +106,11 @@ public class ReportAppService : HR_Mangment2AppService, IReportAppService
     }
 
     [Authorize(HrPermissions.ReportsPermissions.Hr)]
-    public virtual Task<HrLeaveBalanceReportRowPagedResultDto> GetHrLeaveBalancesAsync(HrLeaveBalanceReportInput input) =>
-        _queries.GetHrLeaveBalancesAsync(input.DepartmentId, input.EmployeeId, PageOf(input));
+    public virtual Task<HrLeaveBalanceReportRowPagedResultDto> GetHrLeaveBalancesAsync(HrLeaveBalanceReportInput input)
+    {
+        var period = OptionalPeriod(input.From, input.To);
+        return _queries.GetHrLeaveBalancesAsync(input.DepartmentId, input.EmployeeId, PageOf(input), period?.From, period?.To);
+    }
 
     [Authorize(HrPermissions.ReportsPermissions.Hr)]
     public virtual Task<HrRequestReportRowPagedResultDto> GetHrRequestsAsync(HrPeriodReportInput input)
@@ -294,11 +302,20 @@ public class ReportAppService : HR_Mangment2AppService, IReportAppService
 
             case ReportCode.HrLeaveBalances:
             {
-                var page = await _queries.GetHrLeaveBalancesAsync(input.DepartmentId, input.EmployeeId, ReportPage.All);
+                var period = OptionalPeriod(input.From, input.To);
+                var page = await _queries.GetHrLeaveBalancesAsync(input.DepartmentId, input.EmployeeId, ReportPage.All, period?.From, period?.To);
+                if (period == null)
+                {
+                    return Table(
+                        null,
+                        new[] { "employee", "department", "leaveYearStart", "entitlementDays", "carriedInDays", "usedDays", "heldDays", "remainingDays", "usedHours" },
+                        page.Items.Select(x => new object?[] { x.Employee.FullName, x.Employee.DepartmentName, Day(x.LeaveYearStart), x.EntitlementDays, x.CarriedInDays, x.UsedDays, x.HeldDays, x.RemainingDays, x.UsedHours }));
+                }
+
                 return Table(
-                    null,
-                    new[] { "employee", "department", "leaveYearStart", "entitlementDays", "carriedInDays", "usedDays", "heldDays", "remainingDays", "usedHours" },
-                    page.Items.Select(x => new object?[] { x.Employee.FullName, x.Employee.DepartmentName, Day(x.LeaveYearStart), x.EntitlementDays, x.CarriedInDays, x.UsedDays, x.HeldDays, x.RemainingDays, x.UsedHours }));
+                    PeriodText(period.Value.From, period.Value.To),
+                    new[] { "employee", "department", "leaveYearStart", "entitlementDays", "carriedInDays", "usedDays", "heldDays", "remainingDays", "usedHours", "periodUsedDays", "periodUsedHours" },
+                    page.Items.Select(x => new object?[] { x.Employee.FullName, x.Employee.DepartmentName, Day(x.LeaveYearStart), x.EntitlementDays, x.CarriedInDays, x.UsedDays, x.HeldDays, x.RemainingDays, x.UsedHours, x.PeriodUsedDays, x.PeriodUsedHours }));
             }
 
             case ReportCode.HrRequests:
@@ -364,6 +381,22 @@ public class ReportAppService : HR_Mangment2AppService, IReportAppService
         }
 
         return (from!.Value, to!.Value);
+    }
+
+    /// <summary>An optional period: both dates or neither, and to not before from; otherwise InvalidPeriod.</summary>
+    private static (DateOnly From, DateOnly To)? OptionalPeriod(DateOnly? from, DateOnly? to)
+    {
+        if (from == null && to == null)
+        {
+            return null;
+        }
+
+        if (from == null || to == null)
+        {
+            throw new BusinessException(HrErrorCodes.Reports.InvalidPeriod);
+        }
+
+        return RequirePeriod(from, to);
     }
 
     private static string PeriodText(DateOnly from, DateOnly to) =>

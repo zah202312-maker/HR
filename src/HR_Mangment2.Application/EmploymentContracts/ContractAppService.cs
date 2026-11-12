@@ -1,18 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentValidation;
 using HR_Mangment2.Common;
 using HR_Mangment2.Employees;
 using HR_Mangment2.Errors;
+using HR_Mangment2.Files;
 using HR_Mangment2.Idempotency;
+using HR_Mangment2.Leaves;
 using HR_Mangment2.Notifications;
 using HR_Mangment2.Permissions;
 using HR_Mangment2.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
+using Volo.Abp.BlobStoring;
 using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Users;
@@ -42,6 +46,10 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
     private readonly WorkCalendarService _calendar;
     private readonly HrNotificationPublisher _notifications;
     private readonly IdempotencyStore _idempotency;
+    private readonly IRepository<ContractAttachment, Guid> _attachments;
+    private readonly UploadedFileGuard _fileGuard;
+    private readonly IBlobContainer<HrFilesContainer> _files;
+    private readonly FileDownloadLinkManager _links;
 
     public ContractAppService(
         IRepository<EmploymentContract, Guid> contracts,
@@ -51,7 +59,11 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
         ICompanyClock companyClock,
         WorkCalendarService calendar,
         HrNotificationPublisher notifications,
-        IdempotencyStore idempotency)
+        IdempotencyStore idempotency,
+        IRepository<ContractAttachment, Guid> attachments,
+        UploadedFileGuard fileGuard,
+        IBlobContainer<HrFilesContainer> files,
+        FileDownloadLinkManager links)
     {
         _contracts = contracts;
         _employees = employees;
@@ -61,6 +73,10 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
         _calendar = calendar;
         _notifications = notifications;
         _idempotency = idempotency;
+        _attachments = attachments;
+        _fileGuard = fileGuard;
+        _files = files;
+        _links = links;
     }
 
     [Authorize(HrPermissions.ContractPermissions.Read)]
@@ -82,9 +98,20 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
     }
 
     [Authorize(HrPermissions.ContractPermissions.Create)]
-    public virtual async Task<ContractDto> CreateAsync(ContractCreateInputDto input, Guid? idempotencyKey)
+    public virtual async Task<ContractDto> CreateAsync(ContractCreateInput input, Guid? idempotencyKey)
     {
-        var earlier = await _idempotency.FindResourceAsync(CreateOperation, idempotencyKey, input);
+        // The file bytes are not part of the fingerprint: their names, types and sizes are enough to tell a retry apart.
+        var fingerprint = new
+        {
+            input.EmployeeId,
+            input.ContractType,
+            input.StartDate,
+            input.EndDate,
+            input.PreviousContractId,
+            Files = input.Attachments.Select(x => new { x.FileName, x.ContentType, x.Content.Length }).ToList()
+        };
+
+        var earlier = await _idempotency.FindResourceAsync(CreateOperation, idempotencyKey, fingerprint);
         if (earlier != null)
         {
             return await ToDtoAsync(await _contracts.GetAsync(earlier.Value));
@@ -123,11 +150,114 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
         var alertDays = (await _settings.PeekValueAsync<ContractSettings>()).AlertDays;
         var status = end <= today.AddDays(alertDays) ? ContractStatus.PendingRecommendation : ContractStatus.Active;
 
+        foreach (var file in input.Attachments)
+        {
+            await _fileGuard.EnsureAcceptedAsync(file.Content, file.ContentType, HrErrorCodes.Contract.AttachmentRejected);
+        }
+
         var contract = new EmploymentContract(GuidGenerator.Create(), CurrentTenant.Id, employeeId, input.ContractType.Trim(), start, end, input.PreviousContractId, status);
         await _contracts.InsertAsync(contract, autoSave: true);
-        await _idempotency.SaveAsync(CreateOperation, idempotencyKey, input, contract.Id);
+
+        foreach (var file in input.Attachments)
+        {
+            var attachmentId = GuidGenerator.Create();
+            var blobName = attachmentId.ToString("N");
+            await _files.SaveAsync(blobName, file.Content);
+            await _attachments.InsertAsync(new ContractAttachment(attachmentId, CurrentTenant.Id, contract.Id, Path.GetFileName(file.FileName), file.ContentType, file.Content.LongLength, blobName, Clock.Now), autoSave: true);
+        }
+
+        await _idempotency.SaveAsync(CreateOperation, idempotencyKey, fingerprint, contract.Id);
 
         return await ToDtoAsync(contract);
+    }
+
+    [Authorize(HrPermissions.ContractPermissions.Read)]
+    public virtual async Task<FileDownloadUrlDto> GetAttachmentDownloadUrlAsync(Guid id, Guid attachmentId) =>
+        await IssueLinkAsync(await FindAttachmentAsync(id, attachmentId));
+
+    [Authorize(HrPermissions.ContractPermissions.ReadOwn)]
+    public virtual async Task<FileDownloadUrlDto> GetMyAttachmentDownloadUrlAsync(Guid id, Guid attachmentId)
+    {
+        var contract = await _contracts.FindAsync(id);
+        var me = await _employees.FirstOrDefaultAsync(x => x.UserId == CurrentUser.GetId());
+        if (contract == null || me == null || contract.EmployeeId != me.Id)
+        {
+            throw new EntityNotFoundException(typeof(EmploymentContract), id);
+        }
+
+        return await IssueLinkAsync(await FindAttachmentAsync(id, attachmentId));
+    }
+
+    /// <summary>Soft delete: hidden from views and downloads, row and blob kept. The entity is audited.</summary>
+    [Authorize(HrPermissions.ContractPermissions.Create)]
+    public virtual async Task DeleteAttachmentAsync(Guid id, Guid attachmentId)
+    {
+        var attachment = await FindAttachmentAsync(id, attachmentId);
+        attachment.MarkDeleted(CurrentUser.GetId(), Clock.Now);
+        await _attachments.UpdateAsync(attachment, autoSave: true);
+    }
+
+    /// <summary>The attachment must belong to this contract and not be deleted (the soft-delete filter hides deleted rows).</summary>
+    private async Task<ContractAttachment> FindAttachmentAsync(Guid contractId, Guid attachmentId) =>
+        await _attachments.FirstOrDefaultAsync(x => x.Id == attachmentId && x.ContractId == contractId)
+        ?? throw new EntityNotFoundException(typeof(ContractAttachment), attachmentId);
+
+    private async Task<FileDownloadUrlDto> IssueLinkAsync(ContractAttachment attachment)
+    {
+        var link = await _links.IssueAsync(attachment.Id, attachment.BlobName, attachment.FileName, attachment.ContentType);
+        return new FileDownloadUrlDto { Url = link.Url, ExpiresAt = link.ExpiresAt };
+    }
+
+    private async Task<Dictionary<Guid, List<AttachmentDto>>> GetAttachmentsAsync(IEnumerable<Guid> contractIds)
+    {
+        var ids = contractIds.Distinct().ToList();
+        var rows = await _attachments.GetListAsync(x => ids.Contains(x.ContractId));
+        return ids.ToDictionary(id => id, id => rows
+            .Where(x => x.ContractId == id)
+            .OrderBy(x => x.CreationTime).ThenBy(x => x.Id)
+            .Select(x => new AttachmentDto { Id = x.Id, FileName = x.FileName, ContentType = x.ContentType, SizeBytes = x.SizeBytes, CreationTime = x.CreationTime })
+            .ToList());
+    }
+
+    /// <summary>
+    /// The executive director's employee contracts page (decision 2026-11-11): every active employee with the details of
+    /// their current (latest) contract, or nulls when they have none. No attachments, recommendation or decision.
+    /// </summary>
+    [Authorize(HrPermissions.ContractPermissions.ReadOverview)]
+    public virtual async Task<EmployeeContractOverviewPagedResultDto> GetOverviewAsync(ContractOverviewListInput input)
+    {
+        var search = input.Search?.Trim();
+        var query = (await _employees.GetQueryableAsync())
+            .Where(x => x.Status == EmployeeStatus.Active)
+            .WhereIf(!string.IsNullOrEmpty(search), x =>
+                x.FullNameAr.Contains(search!) ||
+                (x.FullNameEn != null && x.FullNameEn.Contains(search!)) ||
+                (x.EmployeeNumber != null && x.EmployeeNumber.Contains(search!)));
+
+        var total = await AsyncExecuter.LongCountAsync(query);
+        var rows = await AsyncExecuter.ToListAsync(query.OrderBy(x => x.FullNameAr).ThenBy(x => x.Id).Skip(input.SkipCount).Take(input.MaxResultCount));
+        var references = await _references.ToRefsAsync(rows);
+        var ids = rows.Select(x => x.Id).ToList();
+        var current = (await _contracts.GetListAsync(x => ids.Contains(x.EmployeeId)))
+            .GroupBy(x => x.EmployeeId)
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(c => c.StartDate).ThenByDescending(c => c.CreationTime).First());
+
+        return new EmployeeContractOverviewPagedResultDto
+        {
+            TotalCount = total,
+            Items = rows.Select(x =>
+            {
+                var contract = current.GetValueOrDefault(x.Id);
+                return new EmployeeContractOverviewDto
+                {
+                    Employee = references[x.Id],
+                    ContractType = contract?.ContractType,
+                    StartDate = contract?.StartDate,
+                    EndDate = contract?.EndDate,
+                    Status = contract?.Status
+                };
+            }).ToList()
+        };
     }
 
     [Authorize(HrPermissions.ContractPermissions.Read)]
@@ -209,8 +339,9 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
             .Skip(input.SkipCount)
             .Take(input.MaxResultCount));
         var today = await _companyClock.GetTodayAsync();
+        var attachments = await GetAttachmentsAsync(rows.Select(x => x.Id));
 
-        return new ContractEmployeePagedResultDto { TotalCount = total, Items = rows.Select(x => ToEmployeeDto(x, today)).ToList() };
+        return new ContractEmployeePagedResultDto { TotalCount = total, Items = rows.Select(x => ToEmployeeDto(x, today, attachments[x.Id])).ToList() };
     }
 
     [Authorize(HrPermissions.ContractPermissions.ReadOwn)]
@@ -223,7 +354,8 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
             throw new EntityNotFoundException(typeof(EmploymentContract), id);
         }
 
-        return ToEmployeeDto(contract, await _companyClock.GetTodayAsync());
+        var attachments = await GetAttachmentsAsync(new[] { contract.Id });
+        return ToEmployeeDto(contract, await _companyClock.GetTodayAsync(), attachments[contract.Id]);
     }
 
     /// <summary>QUESTIONS.md item 48 gives this case to the executive director, but the contract's roles do not reach them yet: see D34.</summary>
@@ -260,6 +392,7 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
             .Where(x => x != null)
             .Select(x => x!.Value));
         var today = await _companyClock.GetTodayAsync();
+        var attachments = await GetAttachmentsAsync(contracts.Select(x => x.Id));
 
         return contracts.Select(x => new ContractDto
         {
@@ -292,12 +425,14 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
             IsDecisionOverdue = x.Decision == null && x.DecisionDueDate != null && x.DecisionDueDate < today,
             EmployeeNotifiedAt = x.EmployeeNotifiedAt,
             CreationTime = x.CreationTime,
-            LastModificationTime = x.LastModificationTime
+            LastModificationTime = x.LastModificationTime,
+            Attachments = attachments[x.Id]
         }).ToList();
     }
 
-    private static ContractEmployeeDto ToEmployeeDto(EmploymentContract contract, DateOnly today) => new()
+    private static ContractEmployeeDto ToEmployeeDto(EmploymentContract contract, DateOnly today, List<AttachmentDto> attachments) => new()
     {
+        Attachments = attachments,
         Id = contract.Id,
         ContractType = contract.ContractType,
         StartDate = contract.StartDate,
@@ -314,14 +449,15 @@ public class ContractAppService : HR_Mangment2AppService, IContractAppService
     };
 }
 
-public class ContractCreateInputDtoValidator : AbstractValidator<ContractCreateInputDto>
+public class ContractCreateInputValidator : AbstractValidator<ContractCreateInput>
 {
-    public ContractCreateInputDtoValidator()
+    public ContractCreateInputValidator()
     {
         RuleFor(x => x.EmployeeId).NotNull();
         RuleFor(x => x.ContractType).NotNull().Length(1, EmploymentContract.MaxContractTypeLength);
         RuleFor(x => x.StartDate).NotNull();
         RuleFor(x => x.EndDate).NotNull();
+        RuleFor(x => x.Attachments).Must(x => x.Count <= ContractAttachment.MaxPerContract);
     }
 }
 

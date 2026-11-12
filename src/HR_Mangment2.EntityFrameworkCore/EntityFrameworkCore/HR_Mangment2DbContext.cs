@@ -86,6 +86,14 @@ public class HR_Mangment2DbContext :
     public DbSet<HR_Mangment2.Store.Custody> Custodies { get; set; }
     public DbSet<HR_Mangment2.Store.CustodyCount> CustodyCounts { get; set; }
     public DbSet<HR_Mangment2.Store.CustodyCountLine> CustodyCountLines { get; set; }
+    public DbSet<HR_Mangment2.Store.ItemCategory> ItemCategories { get; set; }
+    public DbSet<HR_Mangment2.Store.ItemUnit> ItemUnits { get; set; }
+    public DbSet<HR_Mangment2.Store.StoreTeam> StoreTeams { get; set; }
+    public DbSet<HR_Mangment2.Store.StorePurchase> StorePurchases { get; set; }
+    public DbSet<HR_Mangment2.Store.StorePurchaseLine> StorePurchaseLines { get; set; }
+    public DbSet<HR_Mangment2.Store.StoreIssueVoucher> StoreIssueVouchers { get; set; }
+    public DbSet<HR_Mangment2.Store.StoreIssueVoucherLine> StoreIssueVoucherLines { get; set; }
+    public DbSet<HR_Mangment2.Store.StoreDocumentAttachment> StoreDocumentAttachments { get; set; }
     public DbSet<HR_Mangment2.Evaluations.EvaluationCriterion> EvaluationCriteria { get; set; }
     public DbSet<HR_Mangment2.Evaluations.EvaluationGrade> EvaluationGrades { get; set; }
     public DbSet<HR_Mangment2.Evaluations.EvaluationCycle> EvaluationCycles { get; set; }
@@ -106,6 +114,20 @@ public class HR_Mangment2DbContext :
     public DbSet<HR_Mangment2.Evaluations.CircularRecipient> CircularRecipients { get; set; }
     public DbSet<HR_Mangment2.ReviewReports.ReviewReport> ReviewReports { get; set; }
     public DbSet<HR_Mangment2.ReviewReports.ReviewReportTeam> ReviewReportTeams { get; set; }
+    public DbSet<HR_Mangment2.ReviewReports.ReviewRoom> ReviewRooms { get; set; }
+    public DbSet<HR_Mangment2.EmploymentContracts.ContractAttachment> ContractAttachments { get; set; }
+    public DbSet<HR_Mangment2.HrEvaluations.HrEvaluationCriterion> HrEvaluationCriteria { get; set; }
+    public DbSet<HR_Mangment2.HrEvaluations.HrEvaluation> HrEvaluations { get; set; }
+    public DbSet<HR_Mangment2.HrEvaluations.HrEvaluationScore> HrEvaluationScores { get; set; }
+    public DbSet<HR_Mangment2.HrEvaluations.HrEvaluationReport> HrEvaluationReports { get; set; }
+    public DbSet<HR_Mangment2.HrEvaluations.HrEvaluationAlert> HrEvaluationAlerts { get; set; }
+    public DbSet<HR_Mangment2.Identity.ProfilePhoto> ProfilePhotos { get; set; }
+    public DbSet<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationCriterion> ReviewerEvaluationCriteria { get; set; }
+    public DbSet<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluation> ReviewerEvaluations { get; set; }
+    public DbSet<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationItem> ReviewerEvaluationItems { get; set; }
+    public DbSet<HR_Mangment2.ReviewerEvaluations.ReviewerEvaluationReport> ReviewerEvaluationReports { get; set; }
+    public DbSet<HR_Mangment2.Notices.Notice> Notices { get; set; }
+    public DbSet<HR_Mangment2.Notices.NoticeRecipient> NoticeRecipients { get; set; }
 
     #endregion
 

@@ -234,6 +234,57 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
         return await ToDtoAsync(run);
     }
 
+    /// <summary>Marks salaries of a closed run as handed over (decision 2026-11-11). Ones already marked keep their date.</summary>
+    [Authorize(HrPermissions.FinancePermissions.PayrollRunDeliver)]
+    public virtual async Task<PayrollRunDto> DeliverAsync(Guid id, PayrollDeliveryInputDto input)
+    {
+        var run = await LoadAsync(id);
+        RequireStatus(run, PayrollRunStatus.Closed);
+        if (input.DeliveredOn > await LazyServiceProvider.LazyGetRequiredService<ICompanyClock>().GetTodayAsync())
+        {
+            throw new BusinessException(HrErrorCodes.Finance.DeliveryDateInFuture);
+        }
+
+        var items = PickItems(run, input.EmployeeIds);
+        foreach (var item in items.Where(x => x.DeliveredOn == null))
+        {
+            item.MarkDelivered(input.DeliveredOn!.Value, CurrentUser.GetId());
+        }
+
+        await _runs.UpdateAsync(run, autoSave: true);
+        return await ToDtoAsync(run);
+    }
+
+    [Authorize(HrPermissions.FinancePermissions.PayrollRunDeliver)]
+    public virtual async Task<PayrollRunDto> UndoDeliveryAsync(Guid id, PayrollUndoDeliveryInputDto input)
+    {
+        var run = await LoadAsync(id);
+        RequireStatus(run, PayrollRunStatus.Closed);
+        foreach (var item in PickItems(run, input.EmployeeIds))
+        {
+            item.UndoDelivery();
+        }
+
+        await _runs.UpdateAsync(run, autoSave: true);
+        return await ToDtoAsync(run);
+    }
+
+    private static List<PayrollItem> PickItems(PayrollRun run, List<Guid>? employeeIds)
+    {
+        if (employeeIds == null || employeeIds.Count == 0)
+        {
+            return run.Items.ToList();
+        }
+
+        var items = run.Items.Where(x => employeeIds.Contains(x.EmployeeId)).ToList();
+        if (items.Count != employeeIds.Distinct().Count())
+        {
+            throw new BusinessException(HrErrorCodes.Finance.EmployeeNotInPayroll);
+        }
+
+        return items;
+    }
+
     [Authorize(HrPermissions.FinancePermissions.PayrollRunExport)]
     public virtual async Task<ReportFile> ExportAsync(Guid id, FinanceExportInput input)
     {
@@ -278,7 +329,8 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
                 Additions = x.Item.Additions,
                 Deductions = x.Item.Deductions,
                 Net = x.Item.Net,
-                ClosedAt = x.ClosedAt!.Value
+                ClosedAt = x.ClosedAt!.Value,
+                DeliveredOn = x.Item.DeliveredOn
             }).ToList()
         };
     }
@@ -333,7 +385,8 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
             Deductions = item.Deductions,
             Net = item.Net,
             Lines = PayrollTables.ToLineDtos(item, L["Finance:BaseSalary"]),
-            ClosedAt = run.ClosedAt!.Value
+            ClosedAt = run.ClosedAt!.Value,
+            DeliveredOn = item.DeliveredOn
         };
     }
 
@@ -393,7 +446,10 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
     }
 
     private async Task<Dictionary<Guid, HR_Mangment2.Identity.UserRefDto>> LoadUsersAsync(IReadOnlyCollection<PayrollRun> runs) =>
-        await References.GetUserRefsAsync(runs.SelectMany(x => new Guid?[] { x.PreparedByUserId, x.ApprovedByUserId }).Where(x => x != null).Select(x => x!.Value));
+        await References.GetUserRefsAsync(runs
+            .SelectMany(x => new Guid?[] { x.PreparedByUserId, x.ApprovedByUserId }.Concat(x.Items.Select(i => i.DeliveredByUserId)))
+            .Where(x => x != null)
+            .Select(x => x!.Value));
 
     private static T Fill<T>(T dto, PayrollRun run, Dictionary<Guid, HR_Mangment2.Identity.UserRefDto> users) where T : PayrollRunSummaryDto
     {
@@ -408,6 +464,7 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
         dto.LastCalculatedAt = run.LastCalculatedAt;
         dto.IsStale = run.IsStale;
         dto.EmployeeCount = run.Items.Count;
+        dto.DeliveredCount = run.Items.Count(x => x.DeliveredOn != null);
         dto.Totals = PayrollTables.Totals(run.Items);
         dto.ConcurrencyStamp = run.ConcurrencyStamp;
         return dto;
@@ -422,7 +479,13 @@ public class PayrollRunAppService : FinanceAppServiceBase, IPayrollRunAppService
         var dto = Fill(new PayrollRunDto(), run, users);
         dto.Items = run.Items
             .OrderBy(x => employees[x.EmployeeId].FullName)
-            .Select(x => PayrollTables.ToItemDto(x, employees[x.EmployeeId], L["Finance:BaseSalary"]))
+            .Select(x =>
+            {
+                var item = PayrollTables.ToItemDto(x, employees[x.EmployeeId], L["Finance:BaseSalary"]);
+                item.DeliveredOn = x.DeliveredOn;
+                item.DeliveredBy = x.DeliveredByUserId == null ? null : users.GetValueOrDefault(x.DeliveredByUserId.Value);
+                return item;
+            })
             .ToList();
         dto.EmployeesWithoutProfile = missing.Select(x => employees[x]).ToList();
         dto.PendingSuggestionCount = (int)await _suggestions.LongCountAsync(x => x.Period == run.Period && x.Status == AdjustmentSuggestionStatus.PendingReview);
@@ -476,6 +539,23 @@ public class PayrollRunCreateInputDtoValidator : AbstractValidator<PayrollRunCre
     public PayrollRunCreateInputDtoValidator()
     {
         RuleFor(x => x.Period).NotNull().Matches(FinanceConsts.PeriodPattern);
+    }
+}
+
+public class PayrollDeliveryInputDtoValidator : AbstractValidator<PayrollDeliveryInputDto>
+{
+    public PayrollDeliveryInputDtoValidator()
+    {
+        RuleFor(x => x.DeliveredOn).NotNull();
+    }
+}
+
+public class PayrollUndoDeliveryInputDtoValidator : AbstractValidator<PayrollUndoDeliveryInputDto>
+{
+    public PayrollUndoDeliveryInputDtoValidator()
+    {
+        RuleFor(x => x.EmployeeIds).NotNull().Must(x => x.Count > 0);
+        RuleFor(x => x.Reason).NotNull().Must(x => !string.IsNullOrWhiteSpace(x)).MaximumLength(FinanceConsts.MaxTextLength);
     }
 }
 

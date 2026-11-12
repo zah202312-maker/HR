@@ -321,10 +321,9 @@ public class UserAccountAppService : HR_Mangment2AppService, IUserAccountAppServ
                 throw new BusinessException(HrErrorCodes.Employee.ExecutiveCannotHaveManager);
             }
 
-            if (employee.ManagerEmployeeId != null)
+            // No manager and no shift for these roles (decision 2026-11-10).
+            if (await _managerLinks.DetachFromScheduleAsync(employee, newRoles, await _companyClock.GetTodayAsync()))
             {
-                await _managerLinks.CloseCurrentLinkAsync(employee.Id, await _companyClock.GetTodayAsync());
-                employee.SetManager(null);
                 await _employees.UpdateAsync(employee, autoSave: true);
             }
 
@@ -348,6 +347,12 @@ public class UserAccountAppService : HR_Mangment2AppService, IUserAccountAppServ
         {
             await _managerLinks.ChangeAsync(employee, await _employees.GetAsync(requestedManagerId.Value), null);
             await _employees.UpdateAsync(employee, autoSave: true);
+        }
+
+        // The HR manager keeps a manager but has no shift (decision 2026-11-10).
+        if (ManagerLinkService.IsOutsideSchedule(newRoles))
+        {
+            await _managerLinks.DetachFromScheduleAsync(employee, newRoles, await _companyClock.GetTodayAsync());
         }
     }
 

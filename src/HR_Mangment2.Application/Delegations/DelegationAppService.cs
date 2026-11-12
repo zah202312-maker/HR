@@ -110,16 +110,22 @@ public class DelegationAppService : HR_Mangment2AppService, IDelegationAppServic
             }
 
             delegatorRoles = await LazyServiceProvider.LazyGetRequiredService<Volo.Abp.Identity.IIdentityUserRepository>().GetRoleNamesAsync(me);
-            if (!await _employees.AnyAsync(x => x.UserId == me && x.Status == EmployeeStatus.Active) || !delegatorRoles.Any(x => FullScopeRoles.Contains(x) || x == HrRoles.Accountant))
+            if (!await _employees.AnyAsync(x => x.UserId == me && x.Status == EmployeeStatus.Active) || !delegatorRoles.Any(x => FullScopeRoles.Contains(x) || x == HrRoles.Accountant || x == HrRoles.Reviewer))
             {
                 throw new BusinessException(HrErrorCodes.Delegation.DelegatorNotEligible);
             }
         }
 
-        // The accountant delegates the requests step only. The contract has no other code that fits this refusal.
-        var accountantOnly = !delegatorRoles.Any(x => FullScopeRoles.Contains(x));
+        // The accountant delegates the requests step only, and the reviewer the follow-up reports only (decision
+        // 2026-11-11); nobody else delegates follow-up reports. The contract has no other code that fits these refusals.
+        var fullScope = delegatorRoles.Any(x => FullScopeRoles.Contains(x));
+        var accountant = delegatorRoles.Contains(HrRoles.Accountant);
+        var reviewer = delegatorRoles.Contains(HrRoles.Reviewer);
+        var scopeAllowed = scope == DelegationScope.ReviewReports
+            ? reviewer
+            : fullScope || (accountant && scope == DelegationScope.Requests);
         var eligible = await _employees.AnyAsync(x => x.UserId == toUserId && x.Status == EmployeeStatus.Active);
-        if (!eligible || (accountantOnly && scope != DelegationScope.Requests))
+        if (!eligible || !scopeAllowed)
         {
             throw new BusinessException(HrErrorCodes.Delegation.DelegateNotEligible);
         }
@@ -129,7 +135,9 @@ public class DelegationAppService : HR_Mangment2AppService, IDelegationAppServic
             x.CancelledAt == null &&
             x.StartsAt < endsAt &&
             x.EndsAt > startsAt &&
-            (x.Scope == scope || x.Scope == DelegationScope.AllApprovals || scope == DelegationScope.AllApprovals));
+            (x.Scope == scope ||
+             (scope != DelegationScope.ReviewReports && x.Scope != DelegationScope.ReviewReports &&
+              (x.Scope == DelegationScope.AllApprovals || scope == DelegationScope.AllApprovals))));
         if (overlapping)
         {
             throw new BusinessException(HrErrorCodes.Delegation.OverlappingDelegation);
@@ -179,11 +187,12 @@ public class DelegationAppService : HR_Mangment2AppService, IDelegationAppServic
             query.ApplySorting(input.Sorting, nameField, new Dictionary<string, string> { ["displayName"] = nameField })
                 .Skip(input.SkipCount)
                 .Take(input.MaxResultCount));
+        var photos = await _references.GetPhotoIdsAsync(items);
 
         return new DelegationCandidatePagedResultDto
         {
             TotalCount = total,
-            Items = items.Select(x => new UserRefDto { Id = x.UserId!.Value, DisplayName = EmployeeReferenceReader.FullName(x) }).ToList()
+            Items = items.Select(x => new UserRefDto { Id = x.UserId!.Value, DisplayName = EmployeeReferenceReader.FullName(x), PhotoId = EmployeeReferenceReader.PhotoOf(x, photos) }).ToList()
         };
     }
 

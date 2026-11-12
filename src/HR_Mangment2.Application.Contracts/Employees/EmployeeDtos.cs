@@ -60,6 +60,13 @@ public class EmployeeCreateDto
     public List<string> RoleNames { get; set; } = new();
     public AppGender? Gender { get; set; }
     public string? EmployeeNumber { get; set; }
+
+    /// <summary>The salary agreed at hiring, optional: it becomes the first salary version (decision 2026-11-10). Kept out of the audit log.</summary>
+    [Volo.Abp.Auditing.DisableAuditing]
+    public decimal? BaseSalary { get; set; }
+
+    [Volo.Abp.Auditing.DisableAuditing]
+    public string? SalaryCurrency { get; set; }
 }
 
 public class EmployeeUpdateDto
@@ -83,6 +90,7 @@ public class EmployeeHrDto
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = null!;
+    public Guid? PhotoId { get; set; }
     public string FullNameAr { get; set; } = null!;
     public string? FullNameEn { get; set; }
     public string? Email { get; set; }
@@ -110,6 +118,7 @@ public class EmployeeSelfDto
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = null!;
+    public Guid? PhotoId { get; set; }
     public string FullNameAr { get; set; } = null!;
     public string? FullNameEn { get; set; }
     public string? Email { get; set; }
@@ -133,6 +142,7 @@ public class EmployeeTeamMemberDto
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = null!;
+    public Guid? PhotoId { get; set; }
     public string? Email { get; set; }
     public string? PhoneNumber { get; set; }
     public DepartmentRefDto Department { get; set; } = null!;
@@ -152,6 +162,7 @@ public class EmployeeListItemDto
 {
     public Guid Id { get; set; }
     public string FullName { get; set; } = null!;
+    public Guid? PhotoId { get; set; }
     public DepartmentRefDto Department { get; set; } = null!;
     public string JobTitle { get; set; } = null!;
     public DateOnly HireDate { get; set; }

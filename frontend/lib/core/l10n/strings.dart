@@ -147,6 +147,7 @@ class S {
         InboxCategory.warningDecision => _('قرارات الإنذار', 'Warning decisions'),
         InboxCategory.contractDecision => _('قرارات العقود', 'Contract decisions'),
         InboxCategory.appreciationLetterAcknowledgement => _('كتب الشكر', 'Appreciation letters'),
+        InboxCategory.noticeAcknowledgement => _('اطلاع على التبليغات', 'Notice acknowledgements'),
         InboxCategory.$unknown => _('أخرى', 'Other'),
       };
 
@@ -283,7 +284,7 @@ class S {
         AttendanceDayStatus.onLeave => _('إجازة', 'On leave'),
         AttendanceDayStatus.holiday => _('عطلة رسمية', 'Holiday'),
         AttendanceDayStatus.weeklyOff => _('عطلة أسبوعية', 'Weekly off'),
-        AttendanceDayStatus.noShift => _('بدون وردية', 'No shift'),
+        AttendanceDayStatus.noShift => _('بدون فترة عمل', 'No work period'),
         AttendanceDayStatus.$unknown => '—',
       };
 
@@ -301,7 +302,7 @@ class S {
   String get phone => _('الهاتف', 'Phone');
   String get employeeNumber => _('الرقم الوظيفي', 'Employee number');
   String get roles => _('الأدوار', 'Roles');
-  String get shift => _('الوردية', 'Shift');
+  String get shift => _('فترة العمل', 'Work period');
   String get notificationLanguage => _('لغة الإشعارات والبريد', 'Notification and email language');
   String get readOnlyProfile => _('ملفك للقراءة فقط، والتعديل لدى الموارد البشرية.',
       'Your file is read-only; HR makes changes.');

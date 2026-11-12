@@ -35,6 +35,18 @@ public class SystemSettingsController : HR_Mangment2Controller
     [HttpPut("complaints", Name = "SystemSettings_UpdateComplaints")]
     public Task<SystemSettingsComplaintsDto> UpdateComplaintsAsync([FromBody] SystemSettingsComplaintsUpdateInputDto input) => _service.UpdateComplaintsAsync(input);
 
+    [HttpGet("annual-leave", Name = "SystemSettings_GetAnnualLeave")]
+    public Task<SystemSettingsAnnualLeaveDto> GetAnnualLeaveAsync() => _service.GetAnnualLeaveAsync();
+
+    [HttpPut("annual-leave", Name = "SystemSettings_UpdateAnnualLeave")]
+    public Task<SystemSettingsAnnualLeaveDto> UpdateAnnualLeaveAsync([FromBody] SystemSettingsAnnualLeaveUpdateInputDto input) => _service.UpdateAnnualLeaveAsync(input);
+
+    [HttpGet("hr-evaluation-alert", Name = "SystemSettings_GetHrEvaluationAlert")]
+    public Task<SystemSettingsHrEvaluationAlertDto> GetHrEvaluationAlertAsync() => _service.GetHrEvaluationAlertAsync();
+
+    [HttpPut("hr-evaluation-alert", Name = "SystemSettings_UpdateHrEvaluationAlert")]
+    public Task<SystemSettingsHrEvaluationAlertDto> UpdateHrEvaluationAlertAsync([FromBody] SystemSettingsHrEvaluationAlertUpdateInputDto input) => _service.UpdateHrEvaluationAlertAsync(input);
+
     [HttpGet("hourly-leave", Name = "SystemSettings_GetHourlyLeave")]
     public Task<SystemSettingsHourlyLeaveDto> GetHourlyLeaveAsync() => _service.GetHourlyLeaveAsync();
 

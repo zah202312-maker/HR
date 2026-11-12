@@ -12,6 +12,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import '../hrx/employee_records_tab.dart';
@@ -39,32 +40,45 @@ class EmployeeFilePage extends ConsumerWidget {
       child: AsyncBody<EmployeeHrDto>(
         value: value,
         onRetry: () => ref.invalidate(employeeFileProvider(id)),
-        builder: (e) => DefaultTabController(
-          length: 7,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
-              Tab(text: s.t('البيانات', 'Data')),
-              Tab(text: s.manager),
-              Tab(text: s.shift),
-              Tab(text: s.t('الوثائق', 'Documents')),
-              Tab(text: s.t('سجل المهام', 'Task log')),
-              Tab(text: s.account),
-              Tab(text: s.t('السجل الوظيفي', 'Records')),
-            ]),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TabBarView(children: [
-                _DataTab(e: e),
-                _ManagerTab(e: e),
-                _ShiftTab(e: e),
-                EmployeeDocumentsTab(employeeId: e.id, canManage: true),
-                _TaskLogTab(e: e),
-                _AccountTab(e: e),
-                EmployeeRecordsTab(employeeId: e.id),
+        builder: (e) {
+          // Contracts, warnings, appreciation letters, custody and complaints are tabs of their own, each by permission.
+          final records = employeeRecordTabs(s, ref.watch(sessionProvider), e.id,
+              employee: EmployeeRefDto(id: e.id, fullName: e.fullName, departmentName: e.department.name, photoId: e.photoId));
+          return DefaultTabController(
+            length: 6 + records.length,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  PersonAvatar(name: e.fullName, photoId: e.photoId, radius: 28),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(e.fullName, style: Theme.of(context).textTheme.titleMedium)),
+                ]),
+              ),
+              TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
+                Tab(text: s.t('البيانات', 'Data')),
+                Tab(text: s.manager),
+                Tab(text: s.shift),
+                Tab(text: s.t('الوثائق', 'Documents')),
+                for (final r in records) Tab(text: r.label),
+                Tab(text: s.t('سجل المهام', 'Task log')),
+                Tab(text: s.account),
               ]),
-            ),
-          ]),
-        ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(children: [
+                  _DataTab(e: e),
+                  _ManagerTab(e: e),
+                  _ShiftTab(e: e),
+                  EmployeeDocumentsTab(employeeId: e.id, canManage: true),
+                  for (final r in records) r.body,
+                  _TaskLogTab(e: e),
+                  _AccountTab(e: e),
+                ]),
+              ),
+            ]),
+          );
+        },
       ),
     );
   }
@@ -317,7 +331,7 @@ class _ManagerTabState extends ConsumerState<_ManagerTab> {
                 OutlinedButton.icon(
                   onPressed: () async {
                     final ok = await showAssignEmployeesDialog(context, ref,
-                        EmployeeRefDto(id: widget.e.id, fullName: widget.e.fullName, departmentName: widget.e.department.name));
+                        EmployeeRefDto(id: widget.e.id, fullName: widget.e.fullName, departmentName: widget.e.department.name, photoId: widget.e.photoId));
                     if (ok) ref.invalidate(employeeFileProvider(widget.e.id));
                   },
                   icon: const Icon(Icons.group_add_outlined),
@@ -335,7 +349,7 @@ class _ManagerTabState extends ConsumerState<_ManagerTab> {
       itemBuilder: (context, h) => HrCard(
         child: ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(h.toDate == null ? Icons.link : Icons.history, color: context.hr.accent),
+          leading: PersonAvatar.employee(h.manager),
           title: Text(h.manager.fullName),
           subtitle: Text([
             '${f.date(h.fromDate)} → ${h.toDate == null ? s.t('الآن', 'now') : f.date(h.toDate)}',
@@ -366,7 +380,7 @@ class _ShiftTabState extends ConsumerState<_ShiftTab> {
     DateTime? start;
     final ok = await showFormDialog(
       context,
-      title: s.t('تعيين وردية', 'Assign shift'),
+      title: s.t('تعيين فترة عمل', 'Assign work period'),
       fields: (setState) => [
         Consumer(builder: (context, ref, _) {
           final shifts = ref.watch(activeShiftsProvider);
@@ -426,7 +440,7 @@ class _ShiftTabState extends ConsumerState<_ShiftTab> {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.t('الوردية الحالية', 'Current shift'), style: TextStyle(color: context.hr.textSecondary)),
+              Text(s.t('فترة العمل الحالية', 'Current work period'), style: TextStyle(color: context.hr.textSecondary)),
               const SizedBox(height: 4),
               Text(
                 widget.e.currentShift == null

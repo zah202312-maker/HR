@@ -14,6 +14,26 @@ using Volo.Abp.Auditing;
 
 namespace HR_Mangment2.Controllers.EmploymentContracts;
 
+/// <summary>The multipart form of ContractCreateInputDto (decision 2026-11-10: the paper contract is attached on create).</summary>
+public class ContractCreateInputDto
+{
+    [Required]
+    public Guid? EmployeeId { get; set; }
+
+    [Required]
+    public string ContractType { get; set; } = null!;
+
+    [Required]
+    public DateOnly? StartDate { get; set; }
+
+    [Required]
+    public DateOnly? EndDate { get; set; }
+
+    public Guid? PreviousContractId { get; set; }
+
+    public List<IFormFile>? Attachments { get; set; }
+}
+
 [Route("api/app/contract")]
 public class ContractController : HR_Mangment2Controller
 {
@@ -28,8 +48,46 @@ public class ContractController : HR_Mangment2Controller
     public Task<ContractPagedResultDto> GetListAsync([FromQuery] ContractListInput input) => _service.GetListAsync(input);
 
     [HttpPost(Name = "Contract_Create")]
-    public async Task<ActionResult<ContractDto>> CreateAsync([FromBody] ContractCreateInputDto input, [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyKey) =>
-        StatusCode(201, await _service.CreateAsync(input, idempotencyKey));
+    [Consumes("multipart/form-data")]
+    [DisableAuditing]
+    public async Task<ActionResult<ContractDto>> CreateAsync([FromForm] ContractCreateInputDto input, [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyKey)
+    {
+        var files = new List<UploadedFileInput>();
+        foreach (var file in input.Attachments ?? new List<IFormFile>())
+        {
+            files.Add(await UploadedFiles.ReadAsync(file));
+        }
+
+        return StatusCode(201, await _service.CreateAsync(
+            new ContractCreateInput
+            {
+                EmployeeId = input.EmployeeId,
+                ContractType = input.ContractType,
+                StartDate = input.StartDate,
+                EndDate = input.EndDate,
+                PreviousContractId = input.PreviousContractId,
+                Attachments = files
+            },
+            idempotencyKey));
+    }
+
+    [HttpGet("{id:guid}/attachment/{attachmentId:guid}/download-url", Name = "Contract_GetAttachmentDownloadUrl")]
+    [ResponseCache(NoStore = true)]
+    public Task<FileDownloadUrlDto> GetAttachmentDownloadUrlAsync(Guid id, Guid attachmentId) => _service.GetAttachmentDownloadUrlAsync(id, attachmentId);
+
+    [HttpDelete("{id:guid}/attachment/{attachmentId:guid}", Name = "Contract_DeleteAttachment")]
+    public async Task<IActionResult> DeleteAttachmentAsync(Guid id, Guid attachmentId)
+    {
+        await _service.DeleteAttachmentAsync(id, attachmentId);
+        return NoContent();
+    }
+
+    [HttpGet("my/{id:guid}/attachment/{attachmentId:guid}/download-url", Name = "Contract_GetMyAttachmentDownloadUrl")]
+    [ResponseCache(NoStore = true)]
+    public Task<FileDownloadUrlDto> GetMyAttachmentDownloadUrlAsync(Guid id, Guid attachmentId) => _service.GetMyAttachmentDownloadUrlAsync(id, attachmentId);
+
+    [HttpGet("overview", Name = "Contract_GetOverview")]
+    public Task<EmployeeContractOverviewPagedResultDto> GetOverviewAsync([FromQuery] ContractOverviewListInput input) => _service.GetOverviewAsync(input);
 
     [HttpGet("expiring", Name = "Contract_GetExpiring")]
     public Task<ContractExpiringPagedResultDto> GetExpiringAsync([FromQuery] ContractExpiringListInput input) => _service.GetExpiringAsync(input);

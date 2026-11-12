@@ -113,6 +113,7 @@ public class ReportQueries : ITransientDependency
     private readonly IAsyncQueryableExecuter _executer;
     private readonly IStringLocalizer<HR_Mangment2Resource> _l;
     private readonly IClock _clock;
+    private readonly EmployeeScheduleReader _schedules;
 
     public ReportQueries(
         IRepository<AttendanceDay, Guid> days,
@@ -135,8 +136,10 @@ public class ReportQueries : ITransientDependency
         IRepository<EvaluationCycle, Guid> cycles,
         IRepository<Evaluation, Guid> evaluations,
         IRepository<DepartmentReport, Guid> departmentReports,
-        DepartmentReportReader reportReader)
+        DepartmentReportReader reportReader,
+        EmployeeScheduleReader schedules)
     {
+        _schedules = schedules;
         _cycles = cycles;
         _evaluations = evaluations;
         _departmentReports = departmentReports;
@@ -477,7 +480,28 @@ public class ReportQueries : ITransientDependency
         };
     }
 
-    public virtual async Task<HrLeaveBalanceReportRowPagedResultDto> GetHrLeaveBalancesAsync(Guid? departmentId, Guid? employeeId, ReportPage page)
+    /// <summary>
+    /// Today's company-wide counts for the executive director's dashboard (decision 2026-11-11): the same sums as
+    /// GetHrAttendanceAsync for one day, over the employees who are not ended.
+    /// </summary>
+    public virtual async Task<TodayAttendanceSummaryDto> GetTodaySummaryAsync(DateOnly today)
+    {
+        var ids = await _executer.ToListAsync(CompanyEmployees(await _employees.GetQueryableAsync(), null, null)
+            .Where(x => x.Status != EmployeeStatus.Ended)
+            .Select(x => x.Id));
+        var totals = (await SumDaysAsync(ids, today, today)).Values.ToList();
+
+        return new TodayAttendanceSummaryDto
+        {
+            Date = today,
+            Present = totals.Sum(x => x.PresentDays),
+            Late = totals.Sum(x => x.LateCount),
+            Absent = totals.Sum(x => x.AbsentDays),
+            OnLeave = totals.Sum(x => x.LeaveDays)
+        };
+    }
+
+    public virtual async Task<HrLeaveBalanceReportRowPagedResultDto> GetHrLeaveBalancesAsync(Guid? departmentId, Guid? employeeId, ReportPage page, DateOnly? from = null, DateOnly? to = null)
     {
         var employees = (await _executer.ToListAsync(CompanyEmployees(await _employees.GetQueryableAsync(), departmentId, employeeId)
             .Where(x => x.Status != EmployeeStatus.Ended))).ToDictionary(x => x.Id);
@@ -505,9 +529,50 @@ public class ReportQueries : ITransientDependency
             row.UsedHours = -snapshot.CurrentEntries
                 .Where(x => x.Type is LeaveLedgerType.Deduct or LeaveLedgerType.Reverse)
                 .Sum(x => x.Hours ?? 0);
+
+            if (from != null && to != null)
+            {
+                (row.PeriodUsedDays, row.PeriodUsedHours) = await GetPeriodUsageAsync(row.Employee.Id, from.Value, to.Value);
+            }
         }
 
         return new HrLeaveBalanceReportRowPagedResultDto { TotalCount = references.Count, Items = ordered };
+    }
+
+    /// <summary>
+    /// Approved annual and hourly leave taken inside from..to (decision 2026-11-10). A leave wholly inside the period counts
+    /// its working days as fixed at submission; one crossing an edge counts only the working days of the schedule inside
+    /// the period. Other leave types do not touch the annual balance and are not counted.
+    /// </summary>
+    private async Task<(decimal Days, decimal Hours)> GetPeriodUsageAsync(Guid employeeId, DateOnly from, DateOnly to)
+    {
+        var leaves = await _executer.ToListAsync((await _leaves.GetQueryableAsync()).Where(x =>
+            x.EmployeeId == employeeId &&
+            x.State == LeaveRequestState.Approved &&
+            (x.Kind == LeaveKind.Annual || x.Kind == LeaveKind.Hourly) &&
+            x.RangeStart <= to && x.RangeEnd >= from));
+
+        decimal days = 0, hours = 0;
+        foreach (var leave in leaves)
+        {
+            if (leave.Kind == LeaveKind.Hourly)
+            {
+                hours += leave.RequestedHours ?? 0;
+                continue;
+            }
+
+            if (leave.RangeStart >= from && leave.RangeEnd <= to)
+            {
+                days += leave.WorkingDays;
+                continue;
+            }
+
+            var start = leave.RangeStart > from ? leave.RangeStart : from;
+            var end = leave.RangeEnd < to ? leave.RangeEnd : to;
+            days += (await _schedules.GetAsync(employeeId, start, end)).Count(x => x.Classification == LeaveDayClassification.WorkingDay);
+        }
+
+        return (days, hours);
     }
 
     public virtual async Task<HrRequestReportRowPagedResultDto> GetHrRequestsAsync(DateOnly from, DateOnly to, Guid? departmentId, Guid? employeeId, ReportPage page)

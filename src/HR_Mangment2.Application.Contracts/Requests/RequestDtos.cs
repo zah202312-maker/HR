@@ -276,7 +276,8 @@ public enum InboxCategory
     WarningResponse,
     WarningDecision,
     ContractDecision,
-    AppreciationLetterAcknowledgement
+    AppreciationLetterAcknowledgement,
+    NoticeAcknowledgement
 }
 
 public class InboxSummaryItemDto

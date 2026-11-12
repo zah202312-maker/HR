@@ -35,6 +35,7 @@ public class HR_Mangment2ApplicationModule : AbpModule
         await context.AddBackgroundWorkerAsync<HR_Mangment2.Requests.RequestReminderWorker>();
         await context.AddBackgroundWorkerAsync<HR_Mangment2.Evaluations.EvaluationCycleWorker>();
         await context.AddBackgroundWorkerAsync<HR_Mangment2.Leaves.LeaveMaintenanceWorker>();
+        await context.AddBackgroundWorkerAsync<HR_Mangment2.HrEvaluations.HrEvaluationAlertWorker>();
         await context.AddBackgroundWorkerAsync<HR_Mangment2.EmploymentContracts.EmploymentRecordsWorker>();
     }
 }

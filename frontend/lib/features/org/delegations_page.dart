@@ -8,6 +8,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import 'org_providers.dart';
@@ -16,6 +17,7 @@ String delegationScopeLabel(S s, DelegationScope sc) => switch (sc) {
       DelegationScope.allApprovals => s.t('كل الموافقات', 'All approvals'),
       DelegationScope.requests => s.t('الطلبات', 'Requests'),
       DelegationScope.memosAndIncidents => s.t('المطالعات والبلاغات', 'Memos and incidents'),
+      DelegationScope.reviewReports => s.t('التقرير اليومي وغرفه', 'Daily report and rooms'),
       DelegationScope.$unknown => '—',
     };
 
@@ -46,10 +48,19 @@ class _DelegationsPageState extends ConsumerState<DelegationsPage> {
     final reason = TextEditingController();
     UserRefDto? to;
     UserRefDto? from;
-    var scope = DelegationScope.allApprovals;
     DateTime? starts = DateTime.now().add(const Duration(minutes: 5));
     DateTime? ends;
     final hrOnBehalf = session.can(HrOps.Delegation_List) && session.can(HrOps.UserAccount_Lookup);
+    // Which scopes this person may delegate: approvers all approval scopes, the accountant the requests step, the reviewer
+    // the follow-up reports only (decision 2026-11-11). HR, delegating for someone absent, sees every scope.
+    final approver = [AppRole.departmentManager, AppRole.hrManager, AppRole.executiveDirector, AppRole.systemAdmin].any(session.hasRole);
+    final scopes = <DelegationScope>[
+      if (approver || hrOnBehalf) ...[DelegationScope.allApprovals, DelegationScope.requests, DelegationScope.memosAndIncidents]
+      else if (session.hasRole(AppRole.accountant)) DelegationScope.requests,
+      if (session.hasRole(AppRole.reviewer) || hrOnBehalf) DelegationScope.reviewReports,
+    ];
+    if (scopes.isEmpty) return;
+    var scope = scopes.first;
     final ok = await showFormDialog(
       context,
       title: s.t('تفويض جديد', 'New delegation'),
@@ -81,8 +92,7 @@ class _DelegationsPageState extends ConsumerState<DelegationsPage> {
           initialValue: scope,
           decoration: InputDecoration(labelText: s.t('النطاق', 'Scope')),
           items: [
-            for (final sc in DelegationScope.values.where((v) => v != DelegationScope.$unknown))
-              DropdownMenuItem(value: sc, child: Text(delegationScopeLabel(s, sc))),
+            for (final sc in scopes) DropdownMenuItem(value: sc, child: Text(delegationScopeLabel(s, sc))),
           ],
           onChanged: (v) => setState(() => scope = v ?? scope),
         ),
@@ -157,7 +167,11 @@ class _DelegationsPageState extends ConsumerState<DelegationsPage> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${d.fromUser.displayName} ← ${d.toUser.displayName}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
+              PersonName.user(d.fromUser, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const Text('←'),
+              PersonName.user(d.toUser, style: const TextStyle(fontWeight: FontWeight.w600)),
+            ]),
             Text('${delegationScopeLabel(s, d.scope)} · ${f.dateTime(d.startsAt)} → ${f.dateTime(d.endsAt)}',
                 style: TextStyle(color: context.hr.textSecondary)),
             Text(d.reason, style: Theme.of(context).textTheme.labelSmall),

@@ -634,7 +634,7 @@ public class EvaluationAppService : HR_Mangment2AppService, IEvaluationAppServic
             Status = evaluation.Status,
             IsEditable = evaluation.Status == EvaluationStatus.Draft && cycle.Status == EvaluationCycleStatus.Open,
             Attendance = await ToAttendanceAsync(evaluation, cycle),
-            AvailableGrades = cycle.Grades.OrderBy(x => x.SortOrder).Select(x => new EvaluationGradeOptionDto { Code = x.Code, Name = LocalizedName.Pick(x.NameAr, x.NameEn) }).ToList(),
+            AvailableGrades = ToGradeOptions(cycle),
             Scores = cycle.Criteria.OrderBy(x => x.SortOrder).Select(c =>
             {
                 var score = scores.GetValueOrDefault(c.CriterionId);
@@ -699,9 +699,14 @@ public class EvaluationAppService : HR_Mangment2AppService, IEvaluationAppServic
             AcknowledgedAt = evaluation.AcknowledgedAt,
             ObjectionStatus = evaluation.ObjectionStatus,
             Responses = await ToResponseDtosAsync(evaluation.Responses),
+            AvailableGrades = ToGradeOptions(cycle),
             ConcurrencyStamp = evaluation.ConcurrencyStamp
         };
     }
+
+    /// <summary>The cycle's own verbal scale in display order: the grades a form or an accepted objection can use.</summary>
+    private static List<EvaluationGradeOptionDto> ToGradeOptions(EvaluationCycle cycle) =>
+        cycle.Grades.OrderBy(x => x.SortOrder).Select(x => new EvaluationGradeOptionDto { Code = x.Code, Name = LocalizedName.Pick(x.NameAr, x.NameEn) }).ToList();
 
     public static List<EvaluationSubmittedScoreDto> ToSubmittedScores(Evaluation evaluation, EvaluationCycle cycle) =>
         cycle.Criteria.OrderBy(x => x.SortOrder)

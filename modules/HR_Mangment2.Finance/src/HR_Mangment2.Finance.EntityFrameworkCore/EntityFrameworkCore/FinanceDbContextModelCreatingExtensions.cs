@@ -127,5 +127,41 @@ public static class FinanceDbContextModelCreatingExtensions
             b.HasIndex(x => x.StockMovementId);
             b.HasIndex(x => x.SourceRequestId);
         });
+
+        builder.Entity<PettyCashType>(b =>
+        {
+            b.ToTable("PettyCashTypes", schema);
+            b.ConfigureByConvention();
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(128);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(128);
+            b.HasIndex(x => new { x.TenantId, x.NameAr }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.NameEn }).IsUnique();
+        });
+
+        builder.Entity<PettyCashAssignment>(b =>
+        {
+            b.ToTable("PettyCashAssignments", schema);
+            b.ConfigureByConvention();
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Currency).IsRequired().HasMaxLength(FinanceConsts.CurrencyLength);
+            b.Property(x => x.FromPeriod).IsRequired().HasMaxLength(FinanceConsts.PeriodLength);
+            b.Property(x => x.ToPeriod).HasMaxLength(FinanceConsts.PeriodLength);
+            b.Property(x => x.Note).HasMaxLength(FinanceConsts.MaxTextLength);
+            b.HasOne<PettyCashType>().WithMany().HasForeignKey(x => x.TypeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.EmployeeId, x.TypeId });
+        });
+
+        builder.Entity<PettyCashEntry>(b =>
+        {
+            b.ToTable("PettyCashEntries", schema);
+            b.ConfigureByConvention();
+            b.Property(x => x.Period).IsRequired().HasMaxLength(FinanceConsts.PeriodLength);
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Currency).IsRequired().HasMaxLength(FinanceConsts.CurrencyLength);
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(12);
+            b.HasOne<PettyCashAssignment>().WithMany().HasForeignKey(x => x.AssignmentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.AssignmentId, x.Period }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.Period, x.Status });
+        });
     }
 }

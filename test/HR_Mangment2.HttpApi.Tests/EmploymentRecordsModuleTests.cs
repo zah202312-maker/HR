@@ -99,9 +99,100 @@ public class EmploymentRecordsModuleTests
         };
     }
 
+/// <summary>Contract_Create is multipart since the paper contract can be attached (decision 2026-11-10).</summary>
+    private static MultipartFormDataContent ContractForm(Guid employeeId, string contractType, string startDate, string endDate, Guid? previous = null, params (byte[] Content, string ContentType, string Name)[] files)
+    {
+        var form = new MultipartFormDataContent
+        {
+            { new StringContent(employeeId.ToString()), "employeeId" },
+            { new StringContent(contractType), "contractType" },
+            { new StringContent(startDate), "startDate" },
+            { new StringContent(endDate), "endDate" }
+        };
+
+        if (previous != null)
+        {
+            form.Add(new StringContent(previous.Value.ToString()), "previousContractId");
+        }
+
+        foreach (var file in files)
+        {
+            var part = new ByteArrayContent(file.Content);
+            part.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+            form.Add(part, "attachments", file.Name);
+        }
+
+        return form;
+    }
+
     private static Task<JsonElement> CreateContractAsync(HttpClient hr, Guid employeeId, int startOffset, int endOffset, Guid? previous = null) =>
-        hr.PostAsJsonAsync("/api/app/contract", new { employeeId, contractType = "Annual", startDate = Day(startOffset), endDate = Day(endOffset), previousContractId = previous })
+        hr.PostAsync("/api/app/contract", ContractForm(employeeId, "Annual", Day(startOffset), Day(endOffset), previous))
             .ContinueWith(x => OkAsync(x.Result, HttpStatusCode.Created)).Unwrap();
+
+    [Fact]
+    public async Task Contract_attachments_are_uploaded_on_create_shown_downloaded_and_soft_deleted()
+    {
+        var kit = await EmployeeTestKit.CreateAsync(_host);
+        var manager = await kit.AddDepartmentManagerAsync();
+        var staff = await kit.AddStaffAsync(manager.Id);
+        var staffClient = await kit.SignInAsync(staff);
+        var other = await kit.AddStaffAsync(manager.Id);
+        var otherClient = await kit.SignInAsync(other);
+
+        // A file the guard refuses stops the whole contract.
+        await ShouldFailWithAsync(
+            await kit.Hr.PostAsync("/api/app/contract", ContractForm(staff.Id, "Annual", Day(-10), Day(400), null, (Encoding.ASCII.GetBytes("not a pdf"), "application/pdf", "bad.pdf"))),
+            HrErrorCodes.Document.FileTypeNotAllowed);
+        (await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/contract?employeeId={staff.Id}")).GetProperty("totalCount").GetInt64().ShouldBe(0);
+
+        var created = await OkAsync(
+            await kit.Hr.PostAsync("/api/app/contract", ContractForm(staff.Id, "Annual", Day(-10), Day(400), null, (Pdf, "application/pdf", "paper-contract.pdf"), (Pdf, "application/pdf", "annex.pdf"))),
+            HttpStatusCode.Created);
+        var id = IdOf(created);
+        var attachments = created.GetProperty("attachments").EnumerateArray().ToList();
+        attachments.Count.ShouldBe(2);
+        Text(attachments[0], "fileName").ShouldBe("paper-contract.pdf");
+        attachments[0].GetProperty("sizeBytes").GetInt64().ShouldBe(Pdf.Length);
+        var first = IdOf(attachments[0]);
+        var second = IdOf(attachments[1]);
+
+        // HR downloads; a foreign or unknown attachment id is 404.
+        Text(await OkAsync(await kit.Hr.GetAsync($"/api/app/contract/{id}/attachment/{first}/download-url")), "url").ShouldContain("/files/");
+        (await kit.Hr.GetAsync($"/api/app/contract/{id}/attachment/{Guid.NewGuid()}/download-url")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var otherContract = await CreateContractAsync(kit.Hr, other.Id, -10, 400);
+        otherContract.GetProperty("attachments").GetArrayLength().ShouldBe(0);
+        (await kit.Hr.GetAsync($"/api/app/contract/{IdOf(otherContract)}/attachment/{first}/download-url")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        // The employee sees and downloads their own copy, and nobody else's.
+        var mine = await OkAsync(await staffClient.GetAsync($"/api/app/contract/my/{id}"));
+        mine.GetProperty("attachments").GetArrayLength().ShouldBe(2);
+        (await staffClient.GetFromJsonAsync<JsonElement>("/api/app/contract/my")).GetProperty("items")[0].GetProperty("attachments").GetArrayLength().ShouldBe(2);
+        Text(await OkAsync(await staffClient.GetAsync($"/api/app/contract/my/{id}/attachment/{first}/download-url")), "url").ShouldContain("/files/");
+        (await otherClient.GetAsync($"/api/app/contract/my/{id}/attachment/{first}/download-url")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await staffClient.GetAsync($"/api/app/contract/{id}/attachment/{first}/download-url")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await staffClient.DeleteAsync($"/api/app/contract/{id}/attachment/{first}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        // Soft delete: gone from every view and download, and a second delete is 404.
+        (await kit.Hr.DeleteAsync($"/api/app/contract/{id}/attachment/{first}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await kit.Hr.DeleteAsync($"/api/app/contract/{id}/attachment/{first}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var after = await OkAsync(await kit.Hr.GetAsync($"/api/app/contract/{id}"));
+        after.GetProperty("attachments").EnumerateArray().Select(IdOf).ShouldBe(new[] { second });
+        (await OkAsync(await staffClient.GetAsync($"/api/app/contract/my/{id}"))).GetProperty("attachments").GetArrayLength().ShouldBe(1);
+        (await kit.Hr.GetAsync($"/api/app/contract/{id}/attachment/{first}/download-url")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await staffClient.GetAsync($"/api/app/contract/my/{id}/attachment/{first}/download-url")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        // The row stays, marked deleted.
+        await RunAsync(async services =>
+        {
+            var filter = services.GetRequiredService<Volo.Abp.Data.IDataFilter>();
+            using (filter.Disable<Volo.Abp.ISoftDelete>())
+            {
+                var row = await services.GetRequiredService<Volo.Abp.Domain.Repositories.IRepository<ContractAttachment, Guid>>().GetAsync(first);
+                row.IsDeleted.ShouldBeTrue();
+                row.DeletedAt.ShouldNotBeNull();
+            }
+        });
+    }
 
     [Fact]
     public async Task Contract_runs_from_recommendation_to_decision_and_hides_the_steps_from_the_employee()
@@ -153,17 +244,19 @@ public class EmploymentRecordsModuleTests
         var manager = await kit.AddDepartmentManagerAsync();
         var staff = await kit.AddStaffAsync(manager.Id);
 
-        Task<HttpResponseMessage> Post(object body) => kit.Hr.PostAsJsonAsync("/api/app/contract", body);
+        Task<HttpResponseMessage> Post(Guid employeeId, string contractType, string startDate, string endDate, Guid? previous = null) =>
+            kit.Hr.PostAsync("/api/app/contract", ContractForm(employeeId, contractType, startDate, endDate, previous));
 
-        await ShouldFailWithAsync(await Post(new { employeeId = Guid.NewGuid(), contractType = "A", startDate = Day(1), endDate = Day(2) }), HrErrorCodes.Contract.EmployeeNotFound);
-        await ShouldFailWithAsync(await Post(new { employeeId = staff.Id, contractType = "A", startDate = Day(5), endDate = Day(5) }), HrErrorCodes.Contract.InvalidDateRange);
-        (await Post(new { employeeId = staff.Id, contractType = "", startDate = Day(1), endDate = Day(2) })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        await ShouldFailWithAsync(await Post(Guid.NewGuid(), "A", Day(1), Day(2)), HrErrorCodes.Contract.EmployeeNotFound);
+        await ShouldFailWithAsync(await Post(staff.Id, "A", Day(5), Day(5)), HrErrorCodes.Contract.InvalidDateRange);
+        (await Post(staff.Id, "", Day(1), Day(2))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
         var first = await CreateContractAsync(kit.Hr, staff.Id, -10, 400);
         Text(first, "status").ShouldBe("active");
+        first.GetProperty("attachments").GetArrayLength().ShouldBe(0);
 
-        await ShouldFailWithAsync(await Post(new { employeeId = staff.Id, contractType = "A", startDate = Day(100), endDate = Day(500) }), HrErrorCodes.Contract.OverlappingContract);
-        await ShouldFailWithAsync(await Post(new { employeeId = staff.Id, contractType = "A", startDate = Day(401), endDate = Day(500), previousContractId = IdOf(first) }), HrErrorCodes.Contract.InvalidPreviousContract);
+        await ShouldFailWithAsync(await Post(staff.Id, "A", Day(100), Day(500)), HrErrorCodes.Contract.OverlappingContract);
+        await ShouldFailWithAsync(await Post(staff.Id, "A", Day(401), Day(500), IdOf(first)), HrErrorCodes.Contract.InvalidPreviousContract);
 
         var file = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{staff.Id}");
         file.GetProperty("currentContract").GetProperty("contractId").GetGuid().ShouldBe(IdOf(first));
@@ -179,7 +272,7 @@ public class EmploymentRecordsModuleTests
         var configuration = await kit.Hr.GetFromJsonAsync<JsonElement>("/api/abp/application-configuration");
         var employeeId = await kit.AddFileForUserAsync(configuration.GetProperty("currentUser").GetProperty("id").GetGuid(), kit.ExecutiveEmployeeId);
 
-        var contract = await kit.Hr.PostAsJsonAsync("/api/app/contract", new { employeeId, contractType = "A", startDate = Day(-200), endDate = Day(5) });
+        var contract = await kit.Hr.PostAsync("/api/app/contract", ContractForm(employeeId, "A", Day(-200), Day(5)));
         var id = IdOf(await OkAsync(contract, HttpStatusCode.Created));
 
         await ShouldFailWithAsync(

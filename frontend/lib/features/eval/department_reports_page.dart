@@ -58,6 +58,7 @@ class _DepartmentReportsPageState extends ConsumerState<DepartmentReportsPage> {
         },
         itemBuilder: (context, r) => OpsTile(
           leading: Icons.summarize_outlined,
+          avatar: PersonAvatar.user(r.manager),
           title: '${monthLabel(r.year, r.month)} · ${r.manager.displayName}',
           subtitle: [
             if (r.department != null) r.department!.name,

@@ -230,7 +230,7 @@ public class AttendanceDeviceAppService : HR_Mangment2AppService, IAttendanceDev
         var employeeId = input.EmployeeId!.Value;
         var employee = await _employees.GetAsync(employeeId);
 
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             throw new BusinessException(HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
         }

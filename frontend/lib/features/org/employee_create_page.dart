@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -31,6 +32,9 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
   final _jobTitle = TextEditingController();
   final _userName = TextEditingController();
   final _number = TextEditingController();
+
+  /// The salary agreed at hiring, optional. It goes to the accountant's salary file and is not shown again.
+  final _salary = TextEditingController();
   DepartmentRefDto? _department;
   EmployeeRefDto? _manager;
   String? _shiftId;
@@ -43,13 +47,34 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
 
   @override
   void dispose() {
-    for (final c in [_nameAr, _nameEn, _email, _phone, _address, _jobTitle, _userName, _number]) {
+    for (final c in [_nameAr, _nameEn, _email, _phone, _address, _jobTitle, _userName, _number, _salary]) {
       c.dispose();
     }
     super.dispose();
   }
 
   bool get _isExecutive => _roles.contains(AppRole.executiveDirector.value);
+
+  static final _notAssignableHere = <String>{
+    AppRole.executiveDirector.value,
+    AppRole.hrManager.value,
+    AppRole.systemAdmin.value,
+  };
+
+  /// x-global-rules.manager-link: the executive and the system admin have no manager
+  /// (an HR manager who is also system admin follows the HR manager row).
+  bool get _noManager =>
+      _isExecutive ||
+      (_roles.contains(AppRole.systemAdmin.value) && !_roles.contains(AppRole.hrManager.value));
+
+  /// The executive, the HR manager and the system admin have no shift (decisions of 2026-11-10), nor do the
+  /// accountant and the store officer (decision 2026-11-11).
+  bool get _noShift =>
+      _isExecutive ||
+      _roles.contains(AppRole.hrManager.value) ||
+      _roles.contains(AppRole.systemAdmin.value) ||
+      _roles.contains(AppRole.accountant.value) ||
+      _roles.contains(AppRole.storeOfficer.value);
 
   String? _opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
 
@@ -58,7 +83,8 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
     final valid = _form.currentState!.validate();
     final s = S.of(context);
     if (!valid || _department == null || _hireDate == null || _roles.isEmpty) return;
-    if (!_isExecutive && (_manager == null || _shiftId == null)) return;
+    if (!_noShift && _shiftId == null) return;
+    if (!_noManager && _manager == null) return;
     setState(() => _busy = true);
     try {
       final created = await ref.read(hrApiProvider).employees.Employee_Create(
@@ -72,12 +98,13 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
               departmentId: _department!.id,
               jobTitle: _jobTitle.text.trim(),
               hireDate: _hireDate!,
-              workShiftId: _isExecutive ? null : _shiftId,
-              managerEmployeeId: _isExecutive ? null : _manager?.id,
+              workShiftId: _noShift ? null : _shiftId,
+              managerEmployeeId: _noManager ? null : _manager?.id,
               userName: _userName.text.trim(),
               roleNames: _roles.toList(),
               gender: _gender,
               employeeNumber: _opt(_number),
+              baseSalary: _opt(_salary) == null ? null : double.parse(_salary.text.trim()),
             ),
           );
       if (!mounted) return;
@@ -172,6 +199,24 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
                       maxLength: 128,
                       decoration: InputDecoration(labelText: s.jobTitle),
                       validator: (v) => requiredValidator(context, v)),
+                  TextFormField(
+                    controller: _salary,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                    decoration: InputDecoration(
+                      labelText: s.t('الراتب المتفق عليه (اختياري)', 'Agreed salary (optional)'),
+                      suffixText: 'IQD',
+                      helperText: s.t('يصل للمحاسب كأول راتب من تاريخ المباشرة، ولا يظهر هنا بعد الحفظ.',
+                          'Goes to the accountant as the first salary from the hire date, and is not shown here after saving.'),
+                      helperMaxLines: 2,
+                    ),
+                    validator: (v) {
+                      final t = (v ?? '').trim();
+                      if (t.isEmpty) return null;
+                      final n = double.tryParse(t);
+                      return n == null || n <= 0 ? s.t('اكتب مبلغاً أكبر من صفر', 'Enter an amount above zero') : null;
+                    },
+                  ),
                   PickerField(
                     label: s.hireDate,
                     value: _hireDate == null ? null : f.date(_hireDate),
@@ -182,7 +227,7 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
                       if (d != null) setState(() => _hireDate = d);
                     },
                   ),
-                  if (!_isExecutive)
+                  if (!_noShift)
                     shifts.when(
                       loading: () => const LinearProgressIndicator(),
                       error: (e, _) => Text(s.error(e), style: const TextStyle(color: HrColors.danger)),
@@ -194,7 +239,7 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
                         onChanged: (v) => setState(() => _shiftId = v),
                       ),
                     ),
-                  if (!_isExecutive)
+                  if (!_noManager)
                     PickerField(
                       label: s.manager,
                       value: _manager?.fullName,
@@ -211,8 +256,8 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
                 ]),
                 const SizedBox(height: 8),
                 Text(
-                  s.t('المدير حسب قواعد الربط: مدير القسم للموظف، ومسؤول النظام لمدير القسم، والمدير التنفيذي للموارد البشرية ومسؤول النظام، والمدير التنفيذي أو مدير الموارد البشرية للمراجع. المدير التنفيذي بلا مدير ولا وردية.',
-                      'Manager per the link rules: department manager for employees, system admin for department managers, executive director for HR and system admin, executive director or HR manager for the reviewer. The executive director has no manager or shift.'),
+                  s.t('المدير حسب قواعد الربط: مدير القسم للموظف، والموارد البشرية لمدير القسم، والمدير التنفيذي للموارد البشرية وللمحاسب ولمسؤول المخزن، والمدير التنفيذي أو مدير الموارد البشرية للمراجع. المدير التنفيذي ومسؤول النظام بلا مدير ولا فترة عمل، ومدير الموارد البشرية والمحاسب ومسؤول المخزن بلا فترة عمل.',
+                      'Manager per the link rules: department manager for employees, HR manager for department managers, executive director for HR, the accountant and the store officer, executive director or HR manager for the reviewer. The executive director and the system admin have no manager or work period; the HR manager, the accountant and the store officer have no work period.'),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.hr.textSecondary),
                 ),
               ]),
@@ -238,7 +283,8 @@ class _EmployeeCreatePageState extends ConsumerState<EmployeeCreatePage> {
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => Text(s.error(e), style: const TextStyle(color: HrColors.danger)),
                   data: (list) => Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final r in list)
+                    // The executive, HR manager and system admin roles are not given from this page (decision 2026-11-10).
+                    for (final r in list.where((r) => !_notAssignableHere.contains(r.name)))
                       FilterChip(
                         label: Text(r.displayName),
                         selected: _roles.contains(r.name),

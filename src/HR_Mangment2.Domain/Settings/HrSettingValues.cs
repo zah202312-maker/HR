@@ -27,6 +27,35 @@ public class ComplaintSettings
     public int? OverdueReminderIntervalWorkingDays { get; set; }
 }
 
+/// <summary>
+/// The company's annual leave days per employee year (decision 2026-11-10). Each leave year is granted with the value
+/// in force when it starts, so a change reaches everyone from their next year and never the current one.
+/// </summary>
+public class AnnualLeaveSettings
+{
+    public const decimal InitialDays = 24;
+
+    public decimal DefaultEntitlementDays { get; set; } = InitialDays;
+}
+
+/// <summary>
+/// The low average alert of HR evaluations (decision 2026-11-11): at the end of each cycle of <see cref="WindowWeeks"/>
+/// weeks, an employee with at least <see cref="MinEvaluations"/> evaluations whose average on a heading is
+/// <see cref="Threshold"/> or lower raises an alert to the HR managers.
+/// </summary>
+public class HrEvaluationAlertSettings
+{
+    public decimal Threshold { get; set; } = 7;
+    public int WindowWeeks { get; set; } = 4;
+    public int MinEvaluations { get; set; } = 4;
+}
+
+/// <summary>Internal: the last day of the last computed alert cycle. Not a settings section.</summary>
+public class HrEvaluationAlertState
+{
+    public DateOnly? LastPeriodTo { get; set; }
+}
+
 public class HourlyLeaveSettings
 {
     public decimal? MonthlyAllowedHours { get; set; } = 8;

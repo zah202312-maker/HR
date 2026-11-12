@@ -10,6 +10,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import '../requests/request_widgets.dart';
@@ -64,44 +65,6 @@ class _LeaveAdminPageState extends ConsumerState<LeaveAdminPage> {
     }
   }
 
-  Future<void> _setEntitlement(LeaveBalanceDto b) async {
-    final s = S.of(context);
-    final days = TextEditingController(text: b.nextYearEntitlementDays?.toString() ?? b.currentYearEntitlementDays.toString());
-    final reason = TextEditingController();
-    final ok = await showFormDialog(
-      context,
-      title: s.t('تحديد الاستحقاق', 'Set entitlement'),
-      fields: (_) => [
-        Text(
-          b.isEntitlementSet
-              ? s.t('التغيير يبدأ من سنة الموظف القادمة. لتعديل السنة الحالية استخدمي «تعديل الرصيد».',
-                  'The change starts next employee year. Use "Adjust" for the current year.')
-              : s.t('أول تحديد يفتح سنة الموظف الحالية.', 'The first value opens the current employee year.'),
-          style: Theme.of(context).textTheme.labelSmall,
-        ),
-        TextFormField(
-          controller: days,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: s.t('عدد الأيام', 'Days')),
-          validator: (v) => (double.tryParse((v ?? '').trim()) ?? -1) < 0 ? s.requiredField : null,
-        ),
-        TextFormField(controller: reason, decoration: InputDecoration(labelText: s.note)),
-      ],
-      onSubmit: () => runAction(
-        context,
-        () => ref.read(hrApiProvider).leaveBalance.LeaveBalance_SetEntitlement(
-              id: _employee!.id,
-              body: LeaveEntitlementUpdateDto(
-                entitlementDays: double.parse(days.text.trim()),
-                reason: reason.text.trim().isEmpty ? null : reason.text.trim(),
-                concurrencyStamp: b.concurrencyStamp,
-              ),
-            ),
-        done: s.saved,
-      ),
-    );
-    if (ok) _load();
-  }
 
   Future<void> _adjust() async {
     final s = S.of(context);
@@ -200,8 +163,8 @@ class _LeaveAdminPageState extends ConsumerState<LeaveAdminPage> {
                     Text('${f.date(b.yearStartDate)} → ${f.date(b.yearEndDate)}', style: Theme.of(context).textTheme.labelSmall),
                     const SizedBox(height: 12),
                     Wrap(spacing: 8, runSpacing: 8, children: [
-                      if (session.can(HrOps.LeaveBalance_SetEntitlement))
-                        FilledButton.icon(onPressed: () => _setEntitlement(b), icon: const Icon(Icons.event_available), label: Text(s.t('تحديد الاستحقاق', 'Set entitlement'))),
+                      // No entitlement per employee (decision 2026-11-10): the year opens with the company default from
+                      // system settings; a difference for one person is corrected here with a reason.
                       if (session.can(HrOps.LeaveBalance_Adjust) && b.isEntitlementSet)
                         OutlinedButton.icon(onPressed: _adjust, icon: const Icon(Icons.exposure), label: Text(s.t('تعديل الرصيد', 'Adjust'))),
                     ]),
@@ -498,7 +461,7 @@ class _TeamLeaveCalendarPageState extends ConsumerState<TeamLeaveCalendarPage> {
               child: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(c.employee.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    PersonName.employee(c.employee, style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text(
                       '${c.otherLeaveTypeName ?? s.leaveKindLabel(c.kind)} · ${f.date(c.startDate)}${c.endDate == c.startDate ? '' : ' → ${f.date(c.endDate)}'}'
                       '${c.fromTime != null ? ' · ${c.fromTime}–${c.toTime}' : ''}',

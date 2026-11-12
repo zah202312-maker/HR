@@ -9,6 +9,7 @@ import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
 import '../../core/widgets/paged_list.dart';
+import '../../core/widgets/person_avatar.dart';
 import 'request_widgets.dart';
 
 /// Request_GetInbox: the unified "awaiting my action" box, including delegated items.
@@ -33,6 +34,8 @@ class InboxPage extends ConsumerWidget {
           return HrCard(
             onTap: () => context.go('/requests/${r.id}'),
             child: Row(children: [
+              PersonAvatar.employee(r.employee, radius: 20),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('${r.type.name} — ${r.employee.fullName}', style: const TextStyle(fontWeight: FontWeight.w600)),

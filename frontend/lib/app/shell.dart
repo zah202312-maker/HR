@@ -10,6 +10,8 @@ import '../core/theme/motion.dart';
 import '../core/theme/tokens.dart';
 import '../core/widgets/motion_widgets.dart';
 import '../core/widgets/hr_logo.dart';
+import '../core/widgets/person_avatar.dart';
+import '../features/eval/review_reports_page.dart' show standInForProvider;
 import '../features/notifications/unread_count.dart';
 
 class NavItem {
@@ -29,6 +31,10 @@ class NavItem {
 
   bool visibleFor(Session session) {
     if (session.isSystemAdminOnly && isHiddenForSystemAdmin(path)) return false;
+    if (session.isOutsideSchedule && isHiddenOutsideSchedule(path)) return false;
+    if (session.isHrWithoutSystemAdmin && isHiddenForHrManager(path)) return false;
+    if (session.isBackOfficeOnly && isHiddenForBackOffice(path)) return false;
+    if (session.isExecutive && isHiddenForExecutive(path)) return false;
     if (operation == null && anyOf.isEmpty) return true;
     if (operation != null && session.can(operation!)) return true;
     return anyOf.any(session.can);
@@ -36,7 +42,13 @@ class NavItem {
 }
 
 /// Employee-facing pages that a system admin (without a business role) does not use.
+/// Each entry hides the page and its sub-routes.
 const systemAdminHiddenPaths = <String>[
+  '/team',
+  '/delegations',
+  '/shifts',
+  '/circulars',
+  '/notices',
   '/leaves',
   '/attendance',
   '/memos',
@@ -51,8 +63,41 @@ const systemAdminHiddenPaths = <String>[
   '/holidays',
 ];
 
+/// Hidden exactly, sub-routes kept: '/requests/:id' stays reachable from the inbox and
+/// notifications, so the system admin can still open a request he has to act on.
+const systemAdminHiddenExactPaths = <String>[
+  '/requests',
+  '/requests/new',
+];
+
+/// Pages hidden from the HR manager (decision 2026-11-10): roles and permissions are the system admin's.
+const hrManagerHiddenPaths = <String>['/roles'];
+
+bool isHiddenForHrManager(String location) => hrManagerHiddenPaths.any((p) => location == p || location.startsWith('$p/'));
+
+/// Pages hidden from the executive director (decision 2026-11-11). The list pages only: a request, a warning or an
+/// evaluation objection opened from the inbox or a notification ('/requests/:id', '/warnings/:id',
+/// '/evaluations/open/:id') stays reachable.
+const executiveHiddenExactPaths = <String>['/requests', '/requests/new', '/warnings', '/evaluations', '/complaints/new'];
+const executiveHiddenPaths = <String>['/leaves', '/attendance', '/holidays', '/leave-balances', '/payslips', '/contracts'];
+
+bool isHiddenForExecutive(String location) =>
+    executiveHiddenExactPaths.contains(location) || executiveHiddenPaths.any((p) => location == p || location.startsWith('$p/'));
+
+/// Pages hidden from an accountant or store officer with no other business role (decision 2026-11-11).
+const backOfficeHiddenPaths = <String>['/circulars', '/evaluations', '/warnings', '/appreciation', '/notices', '/holidays'];
+
+bool isHiddenForBackOffice(String location) => backOfficeHiddenPaths.any((p) => location == p || location.startsWith('$p/'));
+
+/// Personal attendance and leave pages, hidden from the roles with no shift (executive, HR manager, system admin).
+const outsideScheduleHiddenPaths = <String>['/leaves', '/attendance'];
+
+bool isHiddenOutsideSchedule(String location) =>
+    outsideScheduleHiddenPaths.any((p) => location == p || location.startsWith('$p/'));
+
 /// Exact path or a sub-route of it ('/attendance' must not match '/attendance-admin').
 bool isHiddenForSystemAdmin(String location) =>
+    systemAdminHiddenExactPaths.contains(location) ||
     systemAdminHiddenPaths.any((p) => location == p || location.startsWith('$p/'));
 
 final navItems = <NavItem>[
@@ -66,6 +111,7 @@ final navItems = <NavItem>[
   NavItem('/incidents', Icons.build_circle_outlined, (s) => s.t('بلاغات الأعطال', 'Fault incidents'), anyOf: [HrOps.Incident_GetMy, HrOps.Incident_GetInbox]),
   NavItem('/complaints', Icons.shield_outlined, (s) => s.t('الشكاوى', 'Complaints'), anyOf: [HrOps.Complaint_GetMyList, HrOps.Complaint_GetAssignedList]),
   NavItem('/circulars', Icons.campaign_outlined, (s) => s.t('التعاميم', 'Circulars'), operation: HrOps.Circular_GetReceivedList),
+  NavItem('/notices', Icons.mark_email_unread_outlined, (s) => s.t('تبليغاتي', 'My notices'), operation: HrOps.Notice_GetReceivedList),
   NavItem('/evaluations', Icons.rate_review_outlined, (s) => s.t('التقييمات', 'Evaluations'),
       anyOf: [HrOps.Evaluation_GetMyList, HrOps.Evaluation_GetTeamList, HrOps.Evaluation_GetHrList]),
   NavItem('/custody', Icons.inventory_2_outlined, (s) => s.t('العهد', 'Custody'), anyOf: [HrOps.Custody_GetMy, HrOps.Custody_GetTeam, HrOps.Custody_GetList]),
@@ -81,8 +127,16 @@ final navItems = <NavItem>[
   NavItem('/team', Icons.groups_2_outlined, (s) => s.t('فريقي', 'My team'), operation: HrOps.Manager_GetMyTeam, admin: true),
   NavItem('/team-calendar', Icons.calendar_month_outlined, (s) => s.t('تقويم إجازات الفريق', 'Team leave calendar'), operation: HrOps.LeaveCalendar_GetTeam, admin: true),
   NavItem('/attendance-admin', Icons.fact_check_outlined, (s) => s.t('حضور الموظفين', 'Employee attendance'), operation: HrOps.Attendance_GetByEmployee, admin: true),
-  NavItem('/leave-balances', Icons.account_balance_wallet_outlined, (s) => s.t('أرصدة الإجازات', 'Leave balances'), operation: HrOps.LeaveBalance_SetEntitlement, admin: true),
+  NavItem('/leave-balances', Icons.account_balance_wallet_outlined, (s) => s.t('أرصدة الإجازات', 'Leave balances'), operation: HrOps.LeaveBalance_Adjust, admin: true),
   NavItem('/employees', Icons.badge_outlined, (s) => s.t('الموظفون', 'Employees'), operation: HrOps.Employee_List, admin: true),
+  NavItem('/send-notice', Icons.forward_to_inbox_outlined, (s) => s.t('إرسال تبليغ', 'Send a notice'), operation: HrOps.Notice_Create, admin: true),
+  NavItem('/hr-evaluations', Icons.grading_outlined, (s) => s.t('تقييم الموظفين', 'Employee evaluations'), operation: HrOps.HrEvaluation_Create, admin: true),
+  NavItem('/hr-evaluation-criteria', Icons.checklist_rtl, (s) => s.t('عناوين تقييم الموارد', 'HR evaluation headings'), operation: HrOps.HrEvaluationCriterion_Create, admin: true),
+  NavItem('/hr-evaluation-reports', Icons.summarize_outlined, (s) => s.t('تقارير تقييم الموارد', 'HR evaluation reports'), operation: HrOps.HrEvaluationReport_GetList, admin: true),
+  NavItem('/hr-evaluation-alerts', Icons.trending_down, (s) => s.t('تنبيهات التقييم', 'Evaluation alerts'), operation: HrOps.HrEvaluationAlert_GetList, admin: true),
+  NavItem('/reviewer-evaluations', Icons.fact_check_outlined, (s) => s.t('تقييمات المراجع', 'Reviewer evaluations'), operation: HrOps.ReviewerEvaluation_Create, admin: true),
+  NavItem('/reviewer-evaluation-criteria', Icons.checklist_rtl, (s) => s.t('عناوين تقييم المراجع', 'Reviewer evaluation headings'), operation: HrOps.ReviewerEvaluationCriterion_Create, admin: true),
+  NavItem('/reviewer-evaluation-reports', Icons.assignment_turned_in_outlined, (s) => s.t('تقارير تقييم المراجع', 'Reviewer evaluation reports'), operation: HrOps.ReviewerEvaluationReport_GetList, admin: true),
   NavItem('/departments', Icons.apartment_outlined, (s) => s.t('الأقسام', 'Departments'), operation: HrOps.Department_List, admin: true),
   NavItem('/accounts', Icons.manage_accounts_outlined, (s) => s.t('الحسابات', 'Accounts'), operation: HrOps.UserAccount_List, admin: true),
   NavItem('/shifts', Icons.schedule_outlined, (s) => s.t('قوالب الدوام', 'Shift templates'), operation: HrOps.WorkShift_List, admin: true),
@@ -94,15 +148,95 @@ final navItems = <NavItem>[
   NavItem('/roles', Icons.admin_panel_settings_outlined, (s) => s.t('الأدوار والصلاحيات', 'Roles and permissions'), operation: HrOps.Role_List, admin: true),
   NavItem('/store', Icons.warehouse_outlined, (s) => s.t('المخزن', 'Store'), anyOf: [HrOps.StockIssue_GetList, HrOps.Item_GetList], admin: true),
   NavItem('/finance', Icons.account_balance_outlined, (s) => s.t('المالية', 'Finance'), anyOf: [HrOps.PayrollRun_List, HrOps.SalaryProfile_List], admin: true),
+  NavItem('/employee-salaries', Icons.payments_outlined, (s) => s.t('رواتب الموظفين', 'Employee salaries'), operation: HrOps.SalaryProfile_GetOverview, admin: true),
+  NavItem('/employee-contracts', Icons.assignment_ind_outlined, (s) => s.t('عقود الموظفين', 'Employee contracts'), operation: HrOps.Contract_GetOverview, admin: true),
   NavItem('/department-reports', Icons.summarize_outlined, (s) => s.t('التقارير الشهرية', 'Monthly reports'), operation: HrOps.DepartmentReport_GetList, admin: true),
-  NavItem('/review-reports', Icons.insights_outlined, (s) => s.t('تقارير المتابعة', 'Follow-up reports'), operation: HrOps.ReviewReport_GetList, admin: true),
-  NavItem('/evaluation-admin', Icons.checklist, (s) => s.t('معايير التقييم', 'Evaluation criteria'), operation: HrOps.EvaluationCriterion_GetList, admin: true),
+  NavItem('/review-reports', Icons.insights_outlined, (s) => s.t('التقرير اليومي', 'Daily report'), operation: HrOps.ReviewReport_GetList, admin: true),
+  NavItem('/review-rooms', Icons.meeting_room_outlined, (s) => s.t('إنشاء غرف', 'Rooms'), operation: HrOps.ReviewRoom_Create, admin: true),
   NavItem('/request-types', Icons.list_alt_outlined, (s) => s.t('أنواع الطلبات', 'Request types'), operation: HrOps.RequestType_GetAdminList, admin: true),
   NavItem('/reports', Icons.bar_chart_outlined, (s) => s.t('التقارير', 'Reports'),
       anyOf: [HrOps.Report_GetTeamAttendance, HrOps.Report_GetReviewDashboard, HrOps.Report_GetHrAttendance], admin: true),
   NavItem('/system-settings', Icons.settings_suggest_outlined, (s) => s.t('إعدادات النظام', 'System settings'), operation: HrOps.SystemSettings_ListSections, admin: true),
   NavItem('/audit-log', Icons.history_edu_outlined, (s) => s.t('سجل التدقيق', 'Audit log'), operation: HrOps.AuditLog_List, admin: true),
 ];
+
+/// Pages shown first for the executive director (decision 2026-11-11): the reviewer's daily report and the HR
+/// evaluation reports.
+const executiveTopPaths = <String>['/review-reports', '/reviewer-evaluation-reports', '/hr-evaluation-reports'];
+
+/// A titled group of sidebar pages.
+class NavSection {
+  const NavSection(this.title, this.paths);
+  final String Function(S s) title;
+  final List<String> paths;
+}
+
+/// The HR manager's sidebar, in Zainab's order (decision 2026-11-11). A page shows only if the HR manager may open it.
+final hrManagerSections = <NavSection>[
+  NavSection((s) => s.t('القائمة الرئيسية', 'Main'), ['/', '/inbox', '/requests', '/notifications', '/memos', '/profile']),
+  NavSection((s) => s.t('الخدمات الوظيفية', 'Employment services'), ['/payslips', '/leave-balances', '/holidays', '/custody', '/contracts', '/delegations']),
+  NavSection((s) => s.t('التواصل والمتابعة', 'Communication and follow-up'),
+      ['/notices', '/circulars', '/send-notice', '/complaints', '/incidents', '/evaluations', '/appreciation', '/warnings']),
+  NavSection((s) => s.t('الإدارة والموظفون', 'Administration and employees'),
+      ['/employees', '/team', '/attendance-admin', '/departments', '/shifts', '/devices', '/attendance-import', '/accounts']),
+  NavSection((s) => s.t('التقييم والأداء', 'Evaluation and performance'),
+      ['/hr-evaluations', '/hr-evaluation-criteria', '/hr-evaluation-alerts', '/hr-evaluation-reports', '/complaint-handlers']),
+  NavSection((s) => s.t('المالية والتقارير', 'Finance and reports'), ['/finance', '/department-reports', '/reports']),
+  NavSection((s) => s.t('النظام', 'System'), ['/system-settings']),
+];
+
+/// The visible pages in sidebar order, each with the section title to show before it (null for none). The HR manager
+/// gets [hrManagerSections]; any other visible page of theirs (from a second role, for instance) follows under «أخرى».
+/// Everyone else keeps the list order with «الإدارة» before the first administration page.
+({List<NavItem> items, List<String Function(S s)?> headers}) navLayout(Session session, {Set<String> alsoVisible = const {}}) {
+  // alsoVisible: pages opened by something other than a permission, such as a stand-in's delegation (2026-11-11).
+  final visible = navItems.where((i) => i.visibleFor(session) || alsoVisible.contains(i.path)).toList();
+  if (!session.isHrWithoutSystemAdmin) {
+    // Executive director (decision 2026-11-11): the evaluation reports sent by the reviewer and the HR manager come
+    // first, right after the home page, under their own title.
+    // Store officer and accountant (decisions 2026-11-11): the store and finance come right after the home page,
+    // with no title of their own.
+    final executiveTop = session.isExecutive;
+    final top = executiveTop
+        ? [for (final p in executiveTopPaths) ...visible.where((i) => i.path == p)]
+        : visible.where((i) => (i.path == '/store' && session.hasRole(AppRole.storeOfficer)) || (i.path == '/finance' && session.hasRole(AppRole.accountant))).toList();
+    final home = visible.where((i) => i.path == '/').toList();
+    final rest = visible.where((i) => i.path != '/' && !top.contains(i)).toList();
+    final items = [...home, ...top, ...rest];
+    return (
+      items: items,
+      headers: [
+        for (var i = 0; i < items.length; i++)
+          if (executiveTop && top.isNotEmpty && items[i] == top.first)
+            (S s) => s.t('تقارير التقييم', 'Evaluation reports')
+          else if (executiveTop && top.isNotEmpty && i == home.length + top.length)
+            (S s) => s.t('القائمة', 'Menu')
+          else if (items[i].admin && !top.contains(items[i]) && (i == 0 || !items[i - 1].admin || top.contains(items[i - 1])))
+            (S s) => s.t('الإدارة', 'Administration')
+          else
+            null,
+      ],
+    );
+  }
+
+  final remaining = {for (final i in visible) i.path: i};
+  final items = <NavItem>[];
+  final headers = <String Function(S s)?>[];
+  void add(String Function(S s) title, Iterable<NavItem> group) {
+    var first = true;
+    for (final item in group) {
+      items.add(item);
+      headers.add(first ? title : null);
+      first = false;
+    }
+  }
+
+  for (final section in hrManagerSections) {
+    add(section.title, [for (final p in section.paths) if (remaining.containsKey(p)) remaining.remove(p)!]);
+  }
+  add((s) => s.t('أخرى', 'Other'), [for (final i in visible) if (remaining.containsKey(i.path)) i]);
+  return (items: items, headers: headers);
+}
 
 /// Desktop ≥1280: full sidebar. Tablet 768–1279: collapsed rail (symbol only). Mobile <768: drawer.
 /// Ambient light behind everything, a floating translucent top bar, and page transitions.
@@ -114,7 +248,11 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    final items = navItems.where((i) => i.visibleFor(session)).toList();
+    // A stand-in for a reviewer sees the daily report and its rooms during the delegation (decision 2026-11-11).
+    final standIn = (ref.watch(standInForProvider).valueOrNull ?? const []).isNotEmpty;
+    final layout = navLayout(session, alsoVisible: {if (standIn) ...{'/review-reports', '/review-rooms'}});
+    final items = layout.items;
+    final headers = layout.headers;
     final width = MediaQuery.sizeOf(context).width;
     final selected = _selectedIndex(items);
     final page = RepaintBoundary(child: _PageTransition(location: location, child: child));
@@ -127,7 +265,7 @@ class AppShell extends ConsumerWidget {
           title: const HrLogo(size: 26, clearSpace: false),
           actions: const [_TopActions()],
         ),
-        drawer: Drawer(child: SafeArea(child: _SideNav(items: items, selected: selected, extended: true, floating: false))),
+        drawer: Drawer(child: SafeArea(child: _SideNav(items: items, headers: headers, selected: selected, extended: true, floating: false))),
         body: AmbientBackground(child: SafeArea(child: page)),
       );
     }
@@ -136,7 +274,7 @@ class AppShell extends ConsumerWidget {
         child: SafeArea(
           child: Row(
             children: [
-              RepaintBoundary(child: _SideNav(items: items, selected: selected, extended: width >= 1280)),
+              RepaintBoundary(child: _SideNav(items: items, headers: headers, selected: selected, extended: width >= 1280)),
               Expanded(
                 child: Column(children: [
                   const _TopBar(),
@@ -237,8 +375,11 @@ class _TopBar extends StatelessWidget {
 }
 
 class _SideNav extends ConsumerStatefulWidget {
-  const _SideNav({required this.items, required this.selected, required this.extended, this.floating = true});
+  const _SideNav({required this.items, required this.headers, required this.selected, required this.extended, this.floating = true});
   final List<NavItem> items;
+
+  /// The section title before each item, or null.
+  final List<String Function(S s)?> headers;
   final int selected;
   final bool extended;
   final bool floating;
@@ -328,11 +469,11 @@ class _SideNavState extends ConsumerState<_SideNav> {
         ),
       Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         for (var i = 0; i < items.length; i++) ...[
-          if (items[i].admin && (i == 0 || !items[i - 1].admin))
+          if (widget.headers[i] != null && (extended || i > 0))
             extended
                 ? Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 14, 6),
-                    child: Text(s.t('الإدارة', 'Administration'), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c.textSecondary)),
+                    padding: EdgeInsetsDirectional.fromSTEB(14, i == 0 ? 4 : 14, 14, 6),
+                    child: Text(widget.headers[i]!(s), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c.textSecondary)),
                   )
                 : const Divider(height: 20),
           // measured outside the slide-in transform so the indicator lands on the final position
@@ -447,6 +588,8 @@ class _TopActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = S.of(context);
     final session = ref.watch(sessionProvider);
+    // A chime for every new notification (decision 2026-11-11). The bell is always on screen, so it listens here.
+    ref.listen<AsyncValue<int>>(unreadCountProvider, NotificationSound.onUnreadChanged);
     final unread = ref.watch(unreadCountProvider).valueOrNull ?? 0;
     final isAr = ref.watch(localeProvider).languageCode == 'ar';
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -482,14 +625,7 @@ class _TopActions extends ConsumerWidget {
                 width: 44,
                 height: 44,
                 child: Center(
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: context.hr.glow,
-                    child: Text(
-                      session.me!.displayName.isNotEmpty ? session.me!.displayName.characters.first : '?',
-                      style: TextStyle(color: context.hr.textPrimary, fontWeight: FontWeight.w700),
-                    ),
-                  ),
+                  child: PersonAvatar(name: session.me!.displayName, photoId: session.me!.photoId),
                 ),
               ),
             ),

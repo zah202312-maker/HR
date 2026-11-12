@@ -42,6 +42,48 @@ class CurrentUserApi {
     return MyAccountDto.fromJson(data as Map<String, dynamic>);
   }
 
+  /// POST /api/app/me/photo  (Upload or replace my profile photo)
+  Future<MyPhotoDto> Me_UploadPhoto({
+    required MyPhotoUploadDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'Me_UploadPhoto',
+      method: 'POST',
+      path: '/api/app/me/photo',
+      body: body.toFormData(),
+      contentType: 'multipart/form-data',
+      cancelToken: cancelToken,
+    );
+    return MyPhotoDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// DELETE /api/app/me/photo  (Remove my profile photo)
+  Future<void> Me_DeletePhoto({
+    CancelToken? cancelToken,
+  }) async {
+    await client.send(
+      operationId: 'Me_DeletePhoto',
+      method: 'DELETE',
+      path: '/api/app/me/photo',
+      cancelToken: cancelToken,
+    );
+  }
+
+  /// GET /api/app/profile-photo/{id}  (Get a profile photo)
+  Future<HrBinaryResponse> ProfilePhoto_Get({
+    required String id,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.sendBinary(
+      operationId: 'ProfilePhoto_Get',
+      method: 'GET',
+      path: '/api/app/profile-photo/${Uri.encodeComponent(id)}',
+      cancelToken: cancelToken,
+    );
+    return data;
+  }
+
   /// GET /api/app/me/employee-profile  (Get my own employee file)
   Future<EmployeeSelfDto> Me_GetEmployeeProfile({
     CancelToken? cancelToken,

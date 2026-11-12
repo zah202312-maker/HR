@@ -10,6 +10,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import 'workflow_shared.dart';
@@ -78,7 +79,7 @@ class _IncidentsPageState extends ConsumerState<IncidentsPage> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (showEmployee) Text(i.employee.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (showEmployee) PersonName.employee(i.employee, style: const TextStyle(fontWeight: FontWeight.w600)),
             Text(i.descriptionPreview, maxLines: 2, overflow: TextOverflow.ellipsis),
             Text([if (i.item != null) i.item!.name, f.dateTime(i.creationTime)].join(' · '), style: TextStyle(color: context.hr.textSecondary, fontSize: 12)),
           ]),
@@ -184,7 +185,7 @@ class IncidentDetailPage extends ConsumerWidget {
           HrCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(children: [
-                Expanded(child: Text(i.employee.fullName, style: Theme.of(context).textTheme.titleMedium)),
+                Expanded(child: PersonName.employee(i.employee, radius: 16, style: Theme.of(context).textTheme.titleMedium)),
                 StatusPill(i.statusLabel, tone: incidentTone(i.status)),
               ]),
               const SizedBox(height: 8),

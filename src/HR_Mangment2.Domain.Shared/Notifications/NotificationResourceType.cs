@@ -17,5 +17,9 @@ public enum NotificationResourceType
     AdjustmentSuggestion,
     None,
     SecureItem,
-    ReviewReport
+    ReviewReport,
+    Notice,
+    HrEvaluationReport,
+    HrEvaluationAlert,
+    ReviewerEvaluationReport
 }

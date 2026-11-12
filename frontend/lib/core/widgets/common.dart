@@ -55,20 +55,23 @@ class HrPage extends StatelessWidget {
 }
 
 class HrCard extends StatelessWidget {
-  const HrCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap});
+  const HrCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap, this.highlighted = false});
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+
+  /// Tinted with the accent and outlined, for something new the user has not opened yet.
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     final c = context.hr;
     return Container(
       decoration: BoxDecoration(
-        color: c.surface,
+        color: highlighted ? Color.alphaBlend(c.accent.withValues(alpha: .12), c.surface) : c.surface,
         borderRadius: BorderRadius.circular(HrColors.radiusCard),
-        border: Border.all(color: c.border),
+        border: Border.all(color: highlighted ? c.accent.withValues(alpha: .7) : c.border, width: highlighted ? 1.5 : 1),
         boxShadow: c.shadow,
       ),
       child: Material(
@@ -140,9 +143,12 @@ class SectionTitle extends StatelessWidget {
 
 /// Key/value row for detail screens.
 class InfoRow extends StatelessWidget {
-  const InfoRow(this.label, this.value, {super.key});
+  const InfoRow(this.label, this.value, {super.key, this.leading});
   final String label;
   final String value;
+
+  /// A person's photo before the value when the value is a name (decision 2026-11-11).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -151,6 +157,7 @@ class InfoRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(width: 150, child: Text(label, style: TextStyle(color: context.hr.textSecondary))),
+            if (leading != null) ...[leading!, const SizedBox(width: 8)],
             Expanded(child: SelectableText(value)),
           ],
         ),

@@ -53,12 +53,6 @@ public class LeaveBalanceDto
     public string ConcurrencyStamp { get; set; } = null!;
 }
 
-public class LeaveEntitlementUpdateDto
-{
-    public decimal? EntitlementDays { get; set; }
-    public string? Reason { get; set; }
-    public string ConcurrencyStamp { get; set; } = null!;
-}
 
 public class LeaveBalanceAdjustDto
 {
@@ -327,7 +321,6 @@ public interface ILeaveBalanceAppService : IApplicationService
 {
     Task<LeaveBalanceDto> GetMyAsync();
     Task<LeaveBalanceDto> GetByEmployeeAsync(Guid employeeId);
-    Task<LeaveBalanceDto> SetEntitlementAsync(Guid employeeId, LeaveEntitlementUpdateDto input);
     Task<LeaveBalanceDto> AdjustAsync(Guid employeeId, LeaveBalanceAdjustDto input, Guid? idempotencyKey);
     Task<LeaveLedgerEntryPagedResultDto> GetLedgerByEmployeeAsync(Guid employeeId, LeaveLedgerListInput input);
     Task<LeaveLedgerEntryPagedResultDto> GetMyLedgerAsync(LeaveLedgerListInput input);

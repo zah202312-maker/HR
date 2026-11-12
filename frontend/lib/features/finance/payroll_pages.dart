@@ -54,6 +54,29 @@ class PayrollRunPage extends ConsumerWidget {
     if (ok) ref.invalidate(payrollRunProvider(id));
   }
 
+  /// Salary delivery (decision 2026-11-11): one employee, or everyone not delivered yet.
+  Future<void> _deliver(BuildContext context, WidgetRef ref, PayrollRunDto r, {PayrollItemDto? item}) async {
+    final s = S.of(context);
+    final picked = await pickDate(context, initial: DateTime.now(), last: DateTime.now());
+    if (picked == null || !context.mounted) return;
+    final ok = await runAction(
+        context,
+        () => ref.read(hrApiProvider).finance.PayrollRun_Deliver(
+            id: r.id, body: PayrollDeliveryInputDto(employeeIds: item == null ? null : [item.employee.id], deliveredOn: picked)),
+        done: s.done);
+    if (ok) ref.invalidate(payrollRunProvider(id));
+  }
+
+  Future<void> _undoDelivery(BuildContext context, WidgetRef ref, PayrollRunDto r, PayrollItemDto item) async {
+    final s = S.of(context);
+    final reason = await askText(context, title: s.t('إلغاء تأشير التسليم', 'Undo delivery'), label: s.reason);
+    if (reason == null || reason.isEmpty || !context.mounted) return;
+    final ok = await runAction(
+        context, () => ref.read(hrApiProvider).finance.PayrollRun_UndoDelivery(id: r.id, body: PayrollUndoDeliveryInputDto(employeeIds: [item.employee.id], reason: reason)),
+        done: s.done);
+    if (ok) ref.invalidate(payrollRunProvider(id));
+  }
+
   Future<void> _export(BuildContext context, WidgetRef ref, PayrollRunDto r, FinanceExportFormat format) => runAction(context, () async {
         final file = await ref.read(hrApiProvider).finance.PayrollRun_Export(id: r.id, format: format);
         await saveBinary(file, fallbackName: 'payroll-${r.period}.${format == FinanceExportFormat.pdf ? 'pdf' : 'xlsx'}');
@@ -83,6 +106,9 @@ class PayrollRunPage extends ConsumerWidget {
                 Text('${s.t('آخر حساب', 'Calculated')} ${f.dateTime(r.lastCalculatedAt)}'),
                 if (r.approvedBy != null) Text('${s.t('اعتمده', 'Approved by')} ${r.approvedBy!.displayName} · ${f.dateTime(r.approvedAt)}'),
                 if (r.closedAt != null) Text('${s.t('أُغلق', 'Closed')} ${f.dateTime(r.closedAt)}'),
+                if (r.status == PayrollRunStatus.closed)
+                  StatusPill('${s.t('سُلّم', 'Delivered')} ${r.deliveredCount} / ${r.employeeCount}',
+                      tone: r.deliveredCount == r.employeeCount ? Tone.success : Tone.warning),
               ]),
             ),
             const SizedBox(height: 12),
@@ -97,6 +123,11 @@ class PayrollRunPage extends ConsumerWidget {
                 OutlinedButton.icon(onPressed: () => _act(context, ref, r, 'return'), icon: const Icon(Icons.undo), label: Text(s.t('إعادة للمحاسب', 'Return'))),
               if (r.status == PayrollRunStatus.approved && session.can(HrOps.PayrollRun_Close))
                 FilledButton.icon(onPressed: () => _act(context, ref, r, 'close'), icon: const Icon(Icons.lock_outline), label: Text(s.t('إغلاق نهائي', 'Close'))),
+              if (r.status == PayrollRunStatus.closed && r.deliveredCount < r.employeeCount && session.can(HrOps.PayrollRun_Deliver))
+                FilledButton.icon(
+                    onPressed: () => _deliver(context, ref, r),
+                    icon: const Icon(Icons.payments_outlined),
+                    label: Text(s.t('تسليم رواتب الباقين', 'Deliver the rest'))),
               if (session.can(HrOps.PayrollRun_Export)) ...[
                 OutlinedButton(onPressed: () => _export(context, ref, r, FinanceExportFormat.pdf), child: const Text('PDF')),
                 OutlinedButton(onPressed: () => _export(context, ref, r, FinanceExportFormat.excel), child: const Text('Excel')),
@@ -130,15 +161,33 @@ class PayrollRunPage extends ConsumerWidget {
                 child: HrCard(
                   child: ExpansionTile(
                     tilePadding: EdgeInsets.zero,
+                    leading: PersonAvatar.employee(i.employee),
                     title: Text(i.employee.fullName),
-                    subtitle: Text(i.employee.departmentName ?? ''),
-                    trailing: Text(money(i.net, i.currency), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text([
+                      if (i.employee.departmentName != null) i.employee.departmentName!,
+                      if (i.deliveredOn != null) '${s.t('سُلّم', 'Delivered')} ${f.date(i.deliveredOn)}${i.deliveredBy == null ? '' : ' · ${i.deliveredBy!.displayName}'}',
+                    ].join(' · ')),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (r.status == PayrollRunStatus.closed) ...[
+                        StatusPill(i.deliveredOn == null ? s.t('لم يُسلَّم', 'Not delivered') : s.t('سُلّم', 'Delivered'),
+                            tone: i.deliveredOn == null ? Tone.warning : Tone.success),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(money(i.net, i.currency), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ]),
                     children: [
                       payrollLines(context, i.lines, i.currency),
                       const Divider(),
                       InfoRow(s.t('الإجمالي', 'Gross'), money(i.gross, i.currency)),
                       InfoRow(s.t('الإضافات', 'Additions'), money(i.additions, i.currency)),
                       InfoRow(s.t('الاستقطاعات', 'Deductions'), money(i.deductions, i.currency)),
+                      if (r.status == PayrollRunStatus.closed && session.can(HrOps.PayrollRun_Deliver))
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: i.deliveredOn == null
+                              ? FilledButton.tonal(onPressed: () => _deliver(context, ref, r, item: i), child: Text(s.t('تأشير التسليم', 'Mark delivered')))
+                              : TextButton(onPressed: () => _undoDelivery(context, ref, r, i), child: Text(s.t('إلغاء التأشير', 'Undo'))),
+                        ),
                     ],
                   ),
                 ),
@@ -329,6 +378,7 @@ class PayslipsPage extends ConsumerWidget {
                   InfoRow(s.t('الإضافات', 'Additions'), money(d.additions, d.currency)),
                   InfoRow(s.t('الاستقطاعات', 'Deductions'), money(d.deductions, d.currency)),
                   InfoRow(s.t('الصافي', 'Net'), money(d.net, d.currency)),
+                  InfoRow(s.t('التسليم', 'Delivery'), d.deliveredOn == null ? s.t('لم يُسلَّم بعد', 'Not delivered yet') : Fmt(context).date(d.deliveredOn)),
                 ]),
               );
             },
@@ -365,7 +415,10 @@ class PayslipsPage extends ConsumerWidget {
         itemBuilder: (context, p) => OpsTile(
           leading: Icons.receipt_long_outlined,
           title: p.period,
-          subtitle: '${s.t('أُغلق', 'Closed')} ${f.date(p.closedAt)}',
+          subtitle: [
+            '${s.t('أُغلق', 'Closed')} ${f.date(p.closedAt)}',
+            p.deliveredOn == null ? s.t('لم يُسلَّم بعد', 'Not delivered yet') : '${s.t('سُلّم', 'Delivered')} ${f.date(p.deliveredOn)}',
+          ].join(' · '),
           trailing: Text(money(p.net, p.currency), style: const TextStyle(fontWeight: FontWeight.w700)),
           onTap: () => _open(context, ref, p),
         ),

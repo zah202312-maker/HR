@@ -252,7 +252,7 @@ class _ShiftEditorPageState extends ConsumerState<ShiftEditorPage> {
                   decoration: InputDecoration(labelText: s.t('العمل الإضافي', 'Overtime')),
                   items: [
                     DropdownMenuItem(value: WorkShiftOvertimePolicy.none, child: Text(s.t('لا يُحسب', 'Not counted'))),
-                    DropdownMenuItem(value: WorkShiftOvertimePolicy.afterShiftEnd, child: Text(s.t('بعد نهاية الوردية', 'After shift end'))),
+                    DropdownMenuItem(value: WorkShiftOvertimePolicy.afterShiftEnd, child: Text(s.t('بعد نهاية فترة العمل', 'After work period end'))),
                     DropdownMenuItem(value: WorkShiftOvertimePolicy.afterDailyHours, child: Text(s.t('بعد عدد ساعات يومية', 'After daily hours'))),
                   ],
                   onChanged: (v) => setState(() => _overtime = v ?? _overtime),

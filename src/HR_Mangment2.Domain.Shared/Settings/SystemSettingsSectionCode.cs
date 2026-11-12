@@ -12,9 +12,10 @@ public enum SystemSettingsSectionCode
     RequestTypes,
     OtherLeaveTypes,
     AttendanceDevices,
-    EvaluationCriteria,
     EmployeeLeaveBalances,
     WorkShifts,
     Holidays,
-    DepartmentsAndManagerLinks
+    DepartmentsAndManagerLinks,
+    AnnualLeave,
+    HrEvaluationAlert
 }

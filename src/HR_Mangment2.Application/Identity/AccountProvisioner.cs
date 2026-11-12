@@ -48,7 +48,11 @@ public class AccountProvisioner : ITransientDependency
         _currentTenant = currentTenant;
     }
 
-    /// <summary>Returns the exact role names, with employee added for anyone who has an employee file.</summary>
+    /// <summary>
+    /// Returns the exact role names, with employee added for anyone who has an employee file. The exception is a
+    /// system admin with no other role: they administer the system and are not a company employee, so employee is
+    /// removed (decision 2026-11-10).
+    /// </summary>
     public virtual async Task<List<string>> ResolveRolesAsync(IEnumerable<string> requested, bool hasEmployeeFile)
     {
         var names = new List<string>();
@@ -63,6 +67,12 @@ public class AccountProvisioner : ITransientDependency
             names.Add(role.Name);
         }
 
+        if (IsSystemAdminOnly(names))
+        {
+            names.Remove(HrRoles.Employee);
+            return names;
+        }
+
         if (hasEmployeeFile && !names.Contains(HrRoles.Employee))
         {
             names.Add(HrRoles.Employee);
@@ -70,6 +80,21 @@ public class AccountProvisioner : ITransientDependency
 
         return names;
     }
+
+    /// <summary>The system admin role with no business role beside it (employee aside).</summary>
+    public static bool IsSystemAdminOnly(IReadOnlyCollection<string> roles) =>
+        roles.Contains(HrRoles.SystemAdmin) && roles.All(x => x == HrRoles.SystemAdmin || x == HrRoles.Employee);
+
+    /// <summary>
+    /// An accountant or store officer with no other business role (employee aside). They receive no circular or notice
+    /// (decision 2026-11-11); with another role they do.
+    /// </summary>
+    public static bool IsBackOfficeOnly(IReadOnlyCollection<string> roles) =>
+        (roles.Contains(HrRoles.Accountant) || roles.Contains(HrRoles.StoreOfficer)) &&
+        roles.All(x => x == HrRoles.Accountant || x == HrRoles.StoreOfficer || x == HrRoles.Employee);
+
+    /// <summary>Not a recipient of circulars or notices: a system admin only, an accountant or store officer only.</summary>
+    public static bool ReceivesNoCirculars(IReadOnlyCollection<string> roles) => IsSystemAdminOnly(roles) || IsBackOfficeOnly(roles);
 
     /// <summary>The protected role, combination and singleton rules, for a change from one role set to another.</summary>
     public virtual async Task EnsureRoleChangeAllowedAsync(Guid? targetUserId, IReadOnlyCollection<string> currentRoles, IReadOnlyCollection<string> newRoles)
@@ -131,7 +156,9 @@ public class AccountProvisioner : ITransientDependency
     {
         var forbidden =
             (roles.Contains(HrRoles.ExecutiveDirector) && roles.Contains(HrRoles.Reviewer)) ||
-            (roles.Contains(HrRoles.Accountant) && (roles.Contains(HrRoles.DepartmentManager) || roles.Contains(HrRoles.StoreOfficer)));
+            (roles.Contains(HrRoles.Accountant) && roles.Contains(HrRoles.DepartmentManager)) ||
+            // Decision 2026-11-11: the HR manager may hold the store and accountant roles together; nobody else may.
+            (roles.Contains(HrRoles.Accountant) && roles.Contains(HrRoles.StoreOfficer) && !roles.Contains(HrRoles.HrManager));
 
         if (forbidden)
         {

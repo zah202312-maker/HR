@@ -9,13 +9,15 @@ using Volo.Abp.Application.Services;
 
 namespace HR_Mangment2.EmploymentContracts
 {
-    public class ContractCreateInputDto
+    /// <summary>The service form of the multipart ContractCreateInputDto: the files already read.</summary>
+    public class ContractCreateInput
     {
         public Guid? EmployeeId { get; set; }
         public string ContractType { get; set; } = null!;
         public DateOnly? StartDate { get; set; }
         public DateOnly? EndDate { get; set; }
         public Guid? PreviousContractId { get; set; }
+        public List<HR_Mangment2.Warnings.UploadedFileInput> Attachments { get; set; } = new();
     }
 
     public class ContractRecommendInputDto
@@ -68,6 +70,7 @@ namespace HR_Mangment2.EmploymentContracts
         public DateTime? EmployeeNotifiedAt { get; set; }
         public DateTime CreationTime { get; set; }
         public DateTime? LastModificationTime { get; set; }
+        public List<AttachmentDto> Attachments { get; set; } = new();
     }
 
     /// <summary>The employee's view. The position and the recommendation are absent by design.</summary>
@@ -81,6 +84,7 @@ namespace HR_Mangment2.EmploymentContracts
         public bool IsExpired { get; set; }
         public string? EmployeeMessage { get; set; }
         public DateTime? DecidedAt { get; set; }
+        public List<AttachmentDto> Attachments { get; set; } = new();
     }
 
     public class ContractPagedResultDto
@@ -111,6 +115,29 @@ namespace HR_Mangment2.EmploymentContracts
         public DateOnly? EndDateTo { get; set; }
     }
 
+    /// <summary>Search and paging of Contract_GetOverview (decision 2026-11-11).</summary>
+    public class ContractOverviewListInput : PagedResultRequestDto
+    {
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string? Search { get; set; }
+    }
+
+    /// <summary>One line of the executive director's employee contracts page: the current contract's details only.</summary>
+    public class EmployeeContractOverviewDto
+    {
+        public EmployeeRefDto Employee { get; set; } = null!;
+        public string? ContractType { get; set; }
+        public DateOnly? StartDate { get; set; }
+        public DateOnly? EndDate { get; set; }
+        public ContractStatus? Status { get; set; }
+    }
+
+    public class EmployeeContractOverviewPagedResultDto
+    {
+        public long TotalCount { get; set; }
+        public List<EmployeeContractOverviewDto> Items { get; set; } = new();
+    }
+
     public class ContractExpiringListInput : PagedAndSortedResultRequestDto
     {
         public int? WithinDays { get; set; }
@@ -120,13 +147,17 @@ namespace HR_Mangment2.EmploymentContracts
     public interface IContractAppService : IApplicationService
     {
         Task<ContractPagedResultDto> GetListAsync(ContractListInput input);
-        Task<ContractDto> CreateAsync(ContractCreateInputDto input, Guid? idempotencyKey);
+        Task<ContractDto> CreateAsync(ContractCreateInput input, Guid? idempotencyKey);
         Task<ContractExpiringPagedResultDto> GetExpiringAsync(ContractExpiringListInput input);
+        Task<EmployeeContractOverviewPagedResultDto> GetOverviewAsync(ContractOverviewListInput input);
         Task<ContractDto> GetAsync(Guid id);
         Task<ContractDto> RecommendAsync(Guid id, ContractRecommendInputDto input);
         Task<ContractDto> DecideAsync(Guid id, ContractDecideInputDto input);
         Task<ContractEmployeePagedResultDto> GetMyListAsync(PagedAndSortedResultRequestDto input);
         Task<ContractEmployeeDto> GetMyAsync(Guid id);
+        Task<FileDownloadUrlDto> GetAttachmentDownloadUrlAsync(Guid id, Guid attachmentId);
+        Task<FileDownloadUrlDto> GetMyAttachmentDownloadUrlAsync(Guid id, Guid attachmentId);
+        Task DeleteAttachmentAsync(Guid id, Guid attachmentId);
     }
 }
 

@@ -9,6 +9,8 @@ import '../../core/network/api_providers.dart';
 import '../../core/session/session_controller.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
+import 'profile_photo_card.dart';
 
 final employeeProfileProvider = FutureProvider.autoDispose<EmployeeSelfDto?>((ref) async {
   if (!ref.watch(sessionProvider).can(HrOps.Me_GetEmployeeProfile)) return null;
@@ -64,7 +66,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             InfoRow(s.department, p.department.name),
             InfoRow(s.jobTitle, p.jobTitle),
             InfoRow(s.hireDate, f.date(p.hireDate)),
-            if (p.manager != null) InfoRow(s.manager, p.manager!.fullName),
+            if (p.manager != null) InfoRow(s.manager, p.manager!.fullName, leading: PersonAvatar.employee(p.manager!, radius: 12)),
             if (p.currentShift != null) InfoRow(s.shift, p.currentShift!.name),
             if (p.email != null) InfoRow(s.email, p.email!),
             if (p.phoneNumber != null) InfoRow(s.phone, p.phoneNumber!),
@@ -141,11 +143,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         padding: const EdgeInsets.only(bottom: 24),
         child: wide
             ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: employeeCard),
+                Expanded(child: Column(children: [const ProfilePhotoCard(), const SizedBox(height: 12), employeeCard])),
                 const SizedBox(width: 12),
                 Expanded(child: accountCard),
               ])
-            : Column(children: [employeeCard, const SizedBox(height: 12), accountCard]),
+            : Column(children: [const ProfilePhotoCard(), const SizedBox(height: 12), employeeCard, const SizedBox(height: 12), accountCard]),
       ),
     );
   }

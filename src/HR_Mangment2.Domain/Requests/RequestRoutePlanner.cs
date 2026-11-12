@@ -53,7 +53,7 @@ public static class RequestRoutePlanner
                 break;
 
             case RequestOwnerRow.DepartmentManager:
-                steps.Add(new PlannedRequestStep(RequestStatus.PendingManager, HrRoles.SystemAdmin, true));
+                // Decision 2026-11-10: the department manager's manager is the HR manager, so the request starts at HR.
                 steps.Add(new PlannedRequestStep(RequestStatus.PendingHr, HrRoles.HrManager, false));
                 break;
 

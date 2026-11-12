@@ -23,30 +23,67 @@ public class EmployeeTestKit
 
     private readonly HostFixture _host;
 
-    private EmployeeTestKit(HostFixture host, HttpClient hr, JsonElement seededAdmin, Guid executiveId)
+    private EmployeeTestKit(HostFixture host, HttpClient hr, JsonElement seededAdmin, Guid defaultShiftId, Guid executiveId, Guid hrManagerId)
     {
         _host = host;
         Hr = hr;
         SystemAdminEmployeeId = seededAdmin.GetProperty("id").GetGuid();
         DepartmentId = seededAdmin.GetProperty("department").GetProperty("id").GetGuid();
-        ShiftId = seededAdmin.GetProperty("currentShift").GetProperty("workShiftId").GetGuid();
+        ShiftId = defaultShiftId;
         ExecutiveEmployeeId = executiveId;
+        HrManagerEmployeeId = hrManagerId;
     }
 
     public HttpClient Hr { get; }
     public Guid SystemAdminEmployeeId { get; }
     public Guid ExecutiveEmployeeId { get; }
+
+    /// <summary>The seeded HR manager's file: department managers report to it (decision 2026-11-10).</summary>
+    public Guid HrManagerEmployeeId { get; }
     public Guid DepartmentId { get; }
     public Guid ShiftId { get; }
 
     public static async Task<EmployeeTestKit> CreateAsync(HostFixture host)
     {
         var hr = await TestUsers.SignedInWithMfaAsync(host, "en", HrRoles.Employee, HrRoles.HrManager);
-        var admins = await hr.GetFromJsonAsync<JsonElement>("/api/app/employee?search=System%20Administrator");
-        var executives = await hr.GetFromJsonAsync<JsonElement>("/api/app/employee?search=Executive%20Director");
-        var admin = await hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{admins.GetProperty("items")[0].GetProperty("id").GetGuid()}");
+        // The seeded files are not on the employees list (decision 2026-11-10), so they are found by account.
+        var admin = await hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{await FindSeededEmployeeIdAsync(host, "sysadmin")}");
+        var executiveId = await FindSeededEmployeeIdAsync(host, "executive");
+        var hrManagerId = await FindSeededEmployeeIdAsync(host, "hrmanager");
 
-        return new EmployeeTestKit(host, hr, admin, executives.GetProperty("items")[0].GetProperty("id").GetGuid());
+        // None of the seeded files has a shift (decisions of 2026-11-10), so the seeded default shift is read directly.
+        var defaultShiftId = await FindDefaultShiftIdAsync(host);
+
+        return new EmployeeTestKit(host, hr, admin, defaultShiftId, executiveId, hrManagerId);
+    }
+
+    /// <summary>The employee file of a seeded account (executive, hrmanager, sysadmin).</summary>
+    public static async Task<Guid> FindSeededEmployeeIdAsync(HostFixture host, string userName)
+    {
+        using var scope = host.Factory.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        var tenant = await services.GetRequiredService<ITenantRepository>().FindByNameAsync(
+            services.GetRequiredService<ITenantNormalizer>().NormalizeName(HostFixture.TestTenantName)!);
+        using var change = services.GetRequiredService<ICurrentTenant>().Change(tenant!.Id);
+        using var uow = services.GetRequiredService<IUnitOfWorkManager>().Begin(requiresNew: true);
+
+        var user = await services.GetRequiredService<Volo.Abp.Identity.IdentityUserManager>().FindByNameAsync(userName)
+                   ?? throw new InvalidOperationException($"The seeded account {userName} is missing.");
+        var employee = await services.GetRequiredService<IRepository<Employee, Guid>>().FirstAsync(x => x.UserId == user.Id);
+        return employee.Id;
+    }
+
+    private static async Task<Guid> FindDefaultShiftIdAsync(HostFixture host)
+    {
+        using var scope = host.Factory.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        var tenant = await services.GetRequiredService<ITenantRepository>().FindByNameAsync(
+            services.GetRequiredService<ITenantNormalizer>().NormalizeName(HostFixture.TestTenantName)!);
+        using var change = services.GetRequiredService<ICurrentTenant>().Change(tenant!.Id);
+        using var uow = services.GetRequiredService<IUnitOfWorkManager>().Begin(requiresNew: true);
+
+        var shift = await services.GetRequiredService<IRepository<HR_Mangment2.WorkShifts.WorkShift, Guid>>().FirstAsync(x => x.NameEn == "Default Shift");
+        return shift.Id;
     }
 
     /// <summary>Every employee needs an address of their own.</summary>
@@ -69,6 +106,13 @@ public class EmployeeTestKit
 
     public async Task<CreatedEmployee> AddAsync(Guid managerId, string[] roles, string? email = null, Guid? shiftId = null)
     {
+        // Decision 2026-11-11: the accountant and the store officer report to the executive director (unless a
+        // department manager row applies first), whatever manager the test had in mind.
+        if ((roles.Contains(HrRoles.Accountant) || roles.Contains(HrRoles.StoreOfficer)) && !roles.Contains(HrRoles.DepartmentManager) && !roles.Contains(HrRoles.Reviewer))
+        {
+            managerId = ExecutiveEmployeeId;
+        }
+
         var response = await Hr.PostAsJsonAsync("/api/app/employee", Body(managerId, roles, email, shiftId: shiftId));
         response.EnsureSuccessStatusCode();
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -83,7 +127,7 @@ public class EmployeeTestKit
             employee.GetProperty("concurrencyStamp").GetString()!);
     }
 
-    public Task<CreatedEmployee> AddDepartmentManagerAsync() => AddAsync(SystemAdminEmployeeId, new[] { HrRoles.DepartmentManager });
+    public Task<CreatedEmployee> AddDepartmentManagerAsync() => AddAsync(HrManagerEmployeeId, new[] { HrRoles.DepartmentManager });
 
     public Task<CreatedEmployee> AddStaffAsync(Guid managerId, string? email = null) => AddAsync(managerId, new[] { HrRoles.Employee }, email);
 

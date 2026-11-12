@@ -15,10 +15,16 @@ public class ItemDto
     public Guid Id { get; set; }
     public string NameAr { get; set; } = null!;
     public string NameEn { get; set; } = null!;
+    public string Sku { get; set; } = null!;
+    public StoreLookupRefDto? Category { get; set; }
+    public StoreLookupRefDto? Unit { get; set; }
     public ItemKind Kind { get; set; }
     public decimal MinQuantity { get; set; }
     public decimal QuantityOnHand { get; set; }
     public bool IsBelowMinimum { get; set; }
+    public decimal AverageUnitCost { get; set; }
+    public decimal StockValue { get; set; }
+    public StockStatus StockStatus { get; set; }
     public bool IsActive { get; set; }
     public string ConcurrencyStamp { get; set; } = null!;
     public DateTime CreationTime { get; set; }
@@ -41,6 +47,9 @@ public class ItemCreateInputDto
 {
     public string NameAr { get; set; } = null!;
     public string NameEn { get; set; } = null!;
+    public string Sku { get; set; } = null!;
+    public Guid? CategoryId { get; set; }
+    public Guid? UnitId { get; set; }
     public ItemKind? Kind { get; set; }
     public decimal? MinQuantity { get; set; }
 }
@@ -56,6 +65,8 @@ public class ItemListInput : PagedAndSortedResultRequestDto
     public ItemKind? Kind { get; set; }
     public bool? IsActive { get; set; }
     public bool? BelowMinimum { get; set; }
+    public Guid? CategoryId { get; set; }
+    public StockStatus? StockStatus { get; set; }
     public string? Filter { get; set; }
 }
 
@@ -76,6 +87,12 @@ public class StockMovementDto
     public Guid? StockIssueId { get; set; }
     public Guid? CustodyId { get; set; }
     public Guid? ReversesMovementId { get; set; }
+    public Guid? PurchaseId { get; set; }
+    public Guid? IssueVoucherId { get; set; }
+    public string? DocumentNumber { get; set; }
+    public StoreLookupRefDto? Team { get; set; }
+    public decimal? UnitCost { get; set; }
+    public decimal? TotalCost { get; set; }
     public EmployeeRefDto? Employee { get; set; }
     public UserRefDto PerformedBy { get; set; } = null!;
     public string? Note { get; set; }
@@ -111,6 +128,8 @@ public class StockMovementListInput : PagedAndSortedResultRequestDto
     public StockMovementType? Type { get; set; }
     public DateOnly? FromDate { get; set; }
     public DateOnly? ToDate { get; set; }
+    public Guid? TeamId { get; set; }
+    public string? Filter { get; set; }
 }
 
 public class StockIssueDto
@@ -273,6 +292,7 @@ public interface IItemAppService : IApplicationService
     Task<ItemRefPagedResultDto> LookupAsync(ItemLookupInput input);
     Task<ItemDto> GetAsync(Guid id);
     Task<ItemDto> UpdateAsync(Guid id, ItemUpdateInputDto input);
+    Task DeleteAsync(Guid id);
 }
 
 public interface IStockAppService : IApplicationService

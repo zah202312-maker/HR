@@ -32,6 +32,29 @@ class Session {
       hasRole(AppRole.systemAdmin) &&
       roles.every((r) => r == AppRole.systemAdmin.value || r == AppRole.employee.value);
 
+  /// HR manager who is not also system admin: the roles and permissions page is hidden (decision 2026-11-10).
+  /// The server permission stays, because the role pickers of the employee and account forms read Role_List.
+  bool get isHrWithoutSystemAdmin => hasRole(AppRole.hrManager) && !hasRole(AppRole.systemAdmin);
+
+  /// Accountant or store officer with no other business role (employee aside): circulars, evaluations, warnings,
+  /// appreciation letters, notices and holidays are hidden (decision 2026-11-11). AccountProvisioner.IsBackOfficeOnly.
+  /// Executive director: the employee-facing pages «طلباتي», leaves, attendance, warnings, holidays, leave balances
+  /// and «تقييماتي» are hidden (decision 2026-11-11). Details opened from the inbox or a notification stay reachable.
+  bool get isExecutive => hasRole(AppRole.executiveDirector);
+
+  bool get isBackOfficeOnly =>
+      (hasRole(AppRole.accountant) || hasRole(AppRole.storeOfficer)) &&
+      roles.every((r) => r == AppRole.accountant.value || r == AppRole.storeOfficer.value || r == AppRole.employee.value);
+
+  /// No shift, and outside attendance and leave: executive, HR manager and system admin (decisions of 2026-11-10),
+  /// accountant and store officer (decision 2026-11-11). ManagerLinkService.IsOutsideSchedule on the server.
+  bool get isOutsideSchedule =>
+      hasRole(AppRole.executiveDirector) ||
+      hasRole(AppRole.hrManager) ||
+      hasRole(AppRole.systemAdmin) ||
+      hasRole(AppRole.accountant) ||
+      hasRole(AppRole.storeOfficer);
+
   /// UI gate for an operation: its x-permission must be granted (null = any signed-in user).
   /// The server still checks every call.
   bool can(String operationId) {

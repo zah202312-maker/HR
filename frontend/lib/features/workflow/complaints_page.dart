@@ -81,8 +81,10 @@ class ComplaintsPage extends ConsumerWidget {
     final session = ref.watch(sessionProvider);
     final api = ref.watch(hrApiProvider).complaints;
     final handler = ref.watch(handlerBoxVisibleProvider).valueOrNull ?? false;
+    // Decision 2026-11-11: the executive director files no complaint; he only handles the ones that reach him.
+    final canComplain = !session.isExecutive;
     final tabs = <(String, Widget)>[
-      if (session.can(HrOps.Complaint_GetMyList))
+      if (canComplain && session.can(HrOps.Complaint_GetMyList))
         (
           s.t('شكاواي', 'My complaints'),
           PagedList<ComplaintComplainantSummaryDto>(
@@ -142,7 +144,7 @@ class ComplaintsPage extends ConsumerWidget {
     return HrPage(
       title: s.t('الشكاوى', 'Complaints'),
       actions: [
-        if (session.can(HrOps.Complaint_Submit))
+        if (canComplain && session.can(HrOps.Complaint_Submit))
           FilledButton.icon(onPressed: () => context.go('/complaints/new'), icon: const Icon(Icons.add), label: Text(s.t('شكوى جديدة', 'New complaint'))),
       ],
       child: tabs.isEmpty

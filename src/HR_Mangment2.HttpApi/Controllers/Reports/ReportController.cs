@@ -38,6 +38,9 @@ public class ReportController : HR_Mangment2Controller
     [HttpGet("evaluation-consistency", Name = "Report_GetEvaluationConsistency")]
     public Task<EvaluationConsistencyRowPagedResultDto> GetEvaluationConsistencyAsync([FromQuery] EvaluationConsistencyReportInput input) => _service.GetEvaluationConsistencyAsync(input);
 
+    [HttpGet("today-attendance-summary", Name = "Report_GetTodayAttendanceSummary")]
+    public Task<TodayAttendanceSummaryDto> GetTodayAttendanceSummaryAsync() => _service.GetTodayAttendanceSummaryAsync();
+
     [HttpGet("hr-attendance", Name = "Report_GetHrAttendance")]
     public Task<HrAttendanceReportRowPagedResultDto> GetHrAttendanceAsync([FromQuery] HrPeriodReportInput input) => _service.GetHrAttendanceAsync(input);
 

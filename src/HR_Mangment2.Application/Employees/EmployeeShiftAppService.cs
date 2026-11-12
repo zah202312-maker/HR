@@ -50,7 +50,7 @@ public class EmployeeShiftAppService : HR_Mangment2AppService, IEmployeeShiftApp
     {
         var employee = await _employees.GetAsync(employeeId);
 
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             throw new BusinessException(HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
         }

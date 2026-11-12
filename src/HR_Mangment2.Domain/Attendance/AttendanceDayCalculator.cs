@@ -61,7 +61,7 @@ public class AttendanceDayCalculator : ITransientDependency
     public virtual async Task RecalculateAsync(Guid employeeId, DateOnly from, DateOnly to)
     {
         var employee = await _employees.FindAsync(employeeId);
-        if (employee == null || (await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (employee == null || ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             return;
         }

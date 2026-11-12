@@ -22,6 +22,7 @@ public class EmployeeReferenceReader : ITransientDependency
     private readonly IRepository<WorkShift, Guid> _shifts;
     private readonly IIdentityUserRepository _users;
     private readonly IAsyncQueryableExecuter _executer;
+    private readonly ProfilePhotoReader _photos;
 
     public EmployeeReferenceReader(
         IRepository<Employee, Guid> employees,
@@ -29,7 +30,8 @@ public class EmployeeReferenceReader : ITransientDependency
         IRepository<EmployeeShiftAssignment, Guid> assignments,
         IRepository<WorkShift, Guid> shifts,
         IIdentityUserRepository users,
-        IAsyncQueryableExecuter executer)
+        IAsyncQueryableExecuter executer,
+        ProfilePhotoReader photos)
     {
         _employees = employees;
         _departments = departments;
@@ -37,6 +39,7 @@ public class EmployeeReferenceReader : ITransientDependency
         _shifts = shifts;
         _users = users;
         _executer = executer;
+        _photos = photos;
     }
 
     public static string FullName(Employee employee) =>
@@ -58,11 +61,13 @@ public class EmployeeReferenceReader : ITransientDependency
     public virtual async Task<Dictionary<Guid, EmployeeRefDto>> ToRefsAsync(IReadOnlyCollection<Employee> employees)
     {
         var departments = await GetDepartmentsAsync(employees.Select(x => x.DepartmentId));
+        var photos = await GetPhotoIdsAsync(employees);
         return employees.ToDictionary(x => x.Id, x => new EmployeeRefDto
         {
             Id = x.Id,
             FullName = FullName(x),
-            DepartmentName = departments.GetValueOrDefault(x.DepartmentId)?.Name
+            DepartmentName = departments.GetValueOrDefault(x.DepartmentId)?.Name,
+            PhotoId = PhotoOf(x, photos)
         });
     }
 
@@ -90,8 +95,21 @@ public class EmployeeReferenceReader : ITransientDependency
             }
         }
 
+        var photos = await _photos.GetPhotoIdsAsync(result.Keys);
+        foreach (var reference in result.Values)
+        {
+            reference.PhotoId = photos.TryGetValue(reference.Id, out var photoId) ? photoId : null;
+        }
+
         return result;
     }
+
+    /// <summary>The account photo of each employee file, keyed by user id (decision 2026-11-11).</summary>
+    public virtual Task<Dictionary<Guid, Guid>> GetPhotoIdsAsync(IEnumerable<Employee> employees) =>
+        _photos.GetPhotoIdsAsync(employees.Where(x => x.UserId != null).Select(x => x.UserId!.Value));
+
+    public static Guid? PhotoOf(Employee employee, IReadOnlyDictionary<Guid, Guid> photos) =>
+        employee.UserId != null && photos.TryGetValue(employee.UserId.Value, out var id) ? id : null;
 
     public virtual async Task<Dictionary<Guid, EmployeeShiftSummaryDto>> GetCurrentShiftsAsync(IEnumerable<Guid> employeeIds)
     {

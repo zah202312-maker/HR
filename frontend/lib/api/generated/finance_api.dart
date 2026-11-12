@@ -13,6 +13,27 @@ class FinanceApi {
   FinanceApi(this.client);
   final HrApiClient client;
 
+  /// GET /api/app/finance/salary-profile/overview  (List employees with their base salary (executive director))
+  Future<EmployeeSalaryOverviewPagedResultDto> SalaryProfile_GetOverview({
+    int? skipCount,
+    int? maxResultCount,
+    String? search,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'SalaryProfile_GetOverview',
+      method: 'GET',
+      path: '/api/app/finance/salary-profile/overview',
+      query: <String, dynamic>{
+        if (skipCount != null) 'skipCount': skipCount,
+        if (maxResultCount != null) 'maxResultCount': maxResultCount,
+        if (search != null) 'search': search,
+      },
+      cancelToken: cancelToken,
+    );
+    return EmployeeSalaryOverviewPagedResultDto.fromJson(data as Map<String, dynamic>);
+  }
+
   /// GET /api/app/finance/salary-profile  (List employees with salary status)
   Future<SalaryProfileListItemPagedResultDto> SalaryProfile_List({
     int? skipCount,
@@ -440,6 +461,243 @@ class FinanceApi {
       cancelToken: cancelToken,
     );
     return data;
+  }
+
+  /// POST /api/app/finance/payroll-run/{id}/deliver  (Mark salaries as delivered)
+  Future<PayrollRunDto> PayrollRun_Deliver({
+    required String id,
+    required PayrollDeliveryInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PayrollRun_Deliver',
+      method: 'POST',
+      path: '/api/app/finance/payroll-run/${Uri.encodeComponent(id)}/deliver',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PayrollRunDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// POST /api/app/finance/payroll-run/{id}/undo-delivery  (Undo a salary delivery mark)
+  Future<PayrollRunDto> PayrollRun_UndoDelivery({
+    required String id,
+    required PayrollUndoDeliveryInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PayrollRun_UndoDelivery',
+      method: 'POST',
+      path: '/api/app/finance/payroll-run/${Uri.encodeComponent(id)}/undo-delivery',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PayrollRunDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// GET /api/app/finance/petty-cash-type  (List petty cash types)
+  Future<PettyCashTypePagedResultDto> PettyCashType_GetList({
+    int? skipCount,
+    int? maxResultCount,
+    String? sorting,
+    bool? isActive,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashType_GetList',
+      method: 'GET',
+      path: '/api/app/finance/petty-cash-type',
+      query: <String, dynamic>{
+        if (skipCount != null) 'skipCount': skipCount,
+        if (maxResultCount != null) 'maxResultCount': maxResultCount,
+        if (sorting != null) 'sorting': sorting,
+        if (isActive != null) 'isActive': isActive,
+      },
+      cancelToken: cancelToken,
+    );
+    return PettyCashTypePagedResultDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// POST /api/app/finance/petty-cash-type  (Create a petty cash type)
+  Future<PettyCashTypeDto> PettyCashType_Create({
+    String? idempotencyKey,
+    required PettyCashTypeCreateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashType_Create',
+      method: 'POST',
+      path: '/api/app/finance/petty-cash-type',
+      headers: <String, dynamic>{
+        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      },
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashTypeDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/app/finance/petty-cash-type/{id}  (Update a petty cash type)
+  Future<PettyCashTypeDto> PettyCashType_Update({
+    required String id,
+    required PettyCashTypeUpdateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashType_Update',
+      method: 'PUT',
+      path: '/api/app/finance/petty-cash-type/${Uri.encodeComponent(id)}',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashTypeDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// GET /api/app/finance/petty-cash-assignment  (List monthly petty cash)
+  Future<PettyCashAssignmentPagedResultDto> PettyCashAssignment_GetList({
+    int? skipCount,
+    int? maxResultCount,
+    String? sorting,
+    String? employeeId,
+    String? typeId,
+    String? activeIn,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashAssignment_GetList',
+      method: 'GET',
+      path: '/api/app/finance/petty-cash-assignment',
+      query: <String, dynamic>{
+        if (skipCount != null) 'skipCount': skipCount,
+        if (maxResultCount != null) 'maxResultCount': maxResultCount,
+        if (sorting != null) 'sorting': sorting,
+        if (employeeId != null) 'employeeId': employeeId,
+        if (typeId != null) 'typeId': typeId,
+        if (activeIn != null) 'activeIn': activeIn,
+      },
+      cancelToken: cancelToken,
+    );
+    return PettyCashAssignmentPagedResultDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// POST /api/app/finance/petty-cash-assignment  (Give an employee monthly petty cash)
+  Future<PettyCashAssignmentDto> PettyCashAssignment_Create({
+    String? idempotencyKey,
+    required PettyCashAssignmentCreateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashAssignment_Create',
+      method: 'POST',
+      path: '/api/app/finance/petty-cash-assignment',
+      headers: <String, dynamic>{
+        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      },
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashAssignmentDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/app/finance/petty-cash-assignment/{id}  (Update or stop monthly petty cash)
+  Future<PettyCashAssignmentDto> PettyCashAssignment_Update({
+    required String id,
+    required PettyCashAssignmentUpdateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashAssignment_Update',
+      method: 'PUT',
+      path: '/api/app/finance/petty-cash-assignment/${Uri.encodeComponent(id)}',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashAssignmentDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// GET /api/app/finance/petty-cash/month  (Petty cash of a month)
+  Future<PettyCashMonthDto> PettyCashEntry_GetMonth({
+    int? skipCount,
+    int? maxResultCount,
+    String? sorting,
+    required String period,
+    PettyCashEntryStatus? status,
+    String? employeeId,
+    String? typeId,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashEntry_GetMonth',
+      method: 'GET',
+      path: '/api/app/finance/petty-cash/month',
+      query: <String, dynamic>{
+        if (skipCount != null) 'skipCount': skipCount,
+        if (maxResultCount != null) 'maxResultCount': maxResultCount,
+        if (sorting != null) 'sorting': sorting,
+        'period': period,
+        if (status != null) 'status': status.toJson(),
+        if (employeeId != null) 'employeeId': employeeId,
+        if (typeId != null) 'typeId': typeId,
+      },
+      cancelToken: cancelToken,
+    );
+    return PettyCashMonthDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// PUT /api/app/finance/petty-cash/entry/{id}  (Change one month amount)
+  Future<PettyCashEntryDto> PettyCashEntry_Update({
+    required String id,
+    required PettyCashEntryUpdateInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashEntry_Update',
+      method: 'PUT',
+      path: '/api/app/finance/petty-cash/entry/${Uri.encodeComponent(id)}',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashEntryDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// POST /api/app/finance/petty-cash/deliver  (Mark petty cash as delivered)
+  Future<PettyCashEntryListDto> PettyCashEntry_Deliver({
+    required PettyCashDeliveryInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashEntry_Deliver',
+      method: 'POST',
+      path: '/api/app/finance/petty-cash/deliver',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashEntryListDto.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// POST /api/app/finance/petty-cash/entry/{id}/undo-delivery  (Undo a petty cash delivery)
+  Future<PettyCashEntryDto> PettyCashEntry_UndoDelivery({
+    required String id,
+    required ReasonInputDto body,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await client.send(
+      operationId: 'PettyCashEntry_UndoDelivery',
+      method: 'POST',
+      path: '/api/app/finance/petty-cash/entry/${Uri.encodeComponent(id)}/undo-delivery',
+      body: body.toJson(),
+      contentType: 'application/json',
+      cancelToken: cancelToken,
+    );
+    return PettyCashEntryDto.fromJson(data as Map<String, dynamic>);
   }
 
   /// GET /api/app/finance/expense  (List expenses)

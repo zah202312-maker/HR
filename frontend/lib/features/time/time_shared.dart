@@ -10,6 +10,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/motion_widgets.dart';
 import '../../core/widgets/pickers.dart';
 
@@ -133,7 +134,7 @@ class AttendanceDayTile extends ConsumerWidget {
         SizedBox(
           width: showEmployee ? 180 : 100,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (showEmployee) Text(day.employee.fullName, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+            if (showEmployee) PersonName.employee(day.employee, style: const TextStyle(fontWeight: FontWeight.w600)),
             Text('${f.weekday(day.date)} ${f.date(day.date)}', style: TextStyle(color: context.hr.textSecondary, fontSize: 12)),
           ]),
         ),

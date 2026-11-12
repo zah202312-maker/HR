@@ -7,6 +7,7 @@ import '../../core/network/api_providers.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import 'request_widgets.dart';
 
 final requestDetailProvider = FutureProvider.autoDispose.family<RequestDetailsDto, String>(
@@ -80,7 +81,7 @@ class _RequestDetailPageState extends ConsumerState<RequestDetailPage> {
                 StatusPill(r.statusLabel, tone: tone, icon: iconForStatusTone(tone)),
               ]),
               const SizedBox(height: 12),
-              InfoRow(s.employee, [r.employee.fullName, if (r.employee.departmentName != null) r.employee.departmentName!].join(' · ')),
+              InfoRow(s.employee, [r.employee.fullName, if (r.employee.departmentName != null) r.employee.departmentName!].join(' · '), leading: PersonAvatar.employee(r.employee, radius: 12)),
               if (r.isOnBehalf) InfoRow(s.submittedBy, '${r.submittedBy.displayName} (${s.onBehalf})'),
               InfoRow(s.date, f.dateTime(r.creationTime)),
               if (r.description != null) InfoRow(s.description, r.description!),
@@ -109,7 +110,7 @@ class _RequestDetailPageState extends ConsumerState<RequestDetailPage> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(radius: 14, child: Text('${st.order}', style: const TextStyle(fontSize: 12))),
-                  title: Text(st.approver?.displayName ?? s.role(st.approverRole)),
+                  title: st.approver == null ? Text(s.role(st.approverRole)) : PersonName.user(st.approver!),
                   subtitle: Text([
                     s.stepDecision(st.decision),
                     if (st.decidedBy != null) st.decidedBy!.displayName,

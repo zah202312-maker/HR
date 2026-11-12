@@ -39,8 +39,6 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
   DateTime? _to;
   AuditActionType? _action;
   bool? _succeeded;
-  final _entityType = TextEditingController();
-  final _entityId = TextEditingController();
   int _version = 0;
 
   void _apply() => setState(() => _version++);
@@ -76,6 +74,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
               width: 220,
               child: DropdownButtonFormField<AuditActionType?>(
                 initialValue: _action,
+                isExpanded: true,
                 decoration: InputDecoration(labelText: s.t('الإجراء', 'Action')),
                 items: [
                   DropdownMenuItem(value: null, child: Text(s.all)),
@@ -89,6 +88,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
               width: 160,
               child: DropdownButtonFormField<bool?>(
                 initialValue: _succeeded,
+                isExpanded: true,
                 decoration: InputDecoration(labelText: s.t('النتيجة', 'Result')),
                 items: [
                   DropdownMenuItem(value: null, child: Text(s.all)),
@@ -98,8 +98,6 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                 onChanged: (v) => setState(() => _succeeded = v),
               ),
             ),
-            SizedBox(width: 180, child: TextField(controller: _entityType, decoration: InputDecoration(labelText: s.t('نوع الكيان', 'Entity type')))),
-            SizedBox(width: 260, child: TextField(controller: _entityId, decoration: InputDecoration(labelText: s.t('معرّف الكيان', 'Entity id')))),
             FilledButton.icon(onPressed: _apply, icon: const Icon(Icons.search), label: Text(s.t('بحث', 'Search'))),
           ]),
         ),
@@ -112,8 +110,6 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
             to: _to == null ? null : DateTime(_to!.year, _to!.month, _to!.day, 23, 59, 59),
             action: _action,
             succeeded: _succeeded,
-            entityType: _entityType.text.trim().isEmpty ? null : _entityType.text.trim(),
-            entityId: _entityId.text.trim().isEmpty ? null : _entityId.text.trim(),
           );
           return (r.items, r.totalCount);
         },
@@ -127,11 +123,6 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                 Expanded(child: Text(e.user?.displayName ?? s.t('النظام', 'System'), style: const TextStyle(fontWeight: FontWeight.w600))),
                 Text(f.dateTime(e.occurredAt), style: TextStyle(color: context.hr.textSecondary, fontSize: 12)),
               ]),
-              if (e.entityType != null || e.entityId != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: SelectableText('${e.entityType ?? ''}  ${e.entityId ?? ''}', style: TextStyle(color: context.hr.textSecondary, fontSize: 12)),
-                ),
               if (e.changedFields.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),

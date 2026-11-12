@@ -152,6 +152,16 @@ public class EvaluationConsistencyRowPagedResultDto
     public List<EvaluationConsistencyRowDto> Items { get; set; } = new();
 }
 
+/// <summary>Today's attendance counts for the whole company, for the executive director's dashboard (decision 2026-11-11).</summary>
+public class TodayAttendanceSummaryDto
+{
+    public DateOnly Date { get; set; }
+    public int Present { get; set; }
+    public int Late { get; set; }
+    public int Absent { get; set; }
+    public decimal OnLeave { get; set; }
+}
+
 public class HrAttendanceReportRowDto
 {
     public EmployeeRefDto Employee { get; set; } = null!;
@@ -179,6 +189,12 @@ public class HrLeaveBalanceReportRowDto
     public decimal HeldDays { get; set; }
     public decimal RemainingDays { get; set; }
     public decimal UsedHours { get; set; }
+
+    /// <summary>Approved annual leave days inside from..to; null without a period (decision 2026-11-10).</summary>
+    public decimal? PeriodUsedDays { get; set; }
+
+    /// <summary>Approved hourly leave hours dated inside from..to; null without a period (decision 2026-11-10).</summary>
+    public decimal? PeriodUsedHours { get; set; }
 }
 
 public class HrLeaveBalanceReportRowPagedResultDto
@@ -290,6 +306,8 @@ public class HrContractReportInput : PagedAndSortedResultRequestDto
 
 public class HrLeaveBalanceReportInput : PagedAndSortedResultRequestDto
 {
+    public DateOnly? From { get; set; }
+    public DateOnly? To { get; set; }
     public Guid? DepartmentId { get; set; }
     public Guid? EmployeeId { get; set; }
 }
@@ -331,6 +349,7 @@ public interface IReportAppService : IApplicationService
     Task<EvaluationConsistencyRowPagedResultDto> GetEvaluationConsistencyAsync(EvaluationConsistencyReportInput input);
 
     Task<HrAttendanceReportRowPagedResultDto> GetHrAttendanceAsync(HrPeriodReportInput input);
+    Task<TodayAttendanceSummaryDto> GetTodayAttendanceSummaryAsync();
 
     Task<HrLeaveBalanceReportRowPagedResultDto> GetHrLeaveBalancesAsync(HrLeaveBalanceReportInput input);
 

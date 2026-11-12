@@ -276,7 +276,7 @@ public class RequestModuleTests
     public async Task A_team_member_outside_the_employee_row_cannot_be_submitted_for()
     {
         var kit = await EmployeeTestKit.CreateAsync(_host);
-        var (adminClient, _, adminEmployee) = await OwnerAsync(kit, kit.ExecutiveEmployeeId, HrRoles.Employee, HrRoles.SystemAdmin, HrRoles.DepartmentManager);
+        var (adminClient, _, adminEmployee) = await OwnerAsync(kit, null, HrRoles.Employee, HrRoles.SystemAdmin, HrRoles.DepartmentManager);
         var (_, _, reportEmployee) = await OwnerAsync(kit, adminEmployee, HrRoles.Employee, HrRoles.DepartmentManager);
 
         await ShouldFailWithAsync(
@@ -322,23 +322,23 @@ public class RequestModuleTests
             HrErrorCodes.Request.NoApproverAvailable);
     }
 
+    /// <summary>Decision 2026-11-10: a department manager reports to the HR manager, so the request starts at HR.</summary>
     [Fact]
-    public async Task The_system_administrator_approves_department_managers_first_and_the_label_says_so()
+    public async Task A_department_managers_request_goes_straight_to_hr()
     {
         var kit = await EmployeeTestKit.CreateAsync(_host);
-        var (adminClient, _, adminEmployee) = await OwnerAsync(kit, kit.ExecutiveEmployeeId, HrRoles.Employee, HrRoles.SystemAdmin);
-        var (managerClient, _, _) = await OwnerAsync(kit, adminEmployee, HrRoles.Employee, HrRoles.DepartmentManager);
+        var (managerClient, _, _) = await OwnerAsync(kit, kit.HrManagerEmployeeId, HrRoles.Employee, HrRoles.DepartmentManager);
 
         var submitted = await SubmitAsync(managerClient);
 
-        Text(submitted, "status").ShouldBe("pendingManager");
-        Text(submitted, "currentApproverRole").ShouldBe("systemAdmin");
-        Text(submitted, "statusLabel").ShouldBe("Waiting for the system administrator");
-        Text(await OkAsync(await ApproveAsync(adminClient, IdOf(submitted))), "status").ShouldBe("pendingHr");
+        Text(submitted, "status").ShouldBe("pendingHr");
+        Text(submitted, "currentApproverRole").ShouldBe("hrManager");
 
-        // Another holder of the role has no step here: the step is named.
-        var otherAdmin = await ClientForRolesAsync(HrRoles.Employee, HrRoles.SystemAdmin);
-        (await otherAdmin.GetAsync($"/api/app/request/{IdOf(submitted)}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // The system administrator has no step on it.
+        var admin = await ClientForRolesAsync(HrRoles.Employee, HrRoles.SystemAdmin);
+        (await admin.GetAsync($"/api/app/request/{IdOf(submitted)}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        Text(await OkAsync(await ApproveAsync(kit.Hr, IdOf(submitted))), "status").ShouldBe("approved");
     }
 
     [Fact]

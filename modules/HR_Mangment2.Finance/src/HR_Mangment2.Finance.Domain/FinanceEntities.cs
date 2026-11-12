@@ -275,6 +275,23 @@ public class PayrollItem : Entity<Guid>, IMultiTenant
     public decimal Net { get; private set; }
     public ICollection<PayrollLine> Lines { get; private set; } = new List<PayrollLine>();
 
+    /// <summary>When the accountant handed this salary over, after the run closed (decision 2026-11-11).</summary>
+    public DateOnly? DeliveredOn { get; private set; }
+
+    public Guid? DeliveredByUserId { get; private set; }
+
+    public void MarkDelivered(DateOnly on, Guid userId)
+    {
+        DeliveredOn = on;
+        DeliveredByUserId = userId;
+    }
+
+    public void UndoDelivery()
+    {
+        DeliveredOn = null;
+        DeliveredByUserId = null;
+    }
+
     protected PayrollItem()
     {
     }

@@ -20,6 +20,27 @@ public class MyAccountDto
     public bool MustChangePassword { get; set; }
     public bool MfaRequired { get; set; }
     public bool MfaEnabled { get; set; }
+    public Guid? PhotoId { get; set; }
+}
+
+/// <summary>Result of Me_UploadPhoto (decision 2026-11-11).</summary>
+public class MyPhotoDto
+{
+    public Guid PhotoId { get; set; }
+}
+
+/// <summary>An uploaded profile photo, read from multipart by the controller.</summary>
+public class MyPhotoUploadInput
+{
+    public byte[] Content { get; set; } = null!;
+    public string ContentType { get; set; } = null!;
+}
+
+/// <summary>The bytes of ProfilePhoto_Get.</summary>
+public class ProfilePhotoContent
+{
+    public byte[] Content { get; set; } = null!;
+    public string ContentType { get; set; } = null!;
 }
 
 public class MyAccountUpdateDto

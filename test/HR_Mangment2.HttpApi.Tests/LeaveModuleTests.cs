@@ -70,13 +70,16 @@ public class LeaveModuleTests
     private static async Task<JsonElement> BalanceOfAsync(HttpClient hr, Guid employeeId) =>
         await hr.GetFromJsonAsync<JsonElement>($"/api/app/leave-balance/employee/{employeeId}");
 
-    private static async Task<JsonElement> SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days)
+    private const string AnnualLeaveSettings = AnnualLeaveDefault.Url;
+
+    /// <summary>Sets the company default (decision 2026-11-10: no entitlement per employee any more).</summary>
+    private static async Task<JsonElement> SetDefaultAsync(HttpClient hr, decimal days)
     {
-        var balance = await BalanceOfAsync(hr, employeeId);
-        return await OkAsync(await hr.PutAsJsonAsync(
-            $"/api/app/leave-balance/employee/{employeeId}/entitlement",
-            new { entitlementDays = days, concurrencyStamp = Stamp(balance) }));
+        var settings = await hr.GetFromJsonAsync<JsonElement>(AnnualLeaveSettings);
+        return await OkAsync(await hr.PutAsJsonAsync(AnnualLeaveSettings, new { defaultEntitlementDays = days, concurrencyStamp = Stamp(settings) }));
     }
+
+    private static Task<JsonElement> SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days) => AnnualLeaveDefault.OpenWithAsync(hr, employeeId, days);
 
     private static object Annual(string start, string end, Guid? employeeId = null) => new { kind = "annual", startDate = start, endDate = end, employeeId };
 
@@ -109,59 +112,64 @@ public class LeaveModuleTests
         return new MultipartFormDataContent { { file, "file", "note.pdf" } };
     }
 
+    /// <summary>Decision 2026-11-10: a new employee's year opens by itself with the company default, so leave can start at once.</summary>
     [Fact]
-    public async Task Before_an_entitlement_is_set_everything_is_zero_and_leave_is_refused()
+    public async Task A_new_employees_year_opens_with_the_company_default()
     {
         var team = await TeamAsync();
+        await SetDefaultAsync(team.Kit.Hr, 24);
 
         var balance = await team.StaffClient.GetFromJsonAsync<JsonElement>("/api/app/leave-balance/my");
-        balance.GetProperty("isEntitlementSet").GetBoolean().ShouldBeFalse();
-        balance.GetProperty("leaveYearId").ValueKind.ShouldBe(JsonValueKind.Null);
-        Dec(balance, "remainingDays").ShouldBe(0);
+        balance.GetProperty("isEntitlementSet").GetBoolean().ShouldBeTrue();
+        balance.GetProperty("leaveYearId").ValueKind.ShouldBe(JsonValueKind.String);
+        Dec(balance, "currentYearEntitlementDays").ShouldBe(24);
+        Dec(balance, "remainingDays").ShouldBe(24);
+        Dec(balance, "nextYearEntitlementDays").ShouldBe(24);
         balance.GetProperty("yearStartDate").GetString().ShouldBe("2026-01-15");
         balance.GetProperty("yearEndDate").GetString().ShouldBe("2027-01-14");
         balance.GetProperty("nextYearStartDate").GetString().ShouldBe("2027-01-15");
-
-        await ShouldFailWithAsync(await team.StaffClient.PostAsJsonAsync("/api/app/leave-request", Annual("2026-09-06", "2026-09-07")), HrErrorCodes.Leave.EntitlementNotSet);
-    }
-
-    [Fact]
-    public async Task The_first_entitlement_opens_the_year_and_later_changes_wait_for_next_year()
-    {
-        var team = await TeamAsync();
-        var url = $"/api/app/leave-balance/employee/{team.Staff.Id}/entitlement";
-
-        (await team.Kit.Hr.PutAsJsonAsync(url, new { entitlementDays = 24, concurrencyStamp = "stale" })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
-
-        var first = await SetEntitlementAsync(team.Kit.Hr, team.Staff.Id, 24);
-        first.GetProperty("isEntitlementSet").GetBoolean().ShouldBeTrue();
-        Dec(first, "currentYearEntitlementDays").ShouldBe(24);
-        Dec(first, "remainingDays").ShouldBe(24);
-        Dec(first, "nextYearEntitlementDays").ShouldBe(24);
 
         var ledger = await team.StaffClient.GetFromJsonAsync<JsonElement>("/api/app/leave-ledger/my");
         ledger.GetProperty("totalCount").GetInt64().ShouldBe(1);
         ledger.GetProperty("items")[0].GetProperty("type").GetString().ShouldBe("grant");
         ledger.GetProperty("items")[0].GetProperty("bucket").GetString().ShouldBe("entitlement");
 
-        var second = await OkAsync(await team.Kit.Hr.PutAsJsonAsync(url, new { entitlementDays = 21, concurrencyStamp = Stamp(first) }));
-        Dec(second, "currentYearEntitlementDays").ShouldBe(24);
-        Dec(second, "nextYearEntitlementDays").ShouldBe(21);
-        Dec(second, "remainingDays").ShouldBe(24);
+        (await SubmitAnnualAsync(team.StaffClient, "2026-09-06", "2026-09-07")).GetProperty("workingDays").GetDecimal().ShouldBe(2);
 
-        (await team.Kit.Hr.PutAsJsonAsync(url, new { entitlementDays = 30, concurrencyStamp = Stamp(first) })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        // The per-employee route is gone.
+        (await team.Kit.Hr.PutAsJsonAsync($"/api/app/leave-balance/employee/{team.Staff.Id}/entitlement", new { entitlementDays = 30, concurrencyStamp = "x" }))
+            .StatusCode.ShouldBeOneOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
+    }
 
-        (await team.StaffClient.PutAsJsonAsync(url, new { entitlementDays = 99, concurrencyStamp = Stamp(second) })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    /// <summary>Decision 2026-11-10: changing the default reaches everyone from their next year; the running year stays.</summary>
+    [Fact]
+    public async Task A_new_default_waits_for_each_employees_next_year()
+    {
+        var team = await TeamAsync();
+        var first = await SetEntitlementAsync(team.Kit.Hr, team.Staff.Id, 24);
+        Dec(first, "currentYearEntitlementDays").ShouldBe(24);
+
+        var settings = await SetDefaultAsync(team.Kit.Hr, 21);
+        Dec(settings, "defaultEntitlementDays").ShouldBe(21);
+
+        var after = await BalanceOfAsync(team.Kit.Hr, team.Staff.Id);
+        Dec(after, "currentYearEntitlementDays").ShouldBe(24);
+        Dec(after, "nextYearEntitlementDays").ShouldBe(21);
+        Dec(after, "remainingDays").ShouldBe(24);
+
+        // A stale stamp is a conflict, and only the HR manager edits the default.
+        (await team.Kit.Hr.PutAsJsonAsync(AnnualLeaveSettings, new { defaultEntitlementDays = 30, concurrencyStamp = Stamp(first) })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await team.StaffClient.GetAsync(AnnualLeaveSettings)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await team.ManagerClient.PutAsJsonAsync(AnnualLeaveSettings, new { defaultEntitlementDays = 99, concurrencyStamp = Stamp(settings) })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await team.Kit.Hr.PutAsJsonAsync(AnnualLeaveSettings, new { defaultEntitlementDays = 400, concurrencyStamp = Stamp(settings) })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task The_document_example_carries_6_and_adds_21_for_27()
     {
         var team = await TeamAsync();
-        var set = await SetEntitlementAsync(team.Kit.Hr, team.Staff.Id, 24);
-        await OkAsync(await team.Kit.Hr.PutAsJsonAsync(
-            $"/api/app/leave-balance/employee/{team.Staff.Id}/entitlement",
-            new { entitlementDays = 21, concurrencyStamp = Stamp(set) }));
+        await SetEntitlementAsync(team.Kit.Hr, team.Staff.Id, 24);
+        await SetDefaultAsync(team.Kit.Hr, 21);
 
         // 18 working days: three and a half weeks of Sunday to Thursday.
         var leave = await SubmitAnnualAsync(team.StaffClient, "2026-06-07", "2026-07-01");
@@ -537,8 +545,9 @@ public class LeaveModuleTests
         (await client.PostAsJsonAsync("/api/app/account/mfa/confirm", new { code = Totp.Compute(enrollment.GetProperty("sharedKey").GetString()!) })).EnsureSuccessStatusCode();
 
         await ShouldFailWithAsync(await client.PostAsJsonAsync($"/api/app/leave-balance/employee/{employeeId}/adjust", new { days = 1, reason = "Mine" }), HrErrorCodes.Leave.SelfAdjustmentNotAllowed);
-        var balance = await BalanceOfAsync(client, employeeId);
-        await ShouldFailWithAsync(await client.PutAsJsonAsync($"/api/app/leave-balance/employee/{employeeId}/entitlement", new { entitlementDays = 50, concurrencyStamp = Stamp(balance) }), HrErrorCodes.Leave.SelfAdjustmentNotAllowed);
+
+        // The HR manager has no balance at all (decision 2026-11-10).
+        await ShouldFailWithAsync(await kit.Hr.GetAsync($"/api/app/leave-balance/employee/{employeeId}"), HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
     }
 
     [Fact]
@@ -558,35 +567,29 @@ public class LeaveModuleTests
         (await admin.GetAsync($"/api/app/leave-ledger/employee/{team.Staff.Id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         await ShouldFailWithAsync(await team.Kit.Hr.GetAsync($"/api/app/leave-balance/employee/{team.Kit.ExecutiveEmployeeId}"), HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
+        await ShouldFailWithAsync(await team.Kit.Hr.GetAsync($"/api/app/leave-balance/employee/{team.Kit.SystemAdminEmployeeId}"), HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
 
         (await team.ManagerClient.GetAsync($"/api/app/leave-request/employee/{team.Staff.Id}")).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await team.ManagerClient.GetAsync($"/api/app/leave-request/employee/{otherTeam.Staff.Id}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
+    /// <summary>Decision 2026-11-10: a department manager reports to the HR manager, so their leave starts at HR.</summary>
     [Fact]
-    public async Task A_system_administrator_sees_the_balance_of_someone_whose_request_is_at_their_step()
+    public async Task A_department_managers_leave_starts_at_hr_and_the_system_administrator_never_sees_it()
     {
         var kit = await EmployeeTestKit.CreateAsync(_host);
-        var (userId, userName) = await TestUsers.CreateAsync(_host, false, HrRoles.Employee, HrRoles.SystemAdmin);
-        var adminFileId = await kit.AddFileForUserAsync(userId, kit.ExecutiveEmployeeId);
-        var admin = TestAuth.ClientFor(_host, (await TestAuth.SignInAsync(_host, userName, TestUsers.Password)).AccessToken, "en");
-        var enrollment = await (await admin.PostAsync("/api/app/account/mfa/enroll", null)).Content.ReadFromJsonAsync<JsonElement>();
-        (await admin.PostAsJsonAsync("/api/app/account/mfa/confirm", new { code = Totp.Compute(enrollment.GetProperty("sharedKey").GetString()!) })).EnsureSuccessStatusCode();
+        var admin = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee, HrRoles.SystemAdmin);
 
-        var manager = await kit.AddAsync(adminFileId, new[] { HrRoles.DepartmentManager });
+        var manager = await kit.AddDepartmentManagerAsync();
         var managerClient = await kit.SignInAsync(manager);
         await SetEntitlementAsync(kit.Hr, manager.Id, 5);
 
-        (await admin.GetAsync($"/api/app/leave-balance/employee/{manager.Id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
-
         var leave = await SubmitAnnualAsync(managerClient, "2026-09-06", "2026-09-07");
-
-        // The manager's request waits for this administrator, as their named manager.
-        Dec(await OkAsync(await admin.GetAsync($"/api/app/leave-balance/employee/{manager.Id}")), "heldDays").ShouldBe(2);
-        (await admin.GetAsync($"/api/app/leave-ledger/employee/{manager.Id}")).StatusCode.ShouldBe(HttpStatusCode.OK);
-
-        await OkAsync(await ApproveAsync(admin, IdOf(leave)));
+        leave.GetProperty("status").GetString().ShouldBe("pendingHr");
         (await admin.GetAsync($"/api/app/leave-balance/employee/{manager.Id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        await OkAsync(await ApproveAsync(kit.Hr, IdOf(leave)));
+        Dec(await BalanceOfAsync(kit.Hr, manager.Id), "usedDays").ShouldBe(2);
     }
 
     [Fact]

@@ -110,7 +110,7 @@ public class StockAppService : HR_Mangment2AppService, IStockAppService
             EmployeeId: employeeId,
             TotalCost: input.TotalCost));
 
-        if (movement.TotalCost != null)
+        if (input.TotalCost != null)
         {
             await _expenses.OnPurchaseRecordedAsync(movement);
         }
@@ -141,7 +141,8 @@ public class StockAppService : HR_Mangment2AppService, IStockAppService
             original = await _movements.FindAsync(input.ReversesMovementId.Value);
 
             // The contract gives no code for a reference that this movement cannot reverse.
-            if (original == null || original.ItemId != item.Id || original.Quantity != -input.Quantity)
+            // A receipt or voucher line is reversed with its whole document (StorePurchase_Reverse, StoreIssueVoucher_Reverse).
+            if (original == null || original.ItemId != item.Id || original.Quantity != -input.Quantity || original.PurchaseId != null || original.IssueVoucherId != null)
             {
                 throw new AbpValidationException(
                     "Invalid reversal.",
@@ -160,9 +161,10 @@ public class StockAppService : HR_Mangment2AppService, IStockAppService
             input.Quantity!.Value,
             CurrentUser.GetId(),
             input.Reason,
-            ReversesMovementId: original?.Id));
+            ReversesMovementId: original?.Id,
+            UnitCost: original?.UnitCost));
 
-        if (original?.TotalCost != null)
+        if (original is { Type: StockMovementType.Receive, TotalCost: not null })
         {
             await _expenses.OnPurchaseReversedAsync(original, movement);
         }
@@ -176,7 +178,9 @@ public class StockAppService : HR_Mangment2AppService, IStockAppService
     {
         var query = (await _movements.GetQueryableAsync())
             .WhereIf(input.ItemId != null, x => x.ItemId == input.ItemId)
-            .WhereIf(input.Type != null, x => x.Type == input.Type);
+            .WhereIf(input.Type != null, x => x.Type == input.Type)
+            .WhereIf(input.TeamId != null, x => x.TeamId == input.TeamId)
+            .WhereIf(!string.IsNullOrWhiteSpace(input.Filter), x => x.DocumentNumber != null && x.DocumentNumber.Contains(input.Filter!));
 
         if (input.FromDate != null)
         {
@@ -197,15 +201,39 @@ public class StockAppService : HR_Mangment2AppService, IStockAppService
         return new StockMovementPagedResultDto { TotalCount = total, Items = await ToDtosAsync(rows) };
     }
 
-    /// <summary>The cost is deliberately absent: QUESTIONS.md item 29, the store officer enters it and does not see it again.</summary>
-    private async Task<List<StockMovementDto>> ToDtosAsync(IReadOnlyCollection<StockMovement> rows)
+    private Task<List<StockMovementDto>> ToDtosAsync(IReadOnlyCollection<StockMovement> rows) =>
+        LazyServiceProvider.LazyGetRequiredService<StockMovementMapper>().ToDtosAsync(rows);
+}
+
+/// <summary>The cost is shown to the store officer since decision 2026-11-11, which replaced QUESTIONS.md item 29.</summary>
+public class StockMovementMapper : Volo.Abp.DependencyInjection.ITransientDependency
+{
+    private readonly ItemReferenceReader _itemRefs;
+    private readonly EmployeeReferenceReader _references;
+    private readonly StoreReferenceReader _storeRefs;
+
+    public StockMovementMapper(ItemReferenceReader itemRefs, EmployeeReferenceReader references, StoreReferenceReader storeRefs)
+    {
+        _itemRefs = itemRefs;
+        _references = references;
+        _storeRefs = storeRefs;
+    }
+
+    public virtual async Task<List<StockMovementDto>> ToDtosAsync(IReadOnlyCollection<StockMovement> rows)
     {
         var items = await _itemRefs.GetRefsAsync(rows.Select(x => x.ItemId));
         var users = await _references.GetUserRefsAsync(rows.Select(x => x.PerformedByUserId));
         var employees = await _references.GetRefsAsync(rows.Where(x => x.EmployeeId != null).Select(x => x.EmployeeId!.Value));
+        var teams = await _storeRefs.GetTeamsAsync(rows.Select(x => x.TeamId));
 
         return rows.Select(x => new StockMovementDto
         {
+            PurchaseId = x.PurchaseId,
+            IssueVoucherId = x.IssueVoucherId,
+            DocumentNumber = x.DocumentNumber,
+            Team = StoreReferenceReader.Pick(teams, x.TeamId),
+            UnitCost = x.UnitCost,
+            TotalCost = x.TotalCost,
             Id = x.Id,
             Item = items[x.ItemId],
             Type = x.Type,

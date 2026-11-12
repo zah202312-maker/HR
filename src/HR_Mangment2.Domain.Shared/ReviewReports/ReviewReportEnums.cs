@@ -1,12 +1,5 @@
 namespace HR_Mangment2.ReviewReports;
 
-public enum ReviewReportPeriodType
-{
-    Daily,
-    Weekly,
-    Monthly
-}
-
 public enum ReviewReportStatus
 {
     Draft,
@@ -15,9 +8,9 @@ public enum ReviewReportStatus
 
 public static class ReviewReportConsts
 {
-    public const int MaxSummaryLength = 4000;
+    public const int MaxContentLength = 10000;
     public const int MaxNotesLength = 2000;
     public const int MaxTeamsPerUpdate = 500;
-    public const int MinCompletionPercent = 0;
-    public const int MaxCompletionPercent = 100;
+    public const int MaxRoomNameLength = 128;
+    public const int MaxRoomMembers = 200;
 }

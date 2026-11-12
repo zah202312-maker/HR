@@ -15,6 +15,7 @@ using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Volo.Abp.Identity;
 using Volo.Abp.MultiTenancy;
 
 namespace HR_Mangment2.Leaves;
@@ -129,7 +130,7 @@ public class DedicatedRequestOwnerResolver : ITransientDependency
 
     private async Task CheckNotExecutiveAsync(Employee employee, string code)
     {
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             throw new BusinessException(code);
         }
@@ -144,13 +145,12 @@ public record LeaveBalanceSnapshot(
     DateOnly YearEnd,
     DateOnly NextYearStart,
     IReadOnlyList<LeaveLedgerEntry> CurrentEntries,
-    IReadOnlyList<LeaveLedgerEntry> FutureEntries)
+    IReadOnlyList<LeaveLedgerEntry> FutureEntries,
+    decimal NextYearEntitlement)
 {
     public decimal Sum(LeaveLedgerBucket bucket) => CurrentEntries.Where(x => x.Bucket == bucket).Sum(x => x.Days ?? 0);
 
     public decimal Sum(params LeaveLedgerType[] types) => CurrentEntries.Where(x => types.Contains(x.Type)).Sum(x => x.Days ?? 0);
-
-    public decimal NextYearEntitlement => Account?.NextYearEntitlementDays ?? CurrentYear?.EntitlementDays ?? 0;
 
     public LeavePools Pools => new(
         Sum(LeaveLedgerBucket.Carried),
@@ -169,6 +169,8 @@ public class LeaveBalanceManager : ITransientDependency
     private readonly ICompanyClock _companyClock;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ICurrentTenant _currentTenant;
+    private readonly HrSettingsStore _settings;
+    private readonly IIdentityUserRepository _users;
 
     public LeaveBalanceManager(
         IRepository<EmployeeLeaveAccount, Guid> accounts,
@@ -176,7 +178,9 @@ public class LeaveBalanceManager : ITransientDependency
         IRepository<LeaveLedgerEntry, Guid> ledger,
         ICompanyClock companyClock,
         IGuidGenerator guidGenerator,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        HrSettingsStore settings,
+        IIdentityUserRepository users)
     {
         _accounts = accounts;
         _years = years;
@@ -184,6 +188,27 @@ public class LeaveBalanceManager : ITransientDependency
         _companyClock = companyClock;
         _guidGenerator = guidGenerator;
         _currentTenant = currentTenant;
+        _settings = settings;
+        _users = users;
+    }
+
+    /// <summary>The company's annual days per leave year, from system settings (decision 2026-11-10).</summary>
+    public virtual async Task<decimal> GetDefaultEntitlementAsync() =>
+        (await _settings.PeekValueAsync<AnnualLeaveSettings>()).DefaultEntitlementDays;
+
+    /// <summary>
+    /// Whether the employee gets a leave year: active, hired by today, and not one of the roles with no shift and no
+    /// leave (executive director, HR manager, system admin).
+    /// </summary>
+    private async Task<bool> HasLeaveAsync(Employee employee, DateOnly today)
+    {
+        if (employee.Status != EmployeeStatus.Active || employee.HireDate > today)
+        {
+            return false;
+        }
+
+        var roles = employee.UserId == null ? new List<string>() : await _users.GetRoleNamesAsync(employee.UserId.Value);
+        return !ManagerLinkService.IsOutsideSchedule(roles);
     }
 
     public virtual Task<EmployeeLeaveAccount?> FindAccountAsync(Guid employeeId) =>
@@ -209,7 +234,13 @@ public class LeaveBalanceManager : ITransientDependency
         var current = years.LastOrDefault(x => x.IsGranted);
         if (current == null)
         {
-            return null;
+            // Nobody sets an entitlement by hand any more: the first year opens with the company default (decision 2026-11-10).
+            if (!await HasLeaveAsync(employee, today))
+            {
+                return null;
+            }
+
+            return await OpenFirstYearAsync(employee, await GetOrCreateAccountAsync(employee.Id), await GetDefaultEntitlementAsync(), null);
         }
 
         while (current.YearEnd < today)
@@ -223,10 +254,10 @@ public class LeaveBalanceManager : ITransientDependency
                 years.Add(next);
             }
 
-            var entitlement = account.NextYearEntitlementDays ?? current.EntitlementDays;
+            // Each year takes the default in force when it starts, so a change never touches a running year.
+            var entitlement = await GetDefaultEntitlementAsync();
             next.Grant(entitlement);
             await _years.UpdateAsync(next, autoSave: true);
-            account.SetNextYearEntitlement(null);
 
             if (entitlement > 0)
             {
@@ -261,11 +292,11 @@ public class LeaveBalanceManager : ITransientDependency
         var future = await _years.FirstOrDefaultAsync(x => x.EmployeeId == employee.Id && x.YearStart == nextStart);
         var futureEntries = future == null ? new List<LeaveLedgerEntry>() : await _ledger.GetListAsync(x => x.LeaveYearId == future.Id);
 
-        return new LeaveBalanceSnapshot(employee, account, year, start, end, nextStart, entries, futureEntries);
+        return new LeaveBalanceSnapshot(employee, account, year, start, end, nextStart, entries, futureEntries, await GetDefaultEntitlementAsync());
     }
 
-    /// <summary>The first entitlement opens the current year with a grant.</summary>
-    public virtual async Task OpenFirstYearAsync(Employee employee, EmployeeLeaveAccount account, decimal days, string? reason)
+    /// <summary>Opens the current year with a grant of the given days (the company default).</summary>
+    public virtual async Task<EmployeeLeaveYear> OpenFirstYearAsync(Employee employee, EmployeeLeaveAccount account, decimal days, string? reason)
     {
         var (start, _) = LeaveYearMath.YearContaining(employee.HireDate, await _companyClock.GetTodayAsync());
         var year = await _years.FirstOrDefaultAsync(x => x.EmployeeId == employee.Id && x.YearStart == start)
@@ -273,8 +304,13 @@ public class LeaveBalanceManager : ITransientDependency
 
         year.Grant(days);
         await _years.UpdateAsync(year, autoSave: true);
-        await WriteAsync(employee.Id, year.Id, LeaveLedgerType.Grant, LeaveLedgerBucket.Entitlement, days, null, null, reason);
+        if (days > 0)
+        {
+            await WriteAsync(employee.Id, year.Id, LeaveLedgerType.Grant, LeaveLedgerBucket.Entitlement, days, null, null, reason);
+        }
+
         await TouchAsync(account);
+        return year;
     }
 
     /// <summary>A deduction takes added days first, in the same order as leave. The caller has checked the amount is available.</summary>

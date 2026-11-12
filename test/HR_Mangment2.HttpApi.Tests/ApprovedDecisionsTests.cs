@@ -122,7 +122,7 @@ public class ApprovedDecisionsTests
         var officer = await kit.SignInAsync(await kit.AddAsync(manager.Id, new[] { HrRoles.Employee, HrRoles.StoreOfficer }));
 
         var suffix = Guid.NewGuid().ToString("N")[..10];
-        var item = await OkAsync(await officer.PostAsJsonAsync("/api/app/item", new { nameAr = "صنف " + suffix, nameEn = "Item " + suffix, kind = "returnable", minQuantity = 1 }), HttpStatusCode.Created);
+        var item = await OkAsync(await officer.PostAsJsonAsync("/api/app/item", await StoreTestKit.ItemBodyAsync(officer, "صنف " + suffix, "Item " + suffix, "returnable", 1)), HttpStatusCode.Created);
         var itemId = item.GetProperty("id").GetGuid();
         await OkAsync(await officer.PostAsJsonAsync("/api/app/stock/receive", new { itemId, quantity = 5 }), HttpStatusCode.Created);
         await OkAsync(await officer.PostAsJsonAsync("/api/app/custody", new { itemId, kind = "personal", employeeId = staff.Id, quantity = 1, deductFromStock = true }), HttpStatusCode.Created);

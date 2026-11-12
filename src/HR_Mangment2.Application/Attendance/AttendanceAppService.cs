@@ -64,7 +64,7 @@ public class AttendanceAppService : HR_Mangment2AppService, IAttendanceAppServic
     [Authorize(HrPermissions.AttendancePermissions.ViewOwn)]
     public virtual async Task<AttendanceDayPagedResultDto> GetMyAsync(AttendanceMyListInput input)
     {
-        if (CurrentUser.IsInRole(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(CurrentUser.Roles))
         {
             throw new BusinessException(HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
         }
@@ -112,7 +112,7 @@ public class AttendanceAppService : HR_Mangment2AppService, IAttendanceAppServic
             }
         }
 
-        if ((await _managerLinks.GetRolesAsync(employee)).Contains(HrRoles.ExecutiveDirector))
+        if (ManagerLinkService.IsOutsideSchedule(await _managerLinks.GetRolesAsync(employee)))
         {
             throw new BusinessException(HrErrorCodes.Attendance.ExecutiveDirectorNotCovered);
         }

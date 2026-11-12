@@ -104,13 +104,7 @@ public class ReportModuleTests
         await AttendanceModuleTests.RunJobsAsync(_host);
     }
 
-    private static async Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days)
-    {
-        var balance = await hr.GetFromJsonAsync<JsonElement>($"/api/app/leave-balance/employee/{employeeId}");
-        (await hr.PutAsJsonAsync(
-            $"/api/app/leave-balance/employee/{employeeId}/entitlement",
-            new { entitlementDays = days, concurrencyStamp = balance.GetProperty("concurrencyStamp").GetString() })).EnsureSuccessStatusCode();
-    }
+    private static Task SetEntitlementAsync(HttpClient hr, Guid employeeId, decimal days) => AnnualLeaveDefault.OpenWithAsync(hr, employeeId, days);
 
     private static async Task<Guid> SubmitLeaveAsync(HttpClient client, string start, string end)
     {
@@ -332,7 +326,31 @@ public class ReportModuleTests
         row.GetProperty("carriedInDays").GetDecimal().ShouldBe(0);
         row.GetProperty("usedHours").GetDecimal().ShouldBe(0);
         row.GetProperty("leaveYearStart").GetString().ShouldBe(own.GetProperty("yearStartDate").GetString());
-        Fields(row).ShouldBe(new[] { "carriedInDays", "employee", "entitlementDays", "heldDays", "leaveYearStart", "remainingDays", "usedDays", "usedHours" });
+        Fields(row).ShouldBe(new[] { "carriedInDays", "employee", "entitlementDays", "heldDays", "leaveYearStart", "periodUsedDays", "periodUsedHours", "remainingDays", "usedDays", "usedHours" });
+
+        // Without a period the two period fields are null (decision 2026-11-10).
+        row.GetProperty("periodUsedDays").ValueKind.ShouldBe(JsonValueKind.Null);
+        row.GetProperty("periodUsedHours").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // The whole approved leave is inside September; the pending one on the 20th is not counted.
+        var month = Items(await OkAsync(await team.Kit.Hr.GetAsync($"/api/app/report/hr-leave-balances?employeeId={team.Staff.Id}&from=2026-09-01&to=2026-09-30"))).Single();
+        month.GetProperty("periodUsedDays").GetDecimal().ShouldBe(2);
+        month.GetProperty("periodUsedHours").GetDecimal().ShouldBe(0);
+        month.GetProperty("usedDays").GetDecimal().ShouldBe(2);
+
+        // A period cutting the leave counts only its working days inside the period.
+        var edge = Items(await OkAsync(await team.Kit.Hr.GetAsync($"/api/app/report/hr-leave-balances?employeeId={team.Staff.Id}&from=2026-09-14&to=2026-09-30"))).Single();
+        edge.GetProperty("periodUsedDays").GetDecimal().ShouldBe(1);
+
+        var before = Items(await OkAsync(await team.Kit.Hr.GetAsync($"/api/app/report/hr-leave-balances?employeeId={team.Staff.Id}&from=2026-08-01&to=2026-08-31"))).Single();
+        before.GetProperty("periodUsedDays").GetDecimal().ShouldBe(0);
+
+        // Both dates or neither, and in order.
+        await ShouldFailWithAsync(await team.Kit.Hr.GetAsync($"/api/app/report/hr-leave-balances?employeeId={team.Staff.Id}&from=2026-09-01"), HrErrorCodes.Reports.InvalidPeriod);
+        await ShouldFailWithAsync(await team.Kit.Hr.GetAsync($"/api/app/report/hr-leave-balances?employeeId={team.Staff.Id}&from=2026-09-30&to=2026-09-01"), HrErrorCodes.Reports.InvalidPeriod);
+
+        // The export takes the same optional period.
+        (await team.Kit.Hr.GetAsync($"/api/app/report/hrLeaveBalances/export?format=excel&employeeId={team.Staff.Id}&from=2026-09-01&to=2026-09-30")).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]

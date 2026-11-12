@@ -42,5 +42,9 @@ public enum NotificationTemplateCode
     AccountSecurityChanged,
     CustodyReturned,
     CustodyCountDifference,
-    ReviewReportSubmitted
+    ReviewReportSubmitted,
+    NoticeReceived,
+    HrEvaluationReportSent,
+    HrEvaluationLowAverage,
+    ReviewerEvaluationReportSent
 }

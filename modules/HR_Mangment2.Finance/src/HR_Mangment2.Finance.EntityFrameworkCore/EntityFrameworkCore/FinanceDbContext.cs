@@ -20,6 +20,9 @@ public class FinanceDbContext : AbpDbContext<FinanceDbContext>
     public DbSet<PayrollItem> PayrollItems { get; set; }
     public DbSet<PayrollLine> PayrollLines { get; set; }
     public DbSet<Expense> Expenses { get; set; }
+    public DbSet<PettyCashType> PettyCashTypes { get; set; }
+    public DbSet<PettyCashAssignment> PettyCashAssignments { get; set; }
+    public DbSet<PettyCashEntry> PettyCashEntries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

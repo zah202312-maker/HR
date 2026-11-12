@@ -123,6 +123,7 @@ class _EvaluationsPageState extends ConsumerState<EvaluationsPage> {
             },
             itemBuilder: (context, e) => OpsTile(
               leading: Icons.rate_review_outlined,
+              avatar: PersonAvatar.employee(e.employee),
               title: e.employee.fullName,
               subtitle: [monthLabel(e.year, e.month), if (e.submittedAt != null) f.dateTime(e.submittedAt)].join(' · '),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [_objectionPill(s, e.objectionStatus), StatusPill(evalStatusLabel(s, e.status), tone: evalTone(e.status))]),
@@ -154,6 +155,7 @@ class _EvaluationsPageState extends ConsumerState<EvaluationsPage> {
             },
             itemBuilder: (context, e) => OpsTile(
               leading: Icons.assessment_outlined,
+              avatar: PersonAvatar.employee(e.employee),
               title: e.employee.fullName,
               subtitle: [monthLabel(e.year, e.month), e.evaluator.displayName, if (e.employee.departmentName != null) e.employee.departmentName!].join(' · '),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -627,17 +629,8 @@ class EvaluationHrPage extends ConsumerWidget {
     final reason = TextEditingController();
     final grades = <String, String>{for (final x in e.scores) x.criterionId: x.gradeCode};
     final original = Map<String, String>.of(grades);
-    // the grade scale comes from the scores already given (names) plus the active scale when readable
-    final scale = <String, String>{for (final x in e.scores) x.gradeCode: x.gradeName};
-    if (ref.read(sessionProvider).can(HrOps.EvaluationGrade_GetList)) {
-      try {
-        final g = await ref.read(hrApiProvider).evaluationAdmin.EvaluationGrade_GetList(isActive: true, maxResultCount: 50);
-        for (final x in g.items) {
-          scale[x.code] = x.name;
-        }
-      } catch (_) {}
-    }
-    if (!context.mounted) return;
+    // the cycle's own verbal scale, in display order
+    final scale = <String, String>{for (final x in e.availableGrades) x.code: x.name};
     final ok = await showFormDialog(
       context,
       width: 600,
@@ -701,7 +694,7 @@ class EvaluationHrPage extends ConsumerWidget {
         builder: (e) => ListView(padding: const EdgeInsets.only(bottom: 24), children: [
           HrCard(
             child: Wrap(spacing: 16, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text(e.employee.fullName, style: Theme.of(context).textTheme.titleMedium),
+              PersonName.employee(e.employee, radius: 16, style: Theme.of(context).textTheme.titleMedium),
               Text(monthLabel(e.year, e.month)),
               Text('${s.t('المقيّم', 'Evaluator')} ${e.evaluator.displayName}'),
               Text(f.dateTime(e.submittedAt)),

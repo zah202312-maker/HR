@@ -10,6 +10,7 @@ import '../../core/session/session_controller.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/person_avatar.dart';
 import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/pickers.dart';
 import '../leaves/new_leave_page.dart' show otherLeaveTypesProvider;
@@ -73,7 +74,7 @@ class _MemosPageState extends ConsumerState<MemosPage> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (showEmployee) Text(m.employee.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (showEmployee) PersonName.employee(m.employee, style: const TextStyle(fontWeight: FontWeight.w600)),
             Text(m.contentPreview, maxLines: 2, overflow: TextOverflow.ellipsis),
             Text('${memoKindLabel(s, m.kind)} · ${f.dateTime(m.creationTime)}', style: TextStyle(color: context.hr.textSecondary, fontSize: 12)),
           ]),
@@ -89,7 +90,9 @@ class _MemosPageState extends ConsumerState<MemosPage> {
     final session = ref.watch(sessionProvider);
     final api = ref.watch(hrApiProvider).memos;
     final canInbox = session.can(HrOps.Memo_GetInbox);
-    final canMine = session.can(HrOps.Memo_GetMy);
+    // Decision 2026-11-11: the executive director keeps «بانتظاري» only, with no «مطالعاتي» and no new memo.
+    final canMine = session.can(HrOps.Memo_GetMy) && !session.isExecutive;
+    final canCreate = session.can(HrOps.Memo_Create) && !session.isExecutive;
     final mine = PagedList<MemoListItemDto>(
       key: ValueKey('my|$_version'),
       fetch: (skip, max) async {
@@ -114,7 +117,7 @@ class _MemosPageState extends ConsumerState<MemosPage> {
     return HrPage(
       title: s.t('المطالعات', 'Memos'),
       actions: [
-        if (session.can(HrOps.Memo_Create)) FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: Text(s.t('مطالعة جديدة', 'New memo'))),
+        if (canCreate) FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: Text(s.t('مطالعة جديدة', 'New memo'))),
       ],
       child: tabs.length == 1
           ? tabs.first.$2
@@ -246,7 +249,7 @@ class MemoDetailPage extends ConsumerWidget {
             HrCard(
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
-                  Expanded(child: Text(m.employee.fullName, style: Theme.of(context).textTheme.titleMedium)),
+                  Expanded(child: PersonName.employee(m.employee, radius: 16, style: Theme.of(context).textTheme.titleMedium)),
                   StatusPill(m.statusLabel, tone: memoTone(m.status)),
                 ]),
                 const SizedBox(height: 8),

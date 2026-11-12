@@ -48,5 +48,6 @@ public enum AdministrativeTaskType
     CircularSent,
     CustodyCountRecorded,
     WarningRecommended,
-    DelegationCreated
+    DelegationCreated,
+    NoticeSent
 }

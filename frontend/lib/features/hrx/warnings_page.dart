@@ -158,6 +158,7 @@ class _WarningsPageState extends ConsumerState<WarningsPage> {
     final f = Fmt(context);
     return OpsTile(
       leading: Icons.report_outlined,
+      avatar: PersonAvatar.employee(w.employee),
       title: '${w.employee.fullName} · ${warningLevelLabel(s, w.decision?.issuedLevel ?? w.recommendedLevel)}',
       subtitle: [f.date(w.incidentDate), w.recommendedBy.displayName, if (w.employee.departmentName != null) w.employee.departmentName!].join(' · '),
       trailing: StatusPill(warningStatusLabel(s, w.status), tone: warningTone(w.status)),
@@ -222,6 +223,7 @@ class _WarningsPageState extends ConsumerState<WarningsPage> {
             },
             itemBuilder: (context, w) => OpsTile(
               leading: Icons.outlined_flag,
+              avatar: PersonAvatar.employee(w.employee),
               title: '${w.employee.fullName} · ${warningLevelLabel(s, w.recommendedLevel)}',
               subtitle: [f.date(w.incidentDate), w.description].join(' · '),
               trailing: StatusPill(stageLabel(s, w.stage), tone: w.stage == WarningRecommendationStage.issued ? Tone.danger : Tone.info),

@@ -26,11 +26,12 @@ String sectionLabel(S s, SystemSettingsSectionCode c) => switch (c) {
       SystemSettingsSectionCode.requestTypes => s.t('أنواع الطلبات', 'Request types'),
       SystemSettingsSectionCode.otherLeaveTypes => s.t('أنواع الإجازات الأخرى', 'Other leave types'),
       SystemSettingsSectionCode.attendanceDevices => s.t('أجهزة البصمة', 'Attendance devices'),
-      SystemSettingsSectionCode.evaluationCriteria => s.t('معايير التقييم', 'Evaluation criteria'),
       SystemSettingsSectionCode.employeeLeaveBalances => s.t('أرصدة الإجازات', 'Leave balances'),
       SystemSettingsSectionCode.workShifts => s.t('الدوامات', 'Work shifts'),
       SystemSettingsSectionCode.holidays => s.t('العطل', 'Holidays'),
       SystemSettingsSectionCode.departmentsAndManagerLinks => s.t('الأقسام وربط المدراء', 'Departments and managers'),
+      SystemSettingsSectionCode.annualLeave => s.t('الإجازة السنوية', 'Annual leave'),
+      SystemSettingsSectionCode.hrEvaluationAlert => s.t('تنبيه معدل التقييم', 'Evaluation average alert'),
       _ => c.value,
     };
 
@@ -45,7 +46,6 @@ const _sectionRoutes = <SystemSettingsSectionCode, String>{
   SystemSettingsSectionCode.workShifts: '/shifts',
   SystemSettingsSectionCode.holidays: '/holidays',
   SystemSettingsSectionCode.departmentsAndManagerLinks: '/departments',
-  SystemSettingsSectionCode.evaluationCriteria: '/evaluation-admin',
 };
 
 /// S-SET-01: system settings. Lists the sections with their owner role; the sections owned by
@@ -63,6 +63,8 @@ class SystemSettingsPage extends ConsumerWidget {
       child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
         if (session.can(HrOps.SystemSettings_GetReminders)) ...[const _RemindersCard(), const SizedBox(height: 12)],
         if (session.can(HrOps.SystemSettings_GetComplaints)) ...[const _ComplaintsCard(), const SizedBox(height: 12)],
+        if (session.can(HrOps.SystemSettings_GetAnnualLeave)) ...[const _AnnualLeaveCard(), const SizedBox(height: 12)],
+        if (session.can(HrOps.SystemSettings_GetHrEvaluationAlert)) ...[const _HrEvaluationAlertCard(), const SizedBox(height: 12)],
         if (session.can(HrOps.SystemSettings_GetHourlyLeave)) ...[const _HourlyLeaveCard(), const SizedBox(height: 12)],
         if (session.can(HrOps.SystemSettings_GetContracts)) ...[const _ContractsCard(), const SizedBox(height: 12)],
         if (session.can(HrOps.SystemSettings_GetFinance)) ...[const _FinanceCard(), const SizedBox(height: 12)],
@@ -301,6 +303,89 @@ class _ComplaintsCardState extends State<_ComplaintsCard> {
         body: SystemSettingsComplaintsUpdateInputDto(
           delayDeadlineWorkingDays: int.parse(_deadline.text),
           overdueReminderIntervalWorkingDays: int.parse(_interval.text),
+          concurrencyStamp: cur.concurrencyStamp,
+        ),
+      ),
+    );
+  }
+}
+
+/// The company's annual leave days per employee year (decision 2026-11-10). Every year that starts afterwards takes
+/// the new number; no running year changes.
+class _AnnualLeaveCard extends StatefulWidget {
+  const _AnnualLeaveCard();
+  @override
+  State<_AnnualLeaveCard> createState() => _AnnualLeaveCardState();
+}
+
+class _AnnualLeaveCardState extends State<_AnnualLeaveCard> {
+  final _days = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return _SettingsCard<SystemSettingsAnnualLeaveDto>(
+      title: s.t('الإجازة السنوية', 'Annual leave'),
+      editOp: HrOps.SystemSettings_UpdateAnnualLeave,
+      load: (api) => api.systemSettings.SystemSettings_GetAnnualLeave(),
+      lastModified: (v) => v.lastModificationTime,
+      bind: (v) => _days.text = _txt(v.defaultEntitlementDays),
+      fields: (context, enabled) => [
+        _decimalField(context, _days, s.t('أيام الإجازة السنوية لكل موظف', 'Annual leave days per employee'), enabled: enabled, min: 0, max: 365),
+        Text(
+          s.t('تُفتح سنة كل موظف جديد بهذا العدد من تاريخ مباشرته. عند تغييره يأخذ كل موظف العدد الجديد من بداية سنته القادمة، ولا تتغير السنة الحالية. لتصحيح رصيد شخص واحد استخدم «تعديل الرصيد».',
+              "Each new employee's year opens with this number from the hire date. A change reaches everyone from their next year; the current year stays. Use \"Adjust\" for one person."),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+      ],
+      save: (api, cur) => api.systemSettings.SystemSettings_UpdateAnnualLeave(
+        body: SystemSettingsAnnualLeaveUpdateInputDto(defaultEntitlementDays: double.parse(_days.text), concurrencyStamp: cur.concurrencyStamp),
+      ),
+    );
+  }
+}
+
+/// The low average alert of HR evaluations (decision 2026-11-11): each cycle, an employee with enough evaluations whose
+/// average on a heading is the threshold or lower alerts the HR manager. Applies from the next cycle.
+class _HrEvaluationAlertCard extends StatefulWidget {
+  const _HrEvaluationAlertCard();
+  @override
+  State<_HrEvaluationAlertCard> createState() => _HrEvaluationAlertCardState();
+}
+
+class _HrEvaluationAlertCardState extends State<_HrEvaluationAlertCard> {
+  final _threshold = TextEditingController();
+  final _weeks = TextEditingController();
+  final _min = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return _SettingsCard<SystemSettingsHrEvaluationAlertDto>(
+      title: s.t('تنبيه معدل التقييم', 'Evaluation average alert'),
+      editOp: HrOps.SystemSettings_UpdateHrEvaluationAlert,
+      load: (api) => api.systemSettings.SystemSettings_GetHrEvaluationAlert(),
+      lastModified: (v) => v.lastModificationTime,
+      bind: (v) {
+        _threshold.text = _txt(v.threshold);
+        _weeks.text = _txt(v.windowWeeks);
+        _min.text = _txt(v.minEvaluations);
+      },
+      fields: (context, enabled) => [
+        _decimalField(context, _threshold, s.t('التنبيه إذا كان المعدل هذا الرقم أو أقل', 'Alert when the average is this or lower'), enabled: enabled, min: 1, max: 10),
+        _intField(context, _weeks, s.t('طول الدورة بالأسابيع', 'Cycle length in weeks'), enabled: enabled, min: 1, max: 12),
+        _intField(context, _min, s.t('أقل عدد تقييمات في الدورة', 'Minimum evaluations in the cycle'), enabled: enabled, min: 1, max: 20),
+        Text(
+          s.t('في نهاية كل دورة يُجمع كل عنوان لكل موظف ويُقسم على عدد تقييماته. إذا كان المعدل الحد أو أقل يصلك تنبيه. التغيير يبدأ من الدورة القادمة.',
+              "At the end of each cycle, each heading's scores per employee are summed and divided by their count. An average at or below the level alerts you. A change applies from the next cycle."),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+      ],
+      save: (api, cur) => api.systemSettings.SystemSettings_UpdateHrEvaluationAlert(
+        body: SystemSettingsHrEvaluationAlertUpdateInputDto(
+          threshold: double.parse(_threshold.text),
+          windowWeeks: int.parse(_weeks.text),
+          minEvaluations: int.parse(_min.text),
           concurrencyStamp: cur.concurrencyStamp,
         ),
       ),

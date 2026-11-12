@@ -99,46 +99,6 @@ public class EvaluationInternalNoteController : HR_Mangment2Controller
     public Task<EvaluationInternalNoteDto> SaveDraftAsync(Guid id, [FromBody] EvaluationInternalNoteDraftDto input) => _service.SaveDraftAsync(id, input);
 }
 
-public class EvaluationCriterionController : HR_Mangment2Controller
-{
-    private readonly IEvaluationCriterionAppService _service;
-
-    public EvaluationCriterionController(IEvaluationCriterionAppService service)
-    {
-        _service = service;
-    }
-
-    [HttpGet("api/app/evaluation-criterion", Name = "EvaluationCriterion_GetList")]
-    public Task<EvaluationCriterionPagedResultDto> GetListAsync([FromQuery] EvaluationScaleListInput input) => _service.GetListAsync(input);
-
-    [HttpPost("api/app/evaluation-criterion", Name = "EvaluationCriterion_Create")]
-    public async Task<ActionResult<EvaluationCriterionDto>> CreateAsync([FromBody] EvaluationCriterionCreateDto input) =>
-        StatusCode(201, await _service.CreateAsync(input));
-
-    [HttpPut("api/app/evaluation-criterion/{id:guid}", Name = "EvaluationCriterion_Update")]
-    public Task<EvaluationCriterionDto> UpdateAsync(Guid id, [FromBody] EvaluationCriterionUpdateDto input) => _service.UpdateAsync(id, input);
-}
-
-public class EvaluationGradeController : HR_Mangment2Controller
-{
-    private readonly IEvaluationGradeAppService _service;
-
-    public EvaluationGradeController(IEvaluationGradeAppService service)
-    {
-        _service = service;
-    }
-
-    [HttpGet("api/app/evaluation-grade", Name = "EvaluationGrade_GetList")]
-    public Task<EvaluationGradePagedResultDto> GetListAsync([FromQuery] EvaluationScaleListInput input) => _service.GetListAsync(input);
-
-    [HttpPost("api/app/evaluation-grade", Name = "EvaluationGrade_Create")]
-    public async Task<ActionResult<EvaluationGradeDto>> CreateAsync([FromBody] EvaluationGradeCreateDto input) =>
-        StatusCode(201, await _service.CreateAsync(input));
-
-    [HttpPut("api/app/evaluation-grade/{id:guid}", Name = "EvaluationGrade_Update")]
-    public Task<EvaluationGradeDto> UpdateAsync(Guid id, [FromBody] EvaluationGradeUpdateDto input) => _service.UpdateAsync(id, input);
-}
-
 public class DepartmentReportController : HR_Mangment2Controller
 {
     private readonly IDepartmentReportAppService _service;

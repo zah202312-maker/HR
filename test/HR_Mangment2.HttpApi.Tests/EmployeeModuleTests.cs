@@ -63,7 +63,12 @@ public class EmployeeModuleTests
         var kit = await EmployeeTestKit.CreateAsync(_host);
         var manager = await kit.AddDepartmentManagerAsync();
 
-        var response = await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(manager.Id, new[] { HrRoles.StoreOfficer }, "s" + Guid.NewGuid().ToString("N")[..8] + "@company.test"));
+        // Decision 2026-11-11: a store officer reports to the executive director, so a department manager is refused.
+        await ShouldFailWithAsync(
+            await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(manager.Id, new[] { HrRoles.StoreOfficer })),
+            HrErrorCodes.Employee.InvalidManagerForRole);
+
+        var response = await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(kit.ExecutiveEmployeeId, new[] { HrRoles.StoreOfficer }, "s" + Guid.NewGuid().ToString("N")[..8] + "@company.test"));
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         response.Headers.CacheControl!.NoStore.ShouldBeTrue();
 
@@ -73,8 +78,10 @@ public class EmployeeModuleTests
         var password = credentials.GetProperty("temporaryPassword").GetString()!;
         password.Length.ShouldBeGreaterThanOrEqualTo(8);
         credentials.GetProperty("mustChangePassword").GetBoolean().ShouldBeTrue();
-        employee.GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(manager.Id);
-        employee.GetProperty("currentShift").GetProperty("effectiveFrom").GetString().ShouldBe("2025-01-15");
+        employee.GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(kit.ExecutiveEmployeeId);
+
+        // No shift for the store officer (decision 2026-11-11), even though the form sent one.
+        (!employee.TryGetProperty("currentShift", out var shift) || shift.ValueKind == JsonValueKind.Null).ShouldBeTrue();
         employee.GetProperty("status").GetString().ShouldBe("active");
         var account = employee.GetProperty("account");
         account.GetProperty("mustChangePassword").GetBoolean().ShouldBeTrue();
@@ -110,15 +117,76 @@ public class EmployeeModuleTests
             await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(kit.SystemAdminEmployeeId, new[] { HrRoles.ExecutiveDirector })),
             HrErrorCodes.Employee.ExecutiveCannotHaveManager);
 
-        // A department manager must report to the system admin, and an accountant to a department manager.
+        // The system admin has no manager either (decision 2026-11-10).
+        await ShouldFailWithAsync(
+            await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(kit.ExecutiveEmployeeId, new[] { HrRoles.SystemAdmin })),
+            HrErrorCodes.Employee.ExecutiveCannotHaveManager);
+        var seededAdmin = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{kit.SystemAdminEmployeeId}");
+        (!seededAdmin.TryGetProperty("manager", out var adminManager) || adminManager.ValueKind == JsonValueKind.Null).ShouldBeTrue();
+        (!seededAdmin.TryGetProperty("currentShift", out var adminShift) || adminShift.ValueKind == JsonValueKind.Null).ShouldBeTrue();
+
+        // Nor the employee role: the system admin is not a company employee (decision 2026-11-10).
+        seededAdmin.GetProperty("roleNames").EnumerateArray().Select(x => x.GetString()).ShouldBe(new[] { HrRoles.SystemAdmin });
+
+        // The HR manager keeps the executive as manager but has no shift (decision 2026-11-10).
+        var seededHrId = await EmployeeTestKit.FindSeededEmployeeIdAsync(_host, "hrmanager");
+        var seededHr = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{seededHrId}");
+        seededHr.GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(kit.ExecutiveEmployeeId);
+        (!seededHr.TryGetProperty("currentShift", out var hrShift) || hrShift.ValueKind == JsonValueKind.Null).ShouldBeTrue();
+
+        // A department manager must report to the HR manager (decision 2026-11-10), and an accountant to a department manager.
         await ShouldFailWithAsync(
             await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(manager.Id, new[] { HrRoles.DepartmentManager })),
+            HrErrorCodes.Employee.InvalidManagerForRole);
+        await ShouldFailWithAsync(
+            await kit.Hr.PostAsJsonAsync("/api/app/employee", kit.Body(kit.SystemAdminEmployeeId, new[] { HrRoles.DepartmentManager })),
             HrErrorCodes.Employee.InvalidManagerForRole);
 
         var duplicate = kit.Body(manager.Id, regular, userName: staff.UserName);
         (await kit.Hr.PostAsJsonAsync("/api/app/employee", duplicate)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
         (await kit.Hr.PostAsJsonAsync("/api/app/employee", new { fullNameAr = "س" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    /// <summary>Decision 2026-11-10: HR records the agreed salary at hiring; the accountant owns it from then on.</summary>
+    [Fact]
+    public async Task The_agreed_salary_becomes_the_first_salary_version_for_the_accountant()
+    {
+        var kit = await EmployeeTestKit.CreateAsync(_host);
+        var manager = await kit.AddDepartmentManagerAsync();
+
+        System.Text.Json.Nodes.JsonObject WithSalary(object? salary, string? currency)
+        {
+            var body = JsonSerializer.SerializeToNode(kit.Body(manager.Id, new[] { HrRoles.Employee }))!.AsObject();
+            body["baseSalary"] = salary == null ? null : System.Text.Json.Nodes.JsonValue.Create((decimal)salary);
+            body["salaryCurrency"] = currency;
+            return body;
+        }
+
+        (await kit.Hr.PostAsJsonAsync("/api/app/employee", WithSalary(0m, null))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await kit.Hr.PostAsJsonAsync("/api/app/employee", WithSalary(500m, "iqd"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await kit.Hr.PostAsJsonAsync("/api/app/employee", WithSalary(null, "IQD"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var response = await kit.Hr.PostAsJsonAsync("/api/app/employee", WithSalary(750000m, null));
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var text = await response.Content.ReadAsStringAsync();
+        text.ShouldNotContain("baseSalary");
+        text.ShouldNotContain("750000");
+        var employeeId = JsonDocument.Parse(text).RootElement.GetProperty("employee").GetProperty("id").GetGuid();
+
+        var accountant = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.Employee, HrRoles.Accountant);
+        var profile = await accountant.GetFromJsonAsync<JsonElement>($"/api/app/finance/salary-profile/{employeeId}");
+        profile.GetProperty("baseSalary").GetDecimal().ShouldBe(750000m);
+        profile.GetProperty("currency").GetString().ShouldBe("IQD");
+        profile.GetProperty("effectiveFrom").GetString().ShouldBe("2025-01-15");
+        profile.GetProperty("components").GetArrayLength().ShouldBe(0);
+
+        // HR still has no way to read it.
+        (await kit.Hr.GetAsync($"/api/app/finance/salary-profile/{employeeId}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        // Without a salary, no salary file is made.
+        var plain = await kit.AddStaffAsync(manager.Id);
+        (await accountant.GetAsync($"/api/app/finance/salary-profile/{plain.Id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -134,6 +202,12 @@ public class EmployeeModuleTests
         item.GetProperty("id").GetGuid().ShouldBe(staff.Id);
         item.GetProperty("hasAccount").GetBoolean().ShouldBeTrue();
 
+        // The executive, the HR manager and the system admin are not listed (decision 2026-11-10).
+        foreach (var unlisted in new[] { HrRoles.ExecutiveDirector, HrRoles.HrManager, HrRoles.SystemAdmin })
+        {
+            (await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee?roleName={unlisted}")).GetProperty("totalCount").GetInt64().ShouldBe(0);
+        }
+
         var byRole = await kit.Hr.GetFromJsonAsync<JsonElement>("/api/app/employee?roleName=departmentManager&maxResultCount=200");
         byRole.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ShouldContain(manager.Id);
 
@@ -142,7 +216,7 @@ public class EmployeeModuleTests
 
         var store = TestAuth.ClientFor(_host, (await TestAuth.SignInAsync(_host, (await TestUsers.CreateAsync(_host, false, HrRoles.StoreOfficer)).UserName, TestUsers.Password)).AccessToken, "en");
         var storeLookup = await store.GetFromJsonAsync<JsonElement>($"/api/app/employee/lookup?search={Uri.EscapeDataString("Staff")}&maxResultCount=200");
-        PropertyNames(storeLookup.GetProperty("items")[0]).ShouldBe(new[] { "id", "fullName", "departmentName" }, ignoreOrder: true);
+        PropertyNames(storeLookup.GetProperty("items")[0]).ShouldBe(new[] { "id", "fullName", "departmentName", "photoId" }, ignoreOrder: true);
         (await store.GetAsync($"/api/app/employee/{staff.Id}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         var reviewer = TestAuth.ClientFor(_host, (await TestAuth.SignInAsync(_host, (await TestUsers.CreateAsync(_host, false, HrRoles.Reviewer)).UserName, TestUsers.Password)).AccessToken, "en");
@@ -217,6 +291,9 @@ public class EmployeeModuleTests
         await ShouldFailWithAsync(
             await kit.Hr.PutAsJsonAsync($"/api/app/employee/{kit.ExecutiveEmployeeId}/manager", new { managerEmployeeId = first.Id, concurrencyStamp = "x" }),
             HrErrorCodes.Employee.ExecutiveCannotHaveManager);
+        await ShouldFailWithAsync(
+            await kit.Hr.PutAsJsonAsync($"/api/app/employee/{kit.SystemAdminEmployeeId}/manager", new { managerEmployeeId = kit.ExecutiveEmployeeId, concurrencyStamp = "x" }),
+            HrErrorCodes.Employee.ExecutiveCannotHaveManager);
         (await kit.Hr.PutAsJsonAsync(url, new { managerEmployeeId = second.Id, concurrencyStamp = "stale" })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
         var changed = await kit.Hr.PutAsJsonAsync(url, new { managerEmployeeId = second.Id, reason = "Moved team", concurrencyStamp = stamp });
@@ -282,7 +359,7 @@ public class EmployeeModuleTests
         var team = await managerClient.GetFromJsonAsync<JsonElement>("/api/app/manager/my-team");
         team.GetProperty("totalCount").GetInt64().ShouldBe(1);
         PropertyNames(team.GetProperty("items")[0]).ShouldBe(
-            new[] { "id", "fullName", "email", "phoneNumber", "department", "jobTitle", "hireDate", "status", "currentShift" },
+            new[] { "id", "fullName", "email", "phoneNumber", "department", "jobTitle", "hireDate", "status", "currentShift", "photoId" },
             ignoreOrder: true);
 
         (await managerClient.GetAsync($"/api/app/manager/my-team/{staff.Id}")).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -399,7 +476,7 @@ public class EmployeeModuleTests
             .GetProperty("items").EnumerateArray().Select(x => x.GetProperty("userName").GetString()).ShouldNotContain(HrTenantBootstrapper.AdminUserName);
 
         var lookup = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/user-account/lookup?search={staff.UserName}");
-        PropertyNames(lookup.GetProperty("items")[0]).ShouldBe(new[] { "id", "displayName" }, ignoreOrder: true);
+        PropertyNames(lookup.GetProperty("items")[0]).ShouldBe(new[] { "id", "displayName", "photoId" }, ignoreOrder: true);
 
         await ShouldFailWithAsync(
             await kit.Hr.PostAsJsonAsync("/api/app/user-account", new { employeeId = staff.Id, userName = "x" + Guid.NewGuid().ToString("N")[..10], roleNames = new[] { HrRoles.Employee } }),
@@ -452,9 +529,9 @@ public class EmployeeModuleTests
             await kit.Hr.PutAsJsonAsync(url, new { roleNames = new[] { HrRoles.DepartmentManager }, managerEmployeeId = manager.Id, concurrencyStamp = await StampAsync(other.UserId) }),
             HrErrorCodes.Employee.InvalidManagerForRole);
 
-        var promoted = await kit.Hr.PutAsJsonAsync(url, new { roleNames = new[] { HrRoles.DepartmentManager }, managerEmployeeId = kit.SystemAdminEmployeeId, concurrencyStamp = await StampAsync(other.UserId) });
+        var promoted = await kit.Hr.PutAsJsonAsync(url, new { roleNames = new[] { HrRoles.DepartmentManager }, managerEmployeeId = kit.HrManagerEmployeeId, concurrencyStamp = await StampAsync(other.UserId) });
         promoted.StatusCode.ShouldBe(HttpStatusCode.OK, await promoted.Content.ReadAsStringAsync());
-        (await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{other.Id}")).GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(kit.SystemAdminEmployeeId);
+        (await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{other.Id}")).GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(kit.HrManagerEmployeeId);
 
         // The manager still has staff, so the role that lets them manage staff cannot be taken away.
         await ShouldFailWithAsync(
@@ -462,7 +539,7 @@ public class EmployeeModuleTests
             HrErrorCodes.Identity.ManagerRoleHasDirectReports);
 
         await ShouldFailWithAsync(
-            await kit.Hr.PutAsJsonAsync($"/api/app/user-account/{staff.UserId}/roles", new { roleNames = new[] { HrRoles.StoreOfficer, HrRoles.Accountant }, concurrencyStamp = await StampAsync(staff.UserId) }),
+            await kit.Hr.PutAsJsonAsync($"/api/app/user-account/{staff.UserId}/roles", new { roleNames = new[] { HrRoles.StoreOfficer, HrRoles.Accountant }, managerEmployeeId = kit.ExecutiveEmployeeId, concurrencyStamp = await StampAsync(staff.UserId) }),
             HrErrorCodes.Identity.ForbiddenRoleCombination);
 
         var executive = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.ExecutiveDirector, HrRoles.HrManager);
@@ -482,9 +559,35 @@ public class EmployeeModuleTests
         (await staffClient.GetAsync("/api/app/employee/lookup")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         var stamp = (await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/user-account/{staff.UserId}")).GetProperty("concurrencyStamp").GetString();
-        (await kit.Hr.PutAsJsonAsync($"/api/app/user-account/{staff.UserId}/roles", new { roleNames = new[] { HrRoles.StoreOfficer }, concurrencyStamp = stamp })).EnsureSuccessStatusCode();
+
+        // The new role needs the executive as manager (decision 2026-11-11): without it the change is refused.
+        await ShouldFailWithAsync(
+            await kit.Hr.PutAsJsonAsync($"/api/app/user-account/{staff.UserId}/roles", new { roleNames = new[] { HrRoles.StoreOfficer }, concurrencyStamp = stamp }),
+            HrErrorCodes.Employee.ManagerRequired);
+        (await kit.Hr.PutAsJsonAsync($"/api/app/user-account/{staff.UserId}/roles", new { roleNames = new[] { HrRoles.StoreOfficer }, managerEmployeeId = kit.ExecutiveEmployeeId, concurrencyStamp = stamp }))
+            .EnsureSuccessStatusCode();
 
         (await staffClient.GetAsync("/api/app/employee/lookup")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Now outside the schedule: no shift, no leave balance.
+        var file = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/employee/{staff.Id}");
+        file.GetProperty("manager").GetProperty("id").GetGuid().ShouldBe(kit.ExecutiveEmployeeId);
+        (!file.TryGetProperty("currentShift", out var shift) || shift.ValueKind == JsonValueKind.Null).ShouldBeTrue();
+        await ShouldFailWithAsync(await kit.Hr.GetAsync($"/api/app/leave-balance/employee/{staff.Id}"), HrErrorCodes.Leave.ExecutiveDirectorNotEligible);
+    }
+
+    /// <summary>Decision 2026-11-11: the HR manager may hold the store and accountant roles together; nobody else may.</summary>
+    [Fact]
+    public async Task Only_the_hr_manager_may_be_store_officer_and_accountant_together()
+    {
+        var (userId, _) = await TestUsers.CreateAsync(_host, false, HrRoles.Employee, HrRoles.HrManager);
+        // Changing the roles of an HR manager is the executive's; reading accounts needs the HR role too.
+        var executive = await TestUsers.SignedInWithMfaAsync(_host, "en", HrRoles.ExecutiveDirector, HrRoles.HrManager);
+        var stamp = (await executive.GetFromJsonAsync<JsonElement>($"/api/app/user-account/{userId}")).GetProperty("concurrencyStamp").GetString();
+
+        var response = await executive.PutAsJsonAsync($"/api/app/user-account/{userId}/roles",
+            new { roleNames = new[] { HrRoles.HrManager, HrRoles.StoreOfficer, HrRoles.Accountant }, concurrencyStamp = stamp });
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -749,7 +852,7 @@ public class EmployeeModuleTests
 
         candidateIds.ShouldContain(delegate1.UserId);
         candidateIds.ShouldNotContain(manager.UserId);
-        PropertyNames(candidates.GetProperty("items")[0]).ShouldBe(new[] { "id", "displayName" }, ignoreOrder: true);
+        PropertyNames(candidates.GetProperty("items")[0]).ShouldBe(new[] { "id", "displayName", "photoId" }, ignoreOrder: true);
 
         var hrList = await kit.Hr.GetFromJsonAsync<JsonElement>($"/api/app/delegation?fromUserId={manager.UserId}");
         hrList.GetProperty("totalCount").GetInt64().ShouldBe(2);

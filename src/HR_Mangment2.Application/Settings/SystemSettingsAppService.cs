@@ -25,11 +25,12 @@ public class SystemSettingsAppService : HR_Mangment2AppService, ISystemSettingsA
         (SystemSettingsSectionCode.RequestTypes, AppRole.SystemAdmin),
         (SystemSettingsSectionCode.OtherLeaveTypes, AppRole.SystemAdmin),
         (SystemSettingsSectionCode.AttendanceDevices, AppRole.SystemAdmin),
-        (SystemSettingsSectionCode.EvaluationCriteria, AppRole.SystemAdmin),
         (SystemSettingsSectionCode.EmployeeLeaveBalances, AppRole.HrManager),
         (SystemSettingsSectionCode.WorkShifts, AppRole.HrManager),
         (SystemSettingsSectionCode.Holidays, AppRole.HrManager),
-        (SystemSettingsSectionCode.DepartmentsAndManagerLinks, AppRole.HrManager)
+        (SystemSettingsSectionCode.DepartmentsAndManagerLinks, AppRole.HrManager),
+        (SystemSettingsSectionCode.AnnualLeave, AppRole.HrManager),
+        (SystemSettingsSectionCode.HrEvaluationAlert, AppRole.HrManager)
     };
 
     private readonly HrSettingsStore _store;
@@ -109,6 +110,27 @@ public class SystemSettingsAppService : HR_Mangment2AppService, ISystemSettingsA
             HoursPerDay = input.HoursPerDay
         }, input.ConcurrencyStamp));
 
+    [Authorize(HrPermissions.SettingsPermissions.AnnualLeave)]
+    public virtual async Task<SystemSettingsAnnualLeaveDto> GetAnnualLeaveAsync() => ToDto(await _store.GetAsync<AnnualLeaveSettings>());
+
+    /// <summary>Applies to every leave year that starts afterwards; no current year changes (decision 2026-11-10).</summary>
+    [Authorize(HrPermissions.SettingsPermissions.AnnualLeave)]
+    public virtual async Task<SystemSettingsAnnualLeaveDto> UpdateAnnualLeaveAsync(SystemSettingsAnnualLeaveUpdateInputDto input) =>
+        ToDto(await _store.SetAsync(new AnnualLeaveSettings { DefaultEntitlementDays = input.DefaultEntitlementDays!.Value }, input.ConcurrencyStamp));
+
+    [Authorize(HrPermissions.SettingsPermissions.HrEvaluationAlert)]
+    public virtual async Task<SystemSettingsHrEvaluationAlertDto> GetHrEvaluationAlertAsync() => ToDto(await _store.GetAsync<HrEvaluationAlertSettings>());
+
+    /// <summary>Applies from the next cycle; computed cycles are not recomputed (decision 2026-11-11).</summary>
+    [Authorize(HrPermissions.SettingsPermissions.HrEvaluationAlert)]
+    public virtual async Task<SystemSettingsHrEvaluationAlertDto> UpdateHrEvaluationAlertAsync(SystemSettingsHrEvaluationAlertUpdateInputDto input) =>
+        ToDto(await _store.SetAsync(new HrEvaluationAlertSettings
+        {
+            Threshold = input.Threshold!.Value,
+            WindowWeeks = input.WindowWeeks!.Value,
+            MinEvaluations = input.MinEvaluations!.Value
+        }, input.ConcurrencyStamp));
+
     [Authorize(HrPermissions.SettingsPermissions.Finance)]
     public virtual async Task<SystemSettingsFinanceDto> GetFinanceAsync() => ToDto(await _store.GetAsync<FinanceSettings>());
 
@@ -147,6 +169,22 @@ public class SystemSettingsAppService : HR_Mangment2AppService, ISystemSettingsA
     {
         MonthlyAllowedHours = s.Value.MonthlyAllowedHours,
         HoursPerDay = s.Value.HoursPerDay,
+        ConcurrencyStamp = s.ConcurrencyStamp,
+        LastModificationTime = s.LastModificationTime
+    };
+
+    private static SystemSettingsAnnualLeaveDto ToDto(SettingsSnapshot<AnnualLeaveSettings> s) => new()
+    {
+        DefaultEntitlementDays = s.Value.DefaultEntitlementDays,
+        ConcurrencyStamp = s.ConcurrencyStamp,
+        LastModificationTime = s.LastModificationTime
+    };
+
+    private static SystemSettingsHrEvaluationAlertDto ToDto(SettingsSnapshot<HrEvaluationAlertSettings> s) => new()
+    {
+        Threshold = s.Value.Threshold,
+        WindowWeeks = s.Value.WindowWeeks,
+        MinEvaluations = s.Value.MinEvaluations,
         ConcurrencyStamp = s.ConcurrencyStamp,
         LastModificationTime = s.LastModificationTime
     };

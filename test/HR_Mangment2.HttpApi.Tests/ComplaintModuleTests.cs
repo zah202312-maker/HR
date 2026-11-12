@@ -415,9 +415,9 @@ public class ComplaintModuleTests
         var all = await OkAsync(await team.StaffClient.GetAsync("/api/app/complaint/respondents?maxResultCount=200"));
         all.GetProperty("items").EnumerateArray().Select(IdOf).ShouldNotContain(team.Kit.SystemAdminEmployeeId);
 
-        // The list shows a name and a department, with no role or category.
+        // The list shows a name, a department and the account photo (decision 2026-11-11), with no role or category.
         var first = list.GetProperty("items")[0];
-        first.EnumerateObject().Select(x => x.Name).ShouldBeSubsetOf(new[] { "id", "fullName", "departmentName" });
+        first.EnumerateObject().Select(x => x.Name).ShouldBeSubsetOf(new[] { "id", "fullName", "departmentName", "photoId" });
 
         var (executive, _, _) = await OwnerAsync(team.Kit, null, HrRoles.Employee, HrRoles.ExecutiveDirector);
         (await executive.PostAsJsonAsync("/api/app/complaint", new { targetKind = "general", level = "normal", subject = "s", content = "c" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);

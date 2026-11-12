@@ -95,6 +95,48 @@ public class SystemSettingsComplaintsUpdateInputDto
     public string ConcurrencyStamp { get; set; } = null!;
 }
 
+public class SystemSettingsAnnualLeaveDto
+{
+    public decimal DefaultEntitlementDays { get; set; }
+    public string ConcurrencyStamp { get; set; } = null!;
+    public DateTime? LastModificationTime { get; set; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public class SystemSettingsAnnualLeaveUpdateInputDto
+{
+    [Required, Range(typeof(decimal), "0", "365")]
+    public decimal? DefaultEntitlementDays { get; set; }
+
+    [Required]
+    public string ConcurrencyStamp { get; set; } = null!;
+}
+
+public class SystemSettingsHrEvaluationAlertDto
+{
+    public decimal Threshold { get; set; }
+    public int WindowWeeks { get; set; }
+    public int MinEvaluations { get; set; }
+    public string ConcurrencyStamp { get; set; } = null!;
+    public DateTime? LastModificationTime { get; set; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public class SystemSettingsHrEvaluationAlertUpdateInputDto
+{
+    [Required, Range(typeof(decimal), "1", "10")]
+    public decimal? Threshold { get; set; }
+
+    [Required, Range(1, 12)]
+    public int? WindowWeeks { get; set; }
+
+    [Required, Range(1, 20)]
+    public int? MinEvaluations { get; set; }
+
+    [Required]
+    public string ConcurrencyStamp { get; set; } = null!;
+}
+
 public class SystemSettingsHourlyLeaveDto
 {
     public decimal? MonthlyAllowedHours { get; set; }
@@ -144,6 +186,10 @@ public interface ISystemSettingsAppService : IApplicationService
     Task<SystemSettingsComplaintsDto> UpdateComplaintsAsync(SystemSettingsComplaintsUpdateInputDto input);
     Task<SystemSettingsHourlyLeaveDto> GetHourlyLeaveAsync();
     Task<SystemSettingsHourlyLeaveDto> UpdateHourlyLeaveAsync(SystemSettingsHourlyLeaveUpdateInputDto input);
+    Task<SystemSettingsAnnualLeaveDto> GetAnnualLeaveAsync();
+    Task<SystemSettingsAnnualLeaveDto> UpdateAnnualLeaveAsync(SystemSettingsAnnualLeaveUpdateInputDto input);
+    Task<SystemSettingsHrEvaluationAlertDto> GetHrEvaluationAlertAsync();
+    Task<SystemSettingsHrEvaluationAlertDto> UpdateHrEvaluationAlertAsync(SystemSettingsHrEvaluationAlertUpdateInputDto input);
     Task<SystemSettingsFinanceDto> GetFinanceAsync();
     Task<SystemSettingsFinanceDto> UpdateFinanceAsync(SystemSettingsFinanceUpdateInputDto input);
 }

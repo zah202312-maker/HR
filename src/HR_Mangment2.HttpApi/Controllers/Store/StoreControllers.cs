@@ -31,6 +31,13 @@ public class ItemController : HR_Mangment2Controller
 
     [HttpPut("api/app/item/{id:guid}", Name = "Item_Update")]
     public Task<ItemDto> UpdateAsync(Guid id, [FromBody] ItemUpdateInputDto input) => _service.UpdateAsync(id, input);
+
+    [HttpDelete("api/app/item/{id:guid}", Name = "Item_Delete")]
+    public async Task<IActionResult> DeleteAsync(Guid id)
+    {
+        await _service.DeleteAsync(id);
+        return NoContent();
+    }
 }
 
 public class StockController : HR_Mangment2Controller

@@ -13,9 +13,9 @@ public class RequestRoutePlannerTests
     [InlineData(RequestOwnerRow.Employee, RequestDestination.None, "PendingManager:departmentManager:named,PendingHr:hrManager")]
     [InlineData(RequestOwnerRow.Employee, RequestDestination.Store, "PendingManager:departmentManager:named,PendingHr:hrManager,PendingDestination:storeOfficer")]
     [InlineData(RequestOwnerRow.Employee, RequestDestination.Accountant, "PendingManager:departmentManager:named,PendingHr:hrManager,PendingDestination:accountant")]
-    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.None, "PendingManager:systemAdmin:named,PendingHr:hrManager")]
-    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.Store, "PendingManager:systemAdmin:named,PendingHr:hrManager,PendingDestination:storeOfficer")]
-    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.Accountant, "PendingManager:systemAdmin:named,PendingHr:hrManager,PendingDestination:accountant")]
+    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.None, "PendingHr:hrManager")]
+    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.Store, "PendingHr:hrManager,PendingDestination:storeOfficer")]
+    [InlineData(RequestOwnerRow.DepartmentManager, RequestDestination.Accountant, "PendingHr:hrManager,PendingDestination:accountant")]
     [InlineData(RequestOwnerRow.HrManager, RequestDestination.None, "PendingExecutive:executiveDirector")]
     [InlineData(RequestOwnerRow.HrManager, RequestDestination.Store, "PendingDestination:storeOfficer")]
     [InlineData(RequestOwnerRow.HrManager, RequestDestination.Accountant, "PendingExecutive:executiveDirector,PendingDestination:accountant")]
@@ -67,9 +67,9 @@ public class RequestRoutePlannerTests
     [Theory]
     [InlineData(new[] { HrRoles.Employee }, new[] { HrRoles.DepartmentManager })]
     [InlineData(new[] { HrRoles.Employee, HrRoles.Reviewer }, new[] { HrRoles.ExecutiveDirector, HrRoles.HrManager })]
-    [InlineData(new[] { HrRoles.Employee, HrRoles.Reviewer, HrRoles.DepartmentManager }, new[] { HrRoles.SystemAdmin })]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.Reviewer, HrRoles.DepartmentManager }, new[] { HrRoles.HrManager })]
     [InlineData(new[] { HrRoles.Employee, HrRoles.HrManager }, new[] { HrRoles.ExecutiveDirector })]
-    [InlineData(new[] { HrRoles.Employee, HrRoles.SystemAdmin }, new[] { HrRoles.ExecutiveDirector })]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.HrManager, HrRoles.SystemAdmin }, new[] { HrRoles.ExecutiveDirector })]
     public void The_manager_link_allows_the_roles_of_its_first_matching_rule(string[] employeeRoles, string[] expected)
     {
         HR_Mangment2.Employees.ManagerLinkService.AllowedManagerRoles(employeeRoles)!.ShouldBe(expected, ignoreOrder: true);
@@ -79,5 +79,25 @@ public class RequestRoutePlannerTests
     public void The_executive_director_has_no_manager()
     {
         HR_Mangment2.Employees.ManagerLinkService.AllowedManagerRoles(new[] { HrRoles.ExecutiveDirector, HrRoles.Employee }).ShouldBeNull();
+    }
+
+    /// <summary>Decisions of 2026-11-10: these three have no shift and are outside attendance and leave.</summary>
+    [Theory]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.ExecutiveDirector }, true)]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.HrManager }, true)]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.SystemAdmin }, true)]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.DepartmentManager }, false)]
+    [InlineData(new[] { HrRoles.Employee, HrRoles.Reviewer }, false)]
+    [InlineData(new[] { HrRoles.Employee }, false)]
+    public void Only_the_executive_hr_manager_and_system_admin_are_outside_the_schedule(string[] roles, bool expected)
+    {
+        HR_Mangment2.Employees.ManagerLinkService.IsOutsideSchedule(roles).ShouldBe(expected);
+    }
+
+    /// <summary>Decision 2026-11-10: the system admin is responsible for the system and reports to no one.</summary>
+    [Fact]
+    public void The_system_admin_has_no_manager()
+    {
+        HR_Mangment2.Employees.ManagerLinkService.AllowedManagerRoles(new[] { HrRoles.SystemAdmin, HrRoles.Employee }).ShouldBeNull();
     }
 }
